@@ -1,0 +1,1909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Slipstream</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E6E4DC; --ink:#2E312F; --you:#CC0066;
+    --yellow:#D8A400; --green:#009E73; --spot:#D55E00; --water:#0072B2; --fuel:#E69F00;
+    --font:"Space Grotesk","Avenir Next",system-ui,-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--paper);font-family:var(--font);color:var(--ink);
+    -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+  .screen{position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:24px 22px calc(28px + env(safe-area-inset-bottom));background:var(--paper);z-index:10}
+  .screen.hide{display:none}
+  .inner{min-height:100%;display:flex;flex-direction:column;justify-content:center;max-width:520px;margin:0 auto}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;opacity:.5;font-weight:500}
+  h1{font-size:clamp(42px,13vw,78px);font-weight:700;letter-spacing:-.045em;line-height:.9;margin:8px 0 0}
+  h1 .cut{color:var(--you)}
+  h2{font-size:clamp(26px,8vw,42px);font-weight:700;letter-spacing:-.03em;line-height:1.02;margin:4px 0 0}
+  .lede{margin-top:14px;font-size:14.5px;line-height:1.5;max-width:34ch;opacity:.8}
+  .rules{margin-top:20px;border-top:1px solid rgba(46,49,47,.16)}
+  .rule{display:flex;gap:13px;align-items:baseline;padding:9px 0;border-bottom:1px solid rgba(46,49,47,.11)}
+  .rule b{font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;min-width:78px;flex:0 0 78px}
+  .rule span{font-size:13px;line-height:1.45;opacity:.82}
+  .k1{color:var(--you)} .k2{color:var(--fuel)} .k3{color:var(--water)} .k4{color:var(--green)} .k5{color:var(--spot)}
+  button.go{margin-top:22px;background:var(--ink);color:var(--paper);border:0;
+    border-radius:999px;padding:15px 32px;font-family:var(--font);font-size:13.5px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+  button.go:active{transform:translateY(1px)}
+  button.go:focus-visible{outline:3px solid var(--you);outline-offset:3px}
+  button.ghost{background:none;color:var(--ink);border:1.5px solid rgba(46,49,47,.3);margin-left:8px}
+  .picks{margin-top:18px;display:flex;flex-direction:column;gap:8px}
+  .pick{display:block;text-align:left;padding:13px 15px;border-radius:14px;
+    border:1.5px solid rgba(46,49,47,.2);background:none;font-family:var(--font);color:var(--ink);cursor:pointer}
+  .pick[aria-pressed="true"]{border-color:var(--you);background:rgba(204,0,102,.07)}
+  .pick .nm{font-size:14px;font-weight:700;letter-spacing:.02em;display:block}
+  .pick .ds{font-size:12.5px;opacity:.72;line-height:1.4;margin-top:3px;display:block}
+  .secthead{margin-top:20px;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.45;font-weight:700}
+  .board{margin-top:7px;border-top:1px solid rgba(46,49,47,.16)}
+  .row{display:grid;grid-template-columns:24px 11px 1fr auto;align-items:center;gap:10px;padding:7px 0;
+    border-bottom:1px solid rgba(46,49,47,.1);font-size:13px}
+  .row .pos{font-weight:700;font-variant-numeric:tabular-nums;opacity:.5}
+  .row .dot{width:11px;height:11px;border-radius:4px}
+  .row .gap{font-variant-numeric:tabular-nums;opacity:.6;font-size:12.5px}
+  .row.me{font-weight:700} .row.me .pos,.row.me .gap{opacity:1}
+  .jerseys{margin-top:14px;display:flex;gap:7px;flex-wrap:wrap}
+  .jersey{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:7px 11px;
+    border-radius:999px;color:#fff}
+  .sub{margin-top:8px;font-size:13.5px;line-height:1.5;opacity:.78;max-width:40ch}
+  .foot{margin-top:16px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;opacity:.4}
+  .ladder{margin-top:10px;display:flex;flex-direction:column;gap:4px}
+  .ladder span:first-child{font-size:15px;letter-spacing:.42em;color:var(--you)}
+  .ladder span:last-child{font-size:11.5px;opacity:.6;line-height:1.4}
+  .prof{margin-top:14px;width:100%;height:74px;display:block}
+  .radar{margin-top:16px;width:100%;height:190px;display:block}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="screen" id="menu"><div class="inner">
+  <div class="eyebrow" id="mDiv">Division 8 of 8</div>
+  <h1>SLIP<span class="cut">STREAM</span></h1>
+  <div class="ladder"><span id="mDots">○○○○○○○●</span><span id="mStat"></span></div>
+  <p class="lede">Three things run down. Only your legs come back for free.</p>
+  <div class="rules">
+    <div class="rule"><b class="k1">Legs</b><span>Wind is what costs you. Sit on a wheel and they come back.</span></div>
+    <div class="rule"><b class="k2">Fuel</b><span>Drains every stage and never returns on its own. Eat before you need to.</span></div>
+    <div class="rule"><b class="k3">Fluid</b><span>You sweat harder climbing, and harder still in the bunch where there is no air.</span></div>
+    <div class="rule"><b class="k2">Gut</b><span>You only take on so much at once. Grab two things together and you waste the second.</span></div>
+    <div class="rule"><b class="k4">Wind</b><span>A crosswind moves the shelter sideways. Get on the right side of the wheel or ride in the gutter.</span></div>
+    <div class="rule"><b class="k1">The jump</b><span>Alternate the L and R pedals to go above tempo, faster for more. Two strokes on the same side is a missed pedal and it costs you. Hold both to coast and recover.</span></div>
+    <div class="rule"><b class="k5">The bunch</b><span>They only chase what scares them. Go up the road before you are worth chasing.</span></div>
+  </div>
+  <canvas class="radar" id="mRadar"></canvas>
+  <div class="picks" id="picks"></div>
+  <button class="go" id="startBtn">Start tour</button><button class="go ghost" id="unitBtn">Km</button><button class="go ghost" id="steerBtn">Drag</button>
+  <div class="foot" id="mSteer"></div>
+  <div class="foot">Hold a side to steer · alternate L and R to pedal · hold both to coast</div>
+</div></div>
+
+<div class="screen hide" id="brief"><div class="inner">
+  <div class="eyebrow" id="bEyebrow"></div>
+  <h2 id="bTitle"></h2>
+  <canvas class="prof" id="bProf"></canvas>
+  <p class="sub" id="bNote"></p>
+  <div class="secthead" id="bGCHead">General classification</div>
+  <div class="board" id="bGC"></div>
+  <button class="go" id="rollBtn">Roll out</button>
+</div></div>
+
+<div class="screen hide" id="result"><div class="inner">
+  <div class="eyebrow" id="rEyebrow"></div>
+  <h2 id="rVerdict"></h2>
+  <p class="sub" id="rSub"></p>
+  <div class="jerseys" id="rJerseys"></div>
+  <div class="secthead">Stage</div>
+  <div class="board" id="rBoard"></div>
+  <div class="secthead">General classification</div>
+  <div class="board" id="rGC"></div>
+  <div class="secthead">Points</div>
+  <div class="board" id="rPts"></div>
+  <div class="secthead">Mountains</div>
+  <div class="board" id="rKom"></div>
+  <button class="go" id="nextBtn">Next stage</button>
+  <div class="foot" id="rFoot"></div>
+</div></div>
+
+<script>
+/* ============================================================================
+   SIM  ·  pure simulation. no canvas, no DOM, deterministic from a seed.
+   This is the part that ports to a Swift package as is.
+   ==========================================================================*/
+const Sim = (function () {
+"use strict";
+
+const CFG = {
+  roadW: 9, base: 12.8, fixedDt: 1 / 120,
+  ease: 0.58, tempo: 0.86, attack: 1.24,
+  sprintFrom: 200, sameTimeGap: 0.4, strokeAttack: 2.0, strokeFull: 2.2,
+  // Every prime pays, so a climber still contests a sprint line and a sprinter
+  // still goes over the top hard. Higher divisions pay far more, which keeps the
+  // best earning at the top of the ladder rather than farming the bottom.
+  // Without these, every bunch finish gives the whole field the same time and the
+  // general classification never separates. Seconds off your total.
+  bonusStage: [6, 4, 2],
+  bonusSprint: [2, 1],
+  purse: {
+    sprint: [40, 25, 15, 8],
+    kom: [50, 30, 18, 10],
+    stage: [200, 140, 100, 70, 50, 35, 25, 15],
+    tour: [600, 400, 260, 180, 120, 80, 50, 30],
+    jersey: 200
+  },
+  // your gut only takes on so much at once. stacking pickups wastes them.
+  digest: 7.5,
+  load: { food: 56, water: 34, salt: 30 },
+  give: { food: 46, water: 46, salt: 60 }
+};
+
+// Capability. Every number the physics reads about a rider lives here, and every
+// rider owns its own copy. A progression layer can hand any rider any block it
+// likes without touching the archetype it was built from.
+// `attack` is an absolute effort ratio. Everything else is a multiplier where
+// 1.00 is neutral. The four named *Cost / *Use / *Rate / *Tax are the ones where
+// lower is better; the rest are higher is better.
+const BASE_STATS = {
+  attack: 1.24,      // effort ratio when attacking
+  kick: 1.00,        // power inside the final 300 m
+  recover: 1.00,     // energy recovery rate
+  draft: 1.00,       // how much shelter is worth
+  gut: 1.00,         // digestion speed
+  handling: 1.00,    // how quickly you cross the road
+  descend: 1.00,     // speed carried downhill
+  resilience: 1.00,  // how late you crack, how soon you come back
+  reach: 1.00,       // how far you can take a bottle or a musette from
+  climbCost: 1.00,   // lower climbs better
+  fuelUse: 1.00,     // lower eats less
+  sweatRate: 1.00,   // lower drinks less
+  windTax: 1.00      // lower is cheaper alone in the wind
+};
+
+// Identity. Name, description, and the stat block a rider of this kind starts with.
+const ARCHETYPES = {
+  rouleur: { key: "rouleur", name: "Rouleur",
+    blurb: "Cheap to ride alone in the wind, no great finish. Built for the breakaway.",
+    stats: { attack: 1.23, climbCost: 1.00, fuelUse: 0.98, recover: 1.05, windTax: 0.78, kick: 0.99, descend: 1.08 } },
+  sprinter: { key: "sprinter", name: "Sprinter",
+    blurb: "Huge finish, poor climber, eats and drinks hard. Win from the bunch.",
+    stats: { attack: 1.34, climbCost: 1.17, fuelUse: 1.10, recover: 1.02, windTax: 1.04, kick: 1.13, descend: 0.94 } },
+  climber: { key: "climber", name: "Climber",
+    blurb: "Flies uphill, suffers in the wind, recovers fast. Win on the summits.",
+    stats: { attack: 1.19, climbCost: 0.68, fuelUse: 0.92, recover: 1.16, windTax: 1.06, kick: 0.95, descend: 1.00 } }
+};
+
+const STAGES = [
+  { name: "Stage 1", sub: "Flat", type: "flat", len: 1400, hilly: 0.16, wind: 0.85, sprints: 2 },
+  { name: "Stage 2", sub: "Hills", type: "hills", len: 1550, hilly: 0.44, wind: 0.40, sprints: 2 },
+  { name: "Stage 3", sub: "Mountains", type: "mountain", len: 1700, hilly: 0.62, wind: 0.15, sprints: 1 }
+];
+
+// The ladder. Division 8 is the bottom rung, Division 1 the top. Difficulty comes
+// from the race being harder to read, not from rivals being faster: sparser feeding,
+// stronger wind, longer and hillier stages, and an AI that stops making mistakes.
+function tierProfile(div) {
+  const t = Math.max(0, Math.min(1, (8 - div) / 7));
+  return {
+    t,
+    len: 1 + 0.18 * t,        // longer stages
+    hilly: 0.14 * t,          // more climbing
+    wind: 0.75 + 0.70 * t,    // stronger crosswinds
+    items: 1 - 0.42 * t,      // less on the road
+    strength: 0.025 * t,      // rivals barely faster
+    ai: t                     // rivals much sharper
+  };
+}
+
+const FIELD = [
+  { name: "NORD", c: "#0072B2", n: 11, type: "rouleur" },
+  { name: "FERN", c: "#009E73", n: 24, type: "climber" },
+  { name: "ORO", c: "#E69F00", n: 37, type: "sprinter" },
+  { name: "PICO", c: "#6A4C93", n: 42, type: "climber" },
+  { name: "SALT", c: "#4D4D4D", n: 55, type: "rouleur" },
+  { name: "VELA", c: "#56B4E9", n: 63, type: "sprinter" },
+  { name: "KITE", c: "#D55E00", n: 78, type: "rouleur" }
+];
+const YOU = { name: "YOU", c: "#CC0066", n: 1 };
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const STEP = 10;
+function buildStage(seed, spec0, D) {
+  const spec = {
+    name: spec0.name, sub: spec0.sub, type: spec0.type, sprints: spec0.sprints,
+    len: Math.round(spec0.len * D.len),
+    hilly: clamp(spec0.hilly + D.hilly, 0, 0.78),
+    wind: clamp(spec0.wind * D.wind, 0, 1)
+  };
+  const R = mulberry32(seed);
+  const n = Math.ceil((spec.len + 400) / STEP);
+  let raw = new Array(n).fill(0), climbs = [];
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const RR = mulberry32(seed + attempt * 7919);
+    raw = new Array(n).fill(0); climbs = [];
+    let d = 190, last = 0;
+    while (d < spec.len - 220) {
+      const span = 140 + RR() * 180;
+      let g = 0; const r = RR();
+      if (r < spec.hilly) g = 0.55 + RR() * 0.45;
+      else if (r < spec.hilly + 0.32) g = -(0.5 + RR() * 0.5);
+      if (last !== 0 && Math.sign(g) === Math.sign(last)) g = 0;
+      last = g;
+      const end = Math.min(d + span, spec.len - 220);
+      for (let i = Math.floor(d / STEP); i < Math.floor(end / STEP); i++) raw[i] = g;
+      if (g > 0 && end - d > 95) climbs.push({ s: d, e: end });
+      d = end;
+    }
+    if (climbs.length >= (spec.type === "flat" ? 1 : 2)) break;
+  }
+  const grades = new Array(n).fill(0), K = 5;
+  for (let i = 0; i < n; i++) {
+    let s = 0, w = 0;
+    for (let k = -K; k <= K; k++) {
+      const j = clamp(i + k, 0, n - 1), wt = 1 - Math.abs(k) / (K + 1);
+      s += raw[j] * wt; w += wt;
+    }
+    grades[i] = s / w;
+  }
+  const elev = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) elev[i] = elev[i - 1] + grades[i] * STEP;
+  let eMin = Math.min.apply(null, elev), eMax = Math.max.apply(null, elev);
+  if (eMax - eMin < 40) eMax = eMin + 40;
+  const gRaw = m => grades[clamp(Math.round(m / STEP), 0, n - 1)] || 0;
+
+  const primes = [];
+  for (const c of climbs) primes.push({ d: c.e + 12, kind: "kom", pts: [6, 4, 2, 1], crossed: [] });
+  const flats = [];
+  for (let m = 330; m < spec.len - 300; m += 20) if (Math.abs(gRaw(m)) < 0.22) flats.push(m);
+  const aims = spec.sprints === 2 ? [0.34, 0.7] : [0.42];
+  for (const t of aims) {
+    const aim = spec.len * t;
+    let bm = null, bd = 1e9;
+    for (const m of flats) {
+      if (primes.some(p => Math.abs(p.d - m) < 120)) continue;
+      if (Math.abs(m - aim) < bd) { bd = Math.abs(m - aim); bm = m; }
+    }
+    if (bm !== null) primes.push({ d: bm, kind: "sprint", pts: [5, 3, 2, 1], crossed: [] });
+  }
+  primes.push({ d: spec.len, kind: "finish", pts: [12, 9, 7, 5, 3, 2, 1], crossed: [] });
+  primes.sort((a, b) => a.d - b.d);
+
+  // Feed zones sit on the calm parts of a course. A 120 m zone must not overlap a
+  // sprint or summit or its run-in, and must not sit just before one: you feed
+  // where nothing is about to happen. If a preferred spot is near a prime, the
+  // zone is pushed to shortly AFTER that prime, never before it.
+  const FEEDLEN = 120, CLEAR_BEFORE = 200, CLEAR_AFTER = 90;
+  // A feed zone spans [m, m+FEEDLEN]. It conflicts with a prime if the prime sits
+  // inside the zone, or within CLEAR_BEFORE ahead of where the zone ends (you must
+  // not feed right before a sprint or climb). Feeding is fine once you are past a
+  // prime, so nothing here forbids sitting shortly after one.
+  const conflicts = m => {
+    const s = m, e = m + FEEDLEN;
+    for (const pr of primes) {
+      const clearAhead = pr.kind === "finish" ? CLEAR_BEFORE : CLEAR_BEFORE;
+      if (pr.d >= s && pr.d <= e) return pr;              // prime inside the zone
+      if (pr.d > e && pr.d - e < clearAhead) return pr;   // zone ends just before a prime
+    }
+    return null;
+  };
+  // Scan the whole course for gaps clean enough to feed in, preferring spots near
+  // the two target points but never sitting in a prime run-in. Guarantee at least
+  // one zone: a stage with no food is unplayable, so if nothing is perfectly clean
+  // we fall back to the least-bad gap rather than leaving the course foodless.
+  const feeds = [];
+  const clean = m => !conflicts(m) && gRaw(m) < 0.3 && gRaw(m + FEEDLEN) < 0.3;
+  for (const t of [0.24, 0.6]) {
+    const aim = spec.len * t;
+    let best = null, bestD = 1e9;
+    for (let m = 240; m < spec.len - FEEDLEN - 220; m += 20) {
+      if (!clean(m)) continue;
+      if (feeds.some(f => Math.abs(f.s - m) < 200)) continue;
+      const d = Math.abs(m - aim);
+      if (d < bestD) { bestD = d; best = m; }
+    }
+    if (best !== null) feeds.push({ s: best, e: best + FEEDLEN });
+  }
+  if (feeds.length === 0) {
+    // no clean gap anywhere: take the flattest spot clear of the finish run-in
+    let best = spec.len * 0.4, bestScore = 1e9;
+    for (let m = 240; m < spec.len - FEEDLEN - 260; m += 20) {
+      const pr = conflicts(m);
+      const score = Math.abs(gRaw(m)) * 100 + (pr && pr.kind !== "finish" ? 60 : 0);
+      if (score < bestScore) { bestScore = score; best = m; }
+    }
+    feeds.push({ s: best, e: best + FEEDLEN });
+  }
+
+  const items = [];
+  const put = (d, x, kind) => {
+    if (d < 60 || d > spec.len - 40) return;
+    items.push({ d, x: clamp(x, -3.2, 3.2), kind, taken: new Set() });
+  };
+  let side = R() < 0.5 ? -1 : 1;
+  for (const f of feeds) {
+    let k = 0;
+    for (let m = f.s + 14; m < f.e; m += (26 + R() * 10) / D.items) {
+      side = -side;
+      put(m, side * (1.7 + R() * 1.3), k++ % 3 === 1 ? "salt" : "food");
+    }
+  }
+  for (const c of climbs) {
+    if (D.items > 0.78) { side = -side; put(c.s - 36, side * (1.6 + R() * 1.4), "water"); }
+    side = -side; put(c.e + 46, side * (1.6 + R() * 1.4), "water");
+  }
+  for (let k = 0; k < (D.items > 0.7 ? 2 : 1); k++) {
+    side = -side; put(spec.len * (0.4 + 0.28 * k), side * (1.6 + R() * 1.4), "water");
+  }
+  items.sort((a, b) => a.d - b.d);
+
+
+  const winds = [];
+  { let m = 0;
+    while (m < spec.len + 200) {
+      const L = 260 + R() * 320;
+      const str = R() < 0.45 ? 0 : (0.35 + R() * 0.65) * spec.wind;
+      winds.push({ s: m, e: m + L, dir: R() < 0.5 ? -1 : 1, str: clamp(str, 0, 1) });
+      m += L;
+    }
+  }
+
+  const scenery = [];
+  for (let m = -60; m < spec.len + 200; m += 9 + R() * 16) {
+    scenery.push({ d: m, side: R() < 0.5 ? -1 : 1, off: 1.6 + R() * 5.5, s: 0.5 + R() * 0.9, k: R() });
+  }
+
+  return { spec, len: spec.len, grades, elev, eMin, eMax, climbs,
+    primes, feeds, items, winds, scenery };
+}
+
+function gradeAt(c, m) {
+  const i = m / STEP, i0 = clamp(Math.floor(i), 0, c.grades.length - 1), i1 = clamp(i0 + 1, 0, c.grades.length - 1);
+  return lerp(c.grades[i0], c.grades[i1], clamp(i - i0, 0, 1));
+}
+function elevAt(c, m) {
+  const i = m / STEP, i0 = clamp(Math.floor(i), 0, c.elev.length - 1), i1 = clamp(i0 + 1, 0, c.elev.length - 1);
+  return lerp(c.elev[i0], c.elev[i1], clamp(i - i0, 0, 1));
+}
+function windAt(c, m) {
+  for (const w of c.winds) if (m >= w.s && m < w.e) return w;
+  return { dir: 0, str: 0 };
+}
+function centreAt(m) {
+  return Math.sin(m * 0.0071) * 2.5 + Math.sin(m * 0.0163 + 1.7) * 1.2 + Math.sin(m * 0.031 + 0.6) * 0.4;
+}
+
+function makeRider(cfg, i, isYou, typeKey, R, extra) {
+  const a = ARCHETYPES[typeKey];
+  return {
+    name: cfg.name, c: cfg.c, num: cfg.n, i, you: isYou, archetype: a,
+    stats: Object.assign({}, BASE_STATS, a.stats, extra || {}),
+    dist: -(i * 2.2) - (isYou ? 4 : 0), prev: 0,
+    x: clamp(((i % 5) - 2) * 1.5 + (Math.floor(i / 5) ? 0.7 : 0), -3.4, 3.4),
+    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0,
+    energy: 100, fuel: 100, fluid: 100,
+    cracked: false, bonk: false, dry: false, absorb: 0, jump: 1, burst: 0, launch: false, launched: false, prevEff: "tempo", bump: 0,
+    eff: "tempo", q: 0, wheel: null, inBunch: true, stumble: 0, spin: 0,
+    hold: null, commit: 0, passSide: 0, grab: null, spent: false,
+    finished: false, time: 0, place: 0, sprintPts: 0, komPts: 0, gcTime: 0, rep: 0.5, money: 0,
+    load: 0, fatigue: 0, legCap: 100, bonus: 0,
+    strength: isYou ? 1 : 0.995 + R() * 0.035, plan: null, think: R() * 0.4
+  };
+}
+function pickPlan(i, R) {
+  const kinds = ["sprint", "climb", "raid", "diesel", "sprint", "climb", "raid"];
+  return { k: kinds[i % kinds.length], at: 0.26 + R() * 0.4, kick: 150 + R() * 200 };
+}
+
+function createRace(opts) {
+  const spec = STAGES[opts.stageIndex];
+  const D = tierProfile(opts.div === undefined ? 8 : opts.div);
+  const course = buildStage(opts.seed, spec, D);
+  const R = mulberry32(opts.seed ^ 0x5f3d17);
+  const riders = [];
+  const you = makeRider(YOU, 0, true, opts.playerType, R, opts.playerStats);
+  riders.push(you);
+  FIELD.forEach((f, k) => {
+    const r = makeRider(f, k + 1, false, f.type, R);
+    r.plan = pickPlan(k + 1, R);
+    r.strength += D.strength;
+    riders.push(r);
+  });
+  for (const r of riders) { r.tx = r.x; r.txS = r.x; r.prev = r.dist; }
+  const ss = riders.map(r => r.strength).sort((a, b) => a - b);
+  for (const r of riders) r.rep = clamp((r.strength - ss[0]) / (ss[ss.length - 1] - ss[0] + 1e-6), 0, 1);
+  you.rep = 0.45;   // day one nobody knows you. win something and that changes.
+  if (opts.gc) for (const r of riders) {
+    const g = opts.gc[r.name];
+    if (g) { r.gcTime = g.time; r.sprintPts = g.sprintPts; r.komPts = g.komPts; }
+  }
+  // Days in the legs. Carried between stages, never shown as its own gauge: it is
+  // simply the reason your legs start lower and come back slower today.
+  if (opts.fatigue) for (const r of riders) {
+    r.fatigue = clamp(opts.fatigue[r.name] || 0, 0, 100);
+    r.legCap = 100 - r.fatigue * 0.28;
+    r.energy = r.legCap;
+  }
+  return {
+    course, riders, you, spec: course.spec, D, div: opts.div === undefined ? 8 : opts.div,
+    payScale: 1 + 2.5 * D.t,
+    stageIndex: opts.stageIndex, seed: opts.seed,
+    rnd: mulberry32(opts.seed ^ 0xa11ce), clock: 0, acc: 0, chase: 0, bunchHead: 0,
+    breakaway: [], breakGap: 0, over: false, events: [],
+    leaders: opts.leaders || {}
+  };
+}
+
+function draftFor(race, r) {
+  const w = windAt(race.course, r.dist);
+  const off = w.dir * w.str * 2.0;
+  const tol = 1.8 - 0.45 * w.str;
+  const edge = CFG.roadW / 2 - 0.55;
+  // Quality falls off smoothly all the way out to the lane edge, so a rider who is
+  // slightly off the wheel gets a weak draft rather than nothing at all. Without
+  // this, picking the nearest lead and then scoring zero left them with no shelter
+  // AND blocked from the riders further up the road.
+  const laneTol = tol + 1.0;
+  const test = o => {
+    const gap = o.dist - r.dist;
+    if (gap < 1.0 || gap > 19) return 0;
+    const centre = o.x + off;
+    const lat = Math.abs(r.x - centre);
+    if (lat > laneTol) return 0;
+    const lq = 1 - lat / laneTol;
+    const gq = gap < 9 ? 1 : 1 - (gap - 9) / 10;
+    let q = lq * lq * gq;
+    if (Math.abs(centre) > edge) q *= 0.45;
+    return q;
+  };
+  // You draft whichever rider ahead shelters you best, EXCEPT that a rider sitting
+  // in someone else's wake breaks it up before it reaches you. So a rider directly
+  // in line four metres up blocks the one ten metres up, but a rider off to the
+  // side does not: they are not in the wind path, so you still get the well-lined-up
+  // wheel further ahead. "Nearest rider wins" was wrong, because it handed you a
+  // barely-ahead rider off to one side over a rider you were squarely behind.
+  const shadowed = o => {
+    const centreO = o.x + off, og = o.dist - r.dist;
+    for (const c of race.riders) {
+      if (c === r || c === o) continue;
+      const cg = c.dist - r.dist;
+      // must sit meaningfully between us: riders essentially alongside each other
+      // (within half a bike length) do not block one another, so two riders level
+      // in the road both draft the same wheel ahead
+      if (cg <= 0.8 || cg >= og) continue;
+      if (Math.abs(c.x - centreO) < HIT_LAT) return true; // and inside their wake
+    }
+    return false;
+  };
+  let lead = null, bq = 0;
+  for (const o of race.riders) {
+    if (o === r) continue;
+    const q = test(o);
+    if (q <= 0 || q <= bq) continue;
+    if (shadowed(o)) continue;
+    bq = q; lead = o;
+  }
+  r.q = bq;
+  r.wheel = lead;
+  r.shelterOff = off;
+  // The speed cap is a COLLISION guard, not a drafting one: it must only look at a
+  // rider close enough and square enough in front to actually run into. Pointing it
+  // at the draft wheel capped the whole bunch to riders up to 19 m up the road.
+  let ah = null, ad = 1e9;
+  for (const o of race.riders) {
+    if (o === r) continue;
+    const gap = o.dist - r.dist;
+    // Only once you are nearly on the wheel. At 6 m the cap stopped you well short
+    // of the rider, so the draft could never pull you up to them.
+    if (gap <= 0 || gap > HIT_LON + 0.9 || Math.abs(o.x - r.x) > HIT_LAT) continue;
+    if (gap < ad) { ad = gap; ah = o; }
+  }
+  r.ahead = ah;
+}
+
+function danger(race, r) {
+  let lead = Infinity;
+  for (const x of race.riders) if (x.gcTime < lead) lead = x.gcTime;
+  const gcThreat = 1 - clamp((r.gcTime - lead) / 45, 0, 1);
+  const base = race.stageIndex === 0 ? r.rep : 0.35 * r.rep + 0.65 * gcThreat;
+  let d = 0.18 + 0.68 * base;
+  if (race.leaders.points === r.name) d = Math.max(d, 0.68);
+  if (race.leaders.kom === r.name && race.course.climbs.length) d = Math.max(d, 0.55);
+  if (race.leaders.gc === r.name) d = 0.96;
+  return clamp(d, 0, 1);
+}
+
+function updateGroups(race) {
+  const sorted = race.riders.slice().sort((a, b) => b.dist - a.dist);
+  const groups = [[sorted[0]]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i - 1].dist - sorted[i].dist < 14) groups[groups.length - 1].push(sorted[i]);
+    else groups.push([sorted[i]]);
+  }
+  let bunch = groups[0];
+  for (const g of groups) if (g.length > bunch.length) bunch = g;
+  const head = bunch[0].dist;
+  race.bunchHead = head;
+  const brk = [];
+  for (const r of race.riders) {
+    r.inBunch = bunch.indexOf(r) >= 0;
+    if (!r.inBunch && r.dist > head + 10) brk.push(r);
+  }
+  // Deep in a bunch you are sheltered by the mass, not just the one wheel ahead.
+  // Count riders around you, ahead and either side, and turn that into a baseline
+  // shelter. This is what makes the peloton an efficient place to sit and is why
+  // a lone rider off the front is doing real work.
+  for (const r of race.riders) {
+    let cover = 0;
+    for (const o of race.riders) {
+      if (o === r) continue;
+      const gap = o.dist - r.dist;
+      if (gap < -6 || gap > 16) continue;
+      const lat = Math.abs(o.x - r.x);
+      if (lat > 4.0) continue;
+      // riders ahead shelter you most; alongside still breaks up the air
+      const w = gap > 0.5 ? 1 : 0.45;
+      cover += w * (1 - lat / 4.0) * (gap > 0.5 ? clamp(1 - (gap - 1) / 15, 0.25, 1) : 1);
+    }
+    r.cover = clamp(cover / 3.4, 0, 1);
+  }
+  race.breakaway = brk;
+  let threat = 0, far = head;
+  for (const r of brk) { const d = danger(race, r); if (d > threat) threat = d; if (r.dist > far) far = r.dist; }
+  const gap = far - head;
+  const done = head / race.course.len;
+  race.breakGap = gap;
+  race.chase = clamp(threat * threat * clamp(gap / 18, 0, 1) * (0.45 + 0.55 * done) * (1.35 + 0.3 * race.D.ai), 0, 1);
+}
+
+function nearestPrime(race, r, kind, range) {
+  let b = null, bd = 1e9;
+  for (const p of race.course.primes) {
+    if (p.kind !== kind || p.crossed.indexOf(r) >= 0) continue;
+    const dd = p.d - r.dist;
+    if (dd < 0 || dd > range || dd > bd) continue;
+    bd = dd; b = p;
+  }
+  return b;
+}
+function findItem(race, r, kind, reach) {
+  let b = null, bd = 1e9;
+  for (const it of race.course.items) {
+    if (it.kind !== kind || it.taken.has(r)) continue;
+    const dd = it.d - r.dist;
+    if (dd < 3 || dd > 30 || dd > bd) continue;
+    if (Math.abs(it.x - r.x) > reach) continue;
+    bd = dd; b = it;
+  }
+  return b;
+}
+
+function aiThink(race, r, dt) {
+  r.commit -= dt; r.think -= dt;
+  if (r.think > 0) return;
+  r.think = 0.3 + race.rnd() * 0.2;
+  const C = race.course, togo = C.len - r.dist, prog = r.dist / C.len, g = gradeAt(C, r.dist);
+  const p = r.plan;
+  let want = "tempo";
+
+  if (p.k === "sprint" && togo < p.kick) want = "attack";
+  else if (p.k === "climb" && g > 0.45 && prog > 0.18) want = "attack";
+  else if (p.k === "raid" && prog > p.at && prog < p.at + 0.2) want = "attack";
+  else if (p.k === "diesel" && togo < 130) want = "attack";
+  if (p.k === "sprint" && nearestPrime(race, r, "sprint", 110) && r.energy > 42) want = "attack";
+  if (p.k === "climb" && nearestPrime(race, r, "kom", 120) && r.energy > 42) want = "attack";
+  if (togo < CFG.sprintFrom) want = "attack";
+
+  // the bunch only works when it has something to be afraid of.
+  // sharper divisions notice sooner.
+  const ai = race.D.ai;
+  if (r.inBunch && race.chase > 0.35 - 0.16 * ai && r.energy > 45 && race.breakGap > 20) want = "attack";
+  if (r.inBunch && race.chase < 0.12 && want === "attack" && togo > 320 && p.k !== "raid") want = "tempo";
+
+  if (r.energy < 25) r.spent = true;
+  if (r.energy > 55) r.spent = false;
+  if (want === "attack" && r.spent && togo > 120) want = "tempo";
+  if (want === "attack" && r.energy < 26 + 12 * ai && togo > 260) want = "tempo";  // better pacing up the ladder
+  if (r.energy < 55 && r.q < 0.2 && want !== "attack" && togo > 320) want = "ease";
+  if (r.energy < 14 || r.cracked) want = "ease";
+  r.eff = want;
+
+  r.grab = null;
+  let need = null;
+  if (r.absorb < 45) {
+    if (r.fuel < 52 + 14 * ai) need = "food";                       // they feed earlier up top
+    if (r.fluid < 46 + 14 * ai && (need === null || r.fuel > 30)) need = race.rnd() < 0.35 ? "salt" : "water";
+  }
+  if (need) {
+    const urgent = need === "food" ? r.fuel < 22 : r.fluid < 20;
+    const reach = (urgent ? 3.6 : 1.9) + 0.9 * ai;
+    r.grab = findItem(race, r, need, reach) || (need === "water" ? findItem(race, r, "salt", reach) : null);
+  }
+  if (r.grab) { r.tx = clamp(r.grab.x, -3.7, 3.7); return; }
+
+  let cand = null, bd = 1e9;
+  for (const o of race.riders) {
+    if (o === r) continue;
+    const gap = o.dist - r.dist;
+    if (gap > 2.5 && gap < 20 && Math.abs(o.x - r.x) < 3.4 && gap < bd) { bd = gap; cand = o; }
+  }
+  const holdOk = r.hold && (r.hold.dist - r.dist) > 2 && (r.hold.dist - r.dist) < 22
+    && Math.abs(r.hold.x - r.x) < 3.8;
+  if (!holdOk) r.hold = cand;
+  else if (cand && cand !== r.hold && (r.hold.dist - r.dist) - bd > 4) r.hold = cand;
+
+  const t = r.hold;
+  if (t) {
+    const off = r.shelterOff || 0, gap = t.dist - r.dist;
+    const blockedBy = t.speed < r.speed - 0.5 || (want === "attack" && gap < 9);
+    if (blockedBy && r.commit <= 0) { r.passSide = t.x > 0 ? -1 : 1; r.commit = 1.8 + race.rnd() * 1.6; }
+    r.tx = r.commit > 0
+      ? clamp(t.x + off + r.passSide * 2.1, -3.7, 3.7)
+      : clamp(t.x + off + (r.i % 2 ? 0.14 : -0.14), -3.7, 3.7);
+  }
+}
+
+function stepRider(race, r, dt) {
+  if (r.finished) return;
+  const C = race.course;
+  r.prev = r.dist;
+  const g = gradeAt(C, r.dist), w = windAt(C, r.dist), st = r.stats;
+  draftFor(race, r);
+  if (r.you) r.stumble = Math.max(0, r.stumble - dt);
+  r.bump = Math.max(0, r.bump - dt);
+  if (!r.you) aiThink(race, r, dt);
+
+  // The jump. It recharges only while you are not attacking, and fastest sitting
+  // on a good wheel. Launching out of full shelter is worth far more than
+  // launching from the wind, and mashing the button is worth nothing at all.
+  // A jump fires on a deliberate launch: for you, three quick alternating strokes;
+  // for the AI, the moment they commit to an attack. It spends the whole charge,
+  // so you cannot chain jumps, and it recharges only while you are not attacking.
+  const wantLaunch = r.you ? (r.launch && !r.launched) : (r.eff === "attack" && r.prevEff !== "attack");
+  if (wantLaunch && r.jump > 0.02) {
+    r.burst = r.jump * (0.35 + 0.65 * r.q);
+    r.jump = 0;
+    if (r.you) race.events.push(r.burst > 0.60 ? { t: "BIG JUMP", c: "you" }
+      : r.burst > 0.28 ? { t: "JUMP", c: "you" }
+      : { t: "NOTHING IN THE LEGS", c: "spot" });
+  }
+  if (r.eff !== "attack") r.jump = clamp(r.jump + 0.55 * dt * (0.4 + 0.6 * r.q), 0, 1);
+  r.launched = r.you ? r.launch : false;              // one jump per launch signal
+  r.burst = Math.max(0, r.burst - dt / 1.6);
+  r.prevEff = r.eff;
+
+  const togo = C.len - r.dist;
+  const climbMul = g > 0 ? st.climbCost : st.descend;
+  const shelter = 1 - 0.5 * Math.max(0, g) + 0.15 * Math.max(0, -g);
+  let effVal = r.eff === "attack" ? st.attack : r.eff === "ease" ? CFG.ease : CFG.tempo;
+  if (r.fluid < 12 && r.eff === "attack") effVal = CFG.tempo;
+
+  const fresh = 0.90 + 0.10 * clamp(r.energy / 40, 0, 1);
+  const dryPen = 0.85 + 0.15 * clamp(r.fluid / 35, 0, 1);
+  const heavy = 1 - 0.15 * clamp(r.absorb / 100, 0, 1);   // full stomach, heavy legs
+  let p = effVal * r.strength * fresh * dryPen * heavy * (1 + 0.30 * r.burst) * (1 + 0.14 * r.spin) * (r.stumble > 0 ? 0.88 : 1);
+  if (togo < 300) p *= st.kick;
+  if (r.bonk) p = Math.min(p, 0.87 * r.strength);
+  if (r.cracked) p = Math.min(p, Math.min(0.80, 0.66 * st.resilience) * r.strength);
+
+  let tgt = CFG.base * p * (1 - 0.34 * g * climbMul) * (1 + 0.045 * r.q * shelter);
+  // You cannot coast through the wheel in front. A real effort overrides it.
+  if (r.eff !== "attack" && r.ahead && tgt > r.ahead.speed) tgt = r.ahead.speed;
+  if (!r.you && r.inBunch) {
+    if (race.chase > 0.15) tgt *= 1 + 0.075 * race.chase;   // they have a reason to ride
+    else if (togo > 300) tgt *= 0.962;                      // nothing scares them, so they sit up
+  }
+  if (!r.you && r.hold && !r.hold.finished && r.eff !== "attack") {
+    const gp = r.hold.dist - r.dist;
+    if (gp > 0 && gp < 26) tgt *= 1 + clamp((gp - 4.8) * 0.16, -0.075, 0.085);
+  }
+  r.speed += (tgt - r.speed) * (1 - Math.exp(-dt * 1.35));
+
+  // Your single wheel gives the main shelter, but sitting deep in a big group is
+  // sheltering in itself: the mass breaks the wind even when you are not perfectly
+  // on a wheel. This bunch floor is what makes staying in the peloton worthwhile
+  // and keeps a lone breakaway working harder than the group chasing it.
+  // Graded by how surrounded you actually are, not a flat bonus for group
+  // membership: the middle of a bunch is sheltered, the edge and the front are not.
+  const bunchFloor = BUNCH_SHELTER * (r.cover || 0);
+  const qEff = Math.max(r.q, bunchFloor);
+  const exposure = 1 - Math.min(0.97, 0.85 * st.draft) * qEff * shelter;
+  const down = Math.max(0, -g);
+  let de;
+  if (effVal > CFG.tempo && !r.cracked) {
+    // Pedaling hard is the only fast drain. This is your matches burning.
+    de = -(effVal - CFG.tempo) * 34 * (1 + 0.45 * Math.max(0, g) * climbMul) * (0.45 + 0.5 * exposure);
+    de *= 1 + 0.55 * (1 - r.burst);                 // forcing an uncharged jump costs extra
+  } else {
+    // Tempo and easing both recover. Fastest sheltered, slower alone, and choked
+    // when you run low on fuel or fluid. Easing recovers faster than tempo.
+    const room = r.cracked ? 1 : (CFG.tempo - (effVal < CFG.tempo ? effVal : CFG.tempo)) / 0.28;
+    // On a descent the draft barely matters, so the shelter bonus flattens toward
+    // neutral: a lone rider recovers almost as well as the bunch and holds the gap.
+    const shelterBonus = (0.5 + 1.3 * (1 - exposure)) * (1 - 0.85 * down) + 0.95 * 0.85 * down;
+    de = (2.4 + 5.0 * room) * shelterBonus * st.recover * (1 + 0.3 * down);
+  }
+  // Exposure always bleeds a little, so a lone rider at tempo just barely loses
+  // ground while the sheltered bunch just barely gains. This is the whole reason
+  // a breakaway is caught, and it is stronger in a crosswind.
+  de -= (0.55 + 1.5 * exposure * (1 + 0.7 * w.str)) * st.windTax * (1 - 0.75 * down);
+  if (!r.you && r.inBunch && race.chase > 0.15) de -= 1.5 * race.chase;
+  if (de > 0) de *= (r.bonk ? 0.25 : 1) * (r.fluid < 25 ? 0.55 : 1) * (r.fuel < 20 ? 0.6 : 1);
+  if (de > 0) de *= 1 - r.fatigue * 0.003;          // tired legs come back slower
+  r.energy = clamp(r.energy + de * dt, 0, r.legCap);
+  if (r.energy <= 0) r.cracked = true;
+  if (r.cracked && r.energy > 28 / st.resilience) r.cracked = false;
+
+  // What you spend today is what you are missing tomorrow. Riding in the wind
+  // costs roughly twice what the same effort costs sitting on a wheel.
+  r.load += ((effVal > CFG.tempo ? (effVal - CFG.tempo) * 1.2 * (0.5 + 0.5 * exposure) : 0)
+    + (r.cracked ? 0.6 : 0) + (r.bonk ? 0.3 : 0) + (r.dry ? 0.3 : 0)) * dt;
+
+  const burn = (0.72 + 1.05 * (effVal - CFG.ease) / 0.66) * (1 + 0.3 * Math.max(0, g)) * st.fuelUse;
+  r.fuel = clamp(r.fuel - burn * dt, 0, 100);
+  const wasBonk = r.bonk; r.bonk = r.fuel <= 0;
+  if (r.bonk && !wasBonk && r.you) race.events.push({ t: "BONK", c: "fuel" });
+
+  const sweat = (0.42 + 0.62 * (effVal - CFG.ease) / 0.66)
+    * (1 + 0.40 * Math.max(0, g) - 0.22 * Math.max(0, -g))
+    * (1 + 0.30 * r.q) * st.sweatRate;
+  r.fluid = clamp(r.fluid - sweat * dt, 0, 100);
+  const wasDry = r.dry; r.dry = r.fluid < 12;
+  if (r.dry && !wasDry && r.you) race.events.push({ t: "CRAMPING", c: "water" });
+
+  // Position over the summit is the position you get on the way down. A good
+  // descender holds a line the rest of the bunch cannot.
+  const pin = 1 - 0.30 * down / st.descend;
+  r.txS += (r.tx - r.txS) * (1 - Math.exp(-dt * (r.you ? 7 : 2.6) * pin));
+  const maxLat = (r.you ? 2.6 : 2.1) * st.handling * pin;
+  const wantV = clamp((r.txS - r.x) * 2.4, -maxLat, maxLat);
+  r.vx += (wantV - r.vx) * (1 - Math.exp(-dt * (r.you ? 9 : 5.5)));
+  r.x = clamp(r.x + r.vx * dt, -CFG.roadW / 2 + 0.55, CFG.roadW / 2 - 0.55);
+
+  r.dist += r.speed * dt;
+
+  r.absorb = clamp(r.absorb - CFG.digest * st.gut * dt, 0, 100);
+  for (const it of C.items) {
+    if (it.d < r.prev - 1.4 || it.d > r.dist + 1.4) continue;
+    if (it.taken.has(r)) continue;
+    const off = Math.abs(it.x - r.x);
+    if (off > 0.95 * st.reach) continue;
+    it.taken.add(r);
+    if (off > 0.95) r.stumble = Math.max(r.stumble, 0.2);   // reaching wide unsettles you
+    const eff = 1 - 0.85 * clamp(r.absorb / 100, 0, 1);
+    const give = CFG.give[it.kind] * eff;
+    r.absorb = clamp(r.absorb + CFG.load[it.kind], 0, 100);
+    if (it.kind === "food") {
+      const got = Math.min(give, 100 - r.fuel);
+      r.fuel = clamp(r.fuel + give, 0, 100);
+      if (r.you) race.events.push({ t: "+" + Math.round(got) + " FUEL", c: got < 18 ? "spot" : "fuel" });
+    } else if (it.kind === "water") {
+      const got = Math.min(give, 100 - r.fluid);
+      r.fluid = clamp(r.fluid + give, 0, 100);
+      if (r.you) race.events.push({ t: "+" + Math.round(got) + " FLUID", c: got < 18 ? "spot" : "water" });
+    } else {
+      const got = Math.min(give, 100 - r.fluid);
+      r.fluid = clamp(r.fluid + give, 0, 100);
+      r.fuel = clamp(r.fuel + give * 0.24, 0, 100);
+      if (r.you) race.events.push({ t: "+" + Math.round(got) + " FLUID, +FUEL", c: got < 18 ? "spot" : "green" });
+    }
+  }
+  for (const pr of C.primes) {
+    if (pr.d <= r.prev || pr.d > r.dist || pr.crossed.indexOf(r) >= 0) continue;
+    pr.crossed.push(r);
+    const pts = pr.pts[pr.crossed.length - 1] || 0;
+    const purse = pr.kind === "finish" ? 0
+      : Math.round((CFG.purse[pr.kind][pr.crossed.length - 1] || 0) * race.payScale);
+    if (pts > 0) {
+      if (pr.kind === "kom") r.komPts += pts; else r.sprintPts += pts;
+      if (pr.kind === "sprint") r.bonus += CFG.bonusSprint[pr.crossed.length - 1] || 0;
+      r.money += purse;
+      if (r.you) race.events.push({
+        t: "+" + pts + " " + (pr.kind === "kom" ? "MOUNTAIN" : "SPRINT") + (purse ? "   +" + purse : ""),
+        c: pr.kind === "kom" ? "spot" : "green" });
+    }
+  }
+  if (r.dist >= C.len) { r.finished = true; r.time = race.clock; }
+}
+
+// Riders are solid. Nobody passes through anybody.
+//   shoulder to shoulder : hard lateral separation, both lose speed, and whoever
+//                          is leaning in takes more of the correction
+//   rear into a wheel    : the rear rider pays heavily, the front rider pays only
+//                          in proportion to how hard the two were closing, so a
+//                          gentle touch costs them nothing and a real hit costs both
+const HIT_LAT = 1.15, HIT_LON = 1.9, EDGE = CFG.roadW / 2 - 0.55;
+const BUNCH_SHELTER = 0.55;   // how much the mass of a bunch shelters you
+function separate(race, dt) { resolve(race, dt); resolve(race, 0); }   // second pass settles chains
+function resolve(race, dt) {
+  const rs = race.riders;
+  for (let a = 0; a < rs.length; a++) for (let b = a + 1; b < rs.length; b++) {
+    const A = rs[a], B = rs[b];
+    if (A.finished || B.finished) continue;
+    const dd = B.dist - A.dist;
+    if (Math.abs(dd) >= HIT_LON) continue;
+    let dx = B.x - A.x;
+    if (Math.abs(dx) >= HIT_LAT) continue;
+    if (Math.abs(dx) < 1e-3) dx = A.i < B.i ? -1e-3 : 1e-3;
+    const side = dx > 0 ? 1 : -1;              // B sits on this side of A
+    const overlap = HIT_LAT - Math.abs(dx);
+
+    if (Math.abs(dd) < 0.8) {
+      // ---------------- alongside
+      const lean = Math.max(0, side * (A.vx - B.vx));       // how hard they are closing
+      const aPush = Math.max(0, side * A.vx), bPush = Math.max(0, -side * B.vx);
+      const tot = aPush + bPush;
+      const wA = tot > 1e-4 ? aPush / tot : 0.5;            // the one leaning in gives way
+      // If one of them is pinned against the gutter and cannot give way, the other
+      // has to take up the slack, otherwise they quietly merge into each other.
+      const wantA = -side * overlap * wA, wantB = side * overlap * (1 - wA);
+      const a1 = clamp(A.x + wantA, -EDGE, EDGE), b1 = clamp(B.x + wantB, -EDGE, EDGE);
+      const missA = wantA - (a1 - A.x), missB = wantB - (b1 - B.x);
+      A.x = clamp(a1 - missB, -EDGE, EDGE);
+      B.x = clamp(b1 - missA, -EDGE, EDGE);
+      const f = 1 - (0.08 + 1.9 * clamp(lean, 0, 2)) * dt;
+      A.speed *= f; B.speed *= f;
+      const avg = (A.vx + B.vx) * 0.5;                      // no leaning through
+      A.vx = avg; B.vx = avg;
+      if (A.you || B.you) bump(race, A.you ? A : B, lean > 0.4 ? "SHOULDERED" : "CONTACT");
+    } else {
+      // ---------------- one is in front
+      const front = dd > 0 ? B : A, rear = dd > 0 ? A : B;
+      const closing = Math.max(0, rear.speed - front.speed);
+      rear.speed -= (closing * 3.8 + 0.12) * dt;             // you cannot ride through a wheel
+      front.speed *= 1 - clamp(closing, 0, 4) * 0.12 * dt;  // only a real hit costs them
+      const nudge = Math.min(overlap, 1.6 * dt);            // and it shoves you offline
+      rear.x = clamp(rear.x - side * (dd > 0 ? 1 : -1) * nudge, -EDGE, EDGE);
+      if (rear.you) bump(race, rear, closing > 1 ? "INTO THE WHEEL" : "TOUCHED A WHEEL");
+      else if (front.you && closing > 1) bump(race, front, "HIT FROM BEHIND");
+    }
+  }
+}
+function bump(race, r, text) {
+  if (r.bump > 0) return;
+  r.bump = 0.65;
+  if (r.you) race.events.push({ t: text, c: "spot" });
+}
+
+function tick(race, dt) {
+  race.clock += dt;
+  updateGroups(race);
+  for (const r of race.riders) stepRider(race, r, dt);
+  separate(race, dt);
+}
+
+function step(race, frameDt, input) {
+  race.acc += Math.min(frameDt, 0.25);
+  while (race.acc >= CFG.fixedDt) {
+    if (input) {
+      const you = race.you;
+      // Effort comes out of the pedals. Clean alternating strokes above the
+      // threshold put you above tempo; spinning faster still adds a little more.
+      you.eff = input.ease ? "ease" : (input.rate >= CFG.strokeAttack ? "attack" : "tempo");
+      you.spin = clamp((input.rate - CFG.strokeFull) / 2.0, 0, 1);
+      you.launch = !!input.launch;                    // three alternating strokes earned a jump
+      if (input.stumble) you.stumble = 0.25;
+      if (input.tx !== null && input.tx !== undefined) you.tx = clamp(input.tx, -3.8, 3.8);
+    }
+    tick(race, CFG.fixedDt);
+    race.acc -= CFG.fixedDt;
+    if (race.you.finished) { race.over = true; break; }
+  }
+}
+
+function settle(race) {
+  let guard = 0;
+  while (race.riders.some(r => !r.finished) && guard++ < 120 * 400) tick(race, CFG.fixedDt);
+  // Riders finishing together take the same time, as in the sport.
+  const order = race.riders.slice().sort((a, b) => a.time - b.time);
+  let groupTime = order[0].time;
+  order[0].time = groupTime;
+  for (let i = 1; i < order.length; i++) {
+    if (order[i].time - order[i - 1].time <= CFG.sameTimeGap) order[i].time = groupTime;
+    else groupTime = order[i].time;
+  }
+  order.forEach((r, i) => {
+    r.place = i + 1;
+    r.bonus += CFG.bonusStage[i] || 0;
+    r.gcTime += r.time - r.bonus;
+    r.money += Math.round((CFG.purse.stage[i] || 0) * race.payScale);
+  });
+  return order;
+}
+
+function liveOrder(race) {
+  return race.riders.slice().sort((a, b) =>
+    a.finished !== b.finished ? (a.finished ? -1 : 1)
+      : a.finished ? a.time - b.time : b.dist - a.dist);
+}
+const byKey = (riders, key, tie) => riders.slice().sort((a, b) => (b[key] - a[key]) || (a[tie] - b[tie]));
+
+return { CFG, ARCHETYPES, BASE_STATS, STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
+  createRace, step, tick, settle, liveOrder, byKey, gradeAt, elevAt, windAt, centreAt, danger };
+})();
+
+/* ============================================================================
+   VIEW  ·  drawing, input and screens. none of this ports.
+   ==========================================================================*/
+(function () {
+"use strict";
+const { CFG, ARCHETYPES, STAGES, clamp, lerp } = Sim;
+const PAL = { paper: "#E6E4DC", verge: "#C7CEBF", tarmac: "#B3B1AA", ink: "#2E312F", chalk: "#F4F2EC",
+  water: "#0072B2", fuel: "#E69F00", green: "#009E73", spot: "#D55E00", yellow: "#D8A400", you: "#CC0066" };
+
+const cv = document.getElementById("game"), ctx = cv.getContext("2d");
+let W = 0, H = 0, roadPx = 280, pxM = 31, yS = 9, riderR = 15, playerY = 0, topBar = 0;
+function metrics() {
+  roadPx = Math.min(W * 0.52, 270, H * 0.30);
+  pxM = roadPx / CFG.roadW;
+  // A rider is HIT_LAT wide and HIT_LON long. Lock the forward scale to the
+  // sideways one in that ratio and the body draws as an exact circle, on any
+  // screen, with contact firing precisely where the circle touches.
+  yS = pxM * (Sim.HIT_LAT / Sim.HIT_LON);
+  riderR = (Sim.HIT_LAT / 2) * pxM;
+  playerY = H * 0.7; topBar = Math.max(64, Math.min(86, H * 0.11));
+}
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); metrics();
+}
+addEventListener("resize", resize); resize();
+
+let race = null, tour = null, camC = 0, flashes = [], phase = "menu", countdown = 0;
+let playerType = "rouleur";
+let ladder = { div: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, units: "metric", steer: "drag", money: 0 };
+
+// ---------------------------------------------------------------- tilt steering
+// iOS 13+ needs an explicit permission grant from inside a user gesture, and the
+// sensor only reports on a secure origin. Both can fail, so this always degrades
+// back to dragging and says why.
+const Tilt = {
+  on: false, ok: false, gamma: 0, zero: null, state: "off", since: 0,
+  handle(e) {
+    if (e.gamma === null || e.gamma === undefined) return;
+    Tilt.ok = true; Tilt.state = "on";
+    Tilt.gamma = Tilt.gamma * 0.72 + e.gamma * 0.28;      // the sensor is noisy
+  },
+  async enable() {
+    if (typeof DeviceOrientationEvent === "undefined") { Tilt.state = "unsupported"; return false; }
+    try {
+      if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        const r = await DeviceOrientationEvent.requestPermission();
+        if (r !== "granted") { Tilt.state = "denied"; return false; }
+      }
+    } catch (e) { Tilt.state = "blocked"; return false; }
+    window.addEventListener("deviceorientation", Tilt.handle);
+    Tilt.on = true; Tilt.ok = false; Tilt.state = "waiting"; Tilt.since = performance.now();
+    setTimeout(() => { if (!Tilt.ok) { Tilt.state = "no signal"; } refreshMenu(); }, 1600);
+    return true;
+  },
+  disable() {
+    window.removeEventListener("deviceorientation", Tilt.handle);
+    Tilt.on = false; Tilt.ok = false; Tilt.state = "off"; Tilt.zero = null;
+  },
+  recentre() { Tilt.zero = null; },
+  // returns a road position, or null if tilt is not usable right now
+  read() {
+    if (!Tilt.on || !Tilt.ok || Tilt.zero === null) return null;
+    let d = Tilt.gamma - Tilt.zero;
+    const dead = 1.4;
+    if (Math.abs(d) < dead) d = 0; else d -= Math.sign(d) * dead;
+    return clamp(d / 20, -1, 1) * (CFG.roadW * 0.44);
+  },
+  label() {
+    if (ladder.steer !== "tilt") return "";
+    return Tilt.state === "on" ? "Tilt the phone to steer."
+      : Tilt.state === "waiting" ? "Waiting for the sensor."
+      : Tilt.state === "denied" ? "Motion access refused, so dragging is still on."
+      : Tilt.state === "no signal" ? "No motion data here. Needs a phone on https. Dragging is still on."
+      : "No motion sensor here. Dragging is still on.";
+  }
+};
+const M = {
+  get imp() { return ladder.units === "imperial"; },
+  speed(ms) { return M.imp ? ms * 2.23694 : ms * 3.6; },
+  speedTag() { return M.imp ? "MPH" : "KM/H"; },
+  long(m) {                                   // stage distances
+    return M.imp ? (m / 1609.344).toFixed(2) + " mi" : (m / 1000).toFixed(1) + " km";
+  },
+  togo(m) {                                   // distance remaining, live
+    if (M.imp) {
+      const mi = m / 1609.344;
+      return mi >= 0.25 ? mi.toFixed(2) + " MI TO GO" : Math.round(m * 1.09361) + " YD TO GO";
+    }
+    return m >= 1000 ? (m / 1000).toFixed(2) + " KM TO GO" : Math.round(m) + " M TO GO";
+  },
+  near(m) {                                   // banner distances
+    return M.imp ? Math.round(m * 1.09361) + " YD" : Math.round(m) + " M";
+  }
+};
+
+// Persists in environments that provide a store, degrades to session only elsewhere.
+const Store = {
+  async load() {
+    try { const r = await window.storage.get("slipstream:ladder"); return r ? JSON.parse(r.value) : null; }
+    catch (e) { return null; }
+  },
+  async save(v) {
+    try { await window.storage.set("slipstream:ladder", JSON.stringify(v)); } catch (e) { }
+  }
+};
+
+// One rule up, one rule down. The equilibrium of that is "wins sometimes".
+function applyLadder(place) {
+  ladder.tours++;
+  let moved = "held";
+  if (place === 1) {
+    ladder.wins++;
+    if (ladder.div === 1) ladder.topWins++;
+    if (ladder.div > 1) { ladder.div--; moved = "up"; }
+    ladder.strikes = 0;
+  } else if (place >= 5) {
+    ladder.strikes++;
+    if (ladder.strikes >= 2) {                       // two bad tours, not one
+      ladder.strikes = 0;
+      if (ladder.div < 8) { ladder.div++; moved = "down"; }
+    }
+  } else ladder.strikes = 0;
+  if (ladder.div < ladder.best) ladder.best = ladder.div;
+  Store.save(ladder);
+  return moved;
+}
+
+function divDots(cur) {
+  let out = "";
+  for (let d = 8; d >= 1; d--) out += d === cur ? "●" : "○";
+  return out;
+}
+function refreshMenu() {
+  $("unitBtn").textContent = ladder.units === "imperial" ? "Miles" : "Km";
+  $("steerBtn").textContent = ladder.steer === "tilt" ? "Tilt" : "Drag";
+  $("mSteer").textContent = ladder.steer === "tilt" ? Tilt.label()
+    : "Hold the left or right half to turn. Let go and you hold your line.";
+  $("mDiv").textContent = "Division " + ladder.div + " of 8";
+  $("mDots").textContent = divDots(ladder.div);
+  $("mStat").textContent = ladder.tours === 0 ? "Win a tour to move up. Two bad tours and you drop."
+    : ladder.tours + " tours · " + ladder.wins + " won · " + ladder.money + " prize money"
+      + (ladder.strikes ? " · one more bad tour and you drop" : "");
+}
+
+function newTour() {
+  tour = { seed: (Math.random() * 1e9) | 0, stage: 0, gc: {}, leaders: {}, fatigue: {} };
+  const names = [Sim.YOU.name].concat(Sim.FIELD.map(f => f.name));
+  for (const n of names) tour.gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
+}
+function startStage() {
+  race = Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.stage,
+    playerType, gc: tour.gc, leaders: tour.leaders, div: ladder.div, fatigue: tour.fatigue });
+  flashes = []; countdown = 3.2; phase = "count"; Tilt.recentre();
+  strokes = []; alt = []; lastSide = null; spinHint = 0;
+}
+
+// ---------------------------------------------------------------- input
+const keys = new Set();
+let btn = { ease: false, attack: false };
+const touches = new Map();     // id -> { x, y, t }
+function btnR() {
+  const h = Math.max(56, Math.min(74, H * 0.088));
+  const m = Math.max(14, W * 0.045);
+  const w = W / 2 - m * 1.5;
+  return { h, w, y: H - h - Math.max(16, H * 0.032), easeX: m, atkX: W / 2 + m * 0.5 };
+}
+// The whole bottom band is pedals, split down the middle, so one thumb can
+// alternate by rocking side to side. Everything above it steers.
+function inBtn(x, y, k) {
+  const b = btnR();
+  if (y < b.y - 20) return false;
+  return k === "ease" ? x < W / 2 : x >= W / 2;
+}
+addEventListener("keydown", e => {
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "z", "x", " "].indexOf(e.key) >= 0) e.preventDefault();
+  if (!e.repeat) {
+    const now = performance.now() / 1000;
+    if (e.key === "z") stroke("L", now);
+    if (e.key === "x") stroke("R", now);
+  }
+  keys.add(e.key);
+});
+addEventListener("keyup", e => keys.delete(e.key));
+// Pedalling. Alternate left and right cleanly to put power down. Two strokes on
+// the same side is a missed pedal and costs you. Hold both and you are coasting.
+let strokes = [], lastSide = null, stumbleFlag = false, stumbleAt = -9;
+let alt = [], spinHint = 0;                            // recent clean alternating strokes
+function stroke(side, now) {
+  if (side === lastSide) { stumbleFlag = true; stumbleAt = now; alt = []; return; }
+  lastSide = side; strokes.push(now); alt.push(now);
+  if (strokes.length > 24) strokes.shift();
+  while (alt.length && now - alt[0] > 0.6) alt.shift();   // a jump is a quick burst
+}
+function strokeRate(now) {
+  let n = 0;
+  for (let i = strokes.length - 1; i >= 0; i--) { if (now - strokes[i] > 1) break; n++; }
+  return n;
+}
+function down(id, x, y) {
+  const now = performance.now() / 1000;
+  touches.set(id, { x, y, t: now });
+  if (inBtn(x, y, "ease")) { btn.ease = id; stroke("L", now); }
+  else if (inBtn(x, y, "attack")) { btn.attack = id; stroke("R", now); }
+}
+function move(id, x, y) {
+  const t = touches.get(id);
+  if (t) { t.x = x; if (y !== undefined) t.y = y; }
+}
+function up(id) {
+  touches.delete(id);
+  if (btn.ease === id) btn.ease = false;
+  if (btn.attack === id) btn.attack = false;
+}
+
+// Hold a side to turn that way, let go and you hold your line. The whole left half
+// turns left and the whole right half turns right, top or bottom, so there is
+// nothing small to hit. A quick tap down in the pedal band is a pedal stroke and
+// nothing else, which is what stops a sprint from wobbling you off the wheel.
+function steerDir() {
+  const now = performance.now() / 1000, b = btnR();
+  let d = 0;
+  for (const t of touches.values()) {
+    if (t.y >= b.y - 20 && now - t.t < 0.18) continue;
+    d += t.x < W / 2 ? -1 : 1;
+  }
+  return d === 0 ? 0 : (d < 0 ? -1 : 1);
+}
+cv.addEventListener("touchstart", e => { e.preventDefault(); for (const t of e.changedTouches) down(t.identifier, t.clientX, t.clientY); }, { passive: false });
+cv.addEventListener("touchmove", e => { e.preventDefault(); for (const t of e.changedTouches) move(t.identifier, t.clientX, t.clientY); }, { passive: false });
+const endT = e => { for (const t of e.changedTouches) up(t.identifier); };
+cv.addEventListener("touchend", endT); cv.addEventListener("touchcancel", endT);
+cv.addEventListener("mousedown", e => down("m", e.clientX, e.clientY));
+addEventListener("mousemove", e => move("m", e.clientX, e.clientY));
+addEventListener("mouseup", () => up("m"));
+
+function readInput(dt) {
+  const now = performance.now() / 1000;
+  const ease = (btn.ease !== false && btn.attack !== false) || keys.has("ArrowDown");
+  const lean = Tilt.read();
+  const rate = ease ? 0 : strokeRate(now);
+  const stumble = stumbleFlag; stumbleFlag = false;
+  // Three clean alternating strokes inside 0.6 s commit a jump. Two shows a hint
+  // so you learn the timing. Coasting (both held) can never launch.
+  let launch = false;
+  if (!ease) {
+    const recent = alt.filter(t => now - t <= 0.6).length;
+    if (recent >= 3) { launch = true; alt = []; spinHint = 0; }
+    else if (recent === 2) spinHint = now;
+  } else { alt = []; }
+  let d = steerDir();
+  if (keys.has("ArrowLeft")) d = -1;
+  if (keys.has("ArrowRight")) d = 1;
+  // A held side steers. Otherwise tilt, if it is working. Otherwise hold your line.
+  const tx = d !== 0 ? clamp(race.you.x + d * 1.2, -3.8, 3.8)
+    : lean !== null ? lean
+    : race.you.x;
+  return { rate, ease, stumble, launch, tx };
+}
+
+// ---------------------------------------------------------------- draw
+const C = () => race.course;
+const sy = d => playerY - (d - race.you.dist) * yS;
+const sx = (d, x) => W / 2 + (Sim.centreAt(d) - camC + x) * pxM;
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr); ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr); ctx.arcTo(x, y, x + w, y, rr); ctx.closePath();
+}
+function label(t, x, y, size, weight, colour, align, track) {
+  ctx.save();
+  ctx.font = weight + " " + size + 'px "Space Grotesk", system-ui, sans-serif';
+  if (track !== undefined && "letterSpacing" in ctx) ctx.letterSpacing = track + "px";
+  ctx.fillStyle = colour; ctx.textAlign = align || "left"; ctx.textBaseline = "alphabetic";
+  ctx.fillText(t, x, y); ctx.restore();
+}
+function textW(t, size, weight, track) {
+  ctx.save();
+  ctx.font = weight + " " + size + 'px "Space Grotesk", system-ui, sans-serif';
+  if (track !== undefined && "letterSpacing" in ctx) ctx.letterSpacing = track + "px";
+  const w = ctx.measureText(t).width; ctx.restore(); return w;
+}
+function fmt(s) {
+  const m = Math.floor(s / 60), r = s - m * 60;
+  return m > 0 ? m + ":" + r.toFixed(1).padStart(4, "0") : r.toFixed(1) + "s";
+}
+
+function drawRoad() {
+  const c = C(), you = race.you;
+  const dBot = you.dist - (H - playerY) / yS - 20, dTop = you.dist + playerY / yS + 20;
+  const rows = 46, L = [], Rr = [];
+  for (let i = 0; i <= rows; i++) {
+    const d = lerp(dBot, dTop, i / rows), cx = sx(d, 0), y = sy(d);
+    L.push([cx - roadPx / 2, y]); Rr.push([cx + roadPx / 2, y]);
+  }
+  ctx.fillStyle = PAL.verge;
+  ctx.beginPath(); ctx.moveTo(L[0][0] - W, L[0][1]);
+  for (let i = 0; i <= rows; i++) ctx.lineTo(L[i][0], L[i][1]);
+  ctx.lineTo(L[rows][0] - W, L[rows][1]); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(Rr[0][0] + W, Rr[0][1]);
+  for (let i = 0; i <= rows; i++) ctx.lineTo(Rr[i][0], Rr[i][1]);
+  ctx.lineTo(Rr[rows][0] + W, Rr[rows][1]); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i <= rows; i++) ctx.lineTo(L[i][0], L[i][1]);
+  for (let i = rows; i >= 0; i--) ctx.lineTo(Rr[i][0], Rr[i][1]);
+  ctx.closePath(); ctx.fillStyle = PAL.tarmac; ctx.fill();
+
+  for (const f of c.feeds) {
+    if (f.e < dBot || f.s > dTop) continue;
+    const a = Math.max(f.s, dBot), b = Math.min(f.e, dTop), st = 10;
+    ctx.beginPath();
+    for (let i = 0; i <= st; i++) { const d = lerp(a, b, i / st); i ? ctx.lineTo(sx(d, 0) - roadPx / 2, sy(d)) : ctx.moveTo(sx(d, 0) - roadPx / 2, sy(d)); }
+    for (let i = st; i >= 0; i--) { const d = lerp(a, b, i / st); ctx.lineTo(sx(d, 0) + roadPx / 2, sy(d)); }
+    ctx.closePath(); ctx.fillStyle = "rgba(244,242,236,.22)"; ctx.fill();
+    if (f.s > dBot && f.s < dTop) label("FEED ZONE", sx(f.s, 0), sy(f.s) - 6, 12, 700, "rgba(244,242,236,.9)", "center", 2);
+  }
+  ctx.strokeStyle = PAL.chalk; ctx.lineWidth = Math.max(2, pxM * 0.09); ctx.lineJoin = "round";
+  for (const side of [L, Rr]) {
+    ctx.beginPath();
+    for (let i = 0; i <= rows; i++) i ? ctx.lineTo(side[i][0], side[i][1]) : ctx.moveTo(side[i][0], side[i][1]);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(244,242,236,.75)"; ctx.lineWidth = Math.max(2, pxM * 0.07);
+  for (let m = Math.floor(dBot / 12) * 12; m < dTop; m += 12) {
+    const y1 = sy(m), y2 = sy(m + 6);
+    if (y1 < -30 || y2 > H + 30) continue;
+    ctx.beginPath(); ctx.moveTo(sx(m, 0), y1); ctx.lineTo(sx(m + 6, 0), y2); ctx.stroke();
+  }
+  for (let m = Math.floor(dBot / 25) * 25; m < dTop; m += 25) {
+    const g = Sim.gradeAt(c, m);
+    if (Math.abs(g) < 0.3) continue;
+    const y = sy(m); if (y < -20 || y > H + 20) continue;
+    const upH = g > 0, wdt = pxM * 1.5, hgt = yS * 2.6 * (upH ? 1 : -1);
+    ctx.strokeStyle = upH ? "rgba(46,49,47,.20)" : "rgba(244,242,236,.42)";
+    ctx.lineWidth = Math.max(2, pxM * 0.11); ctx.lineCap = "round";
+    for (const s of [-1, 1]) {
+      const cx = sx(m, s * 2.5);
+      ctx.beginPath(); ctx.moveTo(cx - wdt / 2, y); ctx.lineTo(cx, y - hgt); ctx.lineTo(cx + wdt / 2, y); ctx.stroke();
+    }
+  }
+  for (const p of c.primes) {
+    if (p.kind === "finish") continue;
+    const y = sy(p.d); if (y < -40 || y > H + 40) continue;
+    const col = p.kind === "kom" ? PAL.spot : PAL.green;
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(4, pxM * 0.2);
+    ctx.beginPath(); ctx.moveTo(sx(p.d, -4.5), y); ctx.lineTo(sx(p.d, 4.5), y); ctx.stroke();
+    label(p.kind === "kom" ? "SUMMIT" : "SPRINT", sx(p.d, 0), y - 9, 12, 700, col, "center", 2.4);
+  }
+  for (let km = 1; km * 1000 < c.len; km++) {
+    const m = km * 1000, y = sy(m); if (y < -40 || y > H + 40) continue;
+    ctx.strokeStyle = "rgba(244,242,236,.9)"; ctx.lineWidth = Math.max(3, pxM * 0.14);
+    ctx.beginPath(); ctx.moveTo(sx(m, -4.5), y); ctx.lineTo(sx(m, 4.5), y); ctx.stroke();
+  }
+  const fy = sy(c.len);
+  if (fy > -60 && fy < H + 60) {
+    const n = 12, cw = roadPx / n;
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = i % 2 ? PAL.ink : PAL.chalk;
+      ctx.fillRect(sx(c.len, 0) - roadPx / 2 + i * cw, fy - 9, cw + 0.6, 18);
+    }
+  }
+  for (const s of c.scenery) {
+    if (s.d < dBot - 10 || s.d > dTop + 10) continue;
+    const y = sy(s.d), x = sx(s.d, s.side * (CFG.roadW / 2 + s.off));
+    if (Sim.gradeAt(c, s.d) > 0.4 && s.k > 0.45) {
+      ctx.fillStyle = "rgba(46,49,47,.30)";
+      ctx.beginPath(); ctx.arc(sx(s.d, s.side * (CFG.roadW / 2 + 0.7)), y, Math.max(2.4, pxM * 0.11), 0, 7); ctx.fill();
+    }
+    const r = pxM * 0.42 * s.s;
+    ctx.fillStyle = "rgba(46,49,47,.07)";
+    ctx.beginPath(); ctx.ellipse(x + r * 0.35, y + r * 0.4, r, r * 0.55, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = s.k > 0.6 ? "#9AAE8C" : "#8AA37F";
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+  }
+}
+
+function drawItems() {
+  const c = C(), you = race.you;
+  const dBot = you.dist - (H - playerY) / yS - 10, dTop = you.dist + playerY / yS + 10;
+  const w = Math.max(7, pxM * 0.36), h = w * 1.5;
+  for (const it of c.items) {
+    if (it.d < dBot || it.d > dTop) continue;
+    const x = sx(it.d, it.x), y = sy(it.d);
+    if (it.taken.has(you)) {
+      ctx.strokeStyle = "rgba(46,49,47,.20)"; ctx.lineWidth = 1.5;
+      roundRect(x - w / 2, y - h / 2, w, h, w * 0.34); ctx.stroke(); continue;
+    }
+    const col = it.kind === "water" ? PAL.water : it.kind === "salt" ? PAL.green : PAL.fuel;
+    ctx.save();
+    ctx.globalAlpha = 1 - 0.62 * clamp(you.absorb / 100, 0, 1);   // still digesting
+    ctx.fillStyle = "rgba(46,49,47,.14)";
+    roundRect(x - w / 2 + 1.5, y - h / 2 + 2.5, w, h, w * 0.34); ctx.fill();
+    ctx.fillStyle = col; roundRect(x - w / 2, y - h / 2, w, h, w * 0.34); ctx.fill();
+    ctx.fillStyle = "rgba(244,242,236,.9)";
+    if (it.kind === "food") { roundRect(x - w * 0.28, y - h * 0.08, w * 0.56, h * 0.16, w * 0.06); ctx.fill(); }
+    else if (it.kind === "water") { roundRect(x - w * 0.16, y - h * 0.46, w * 0.32, h * 0.16, w * 0.1); ctx.fill(); }
+    else {
+      roundRect(x - w * 0.28, y - h * 0.06, w * 0.56, h * 0.12, w * 0.06); ctx.fill();
+      roundRect(x - w * 0.06, y - h * 0.24, w * 0.12, h * 0.48, w * 0.06); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// Six axes rather than twelve numbers. Every stat feeds exactly one of them, and a
+// trade-off shows as a dent in the shape rather than a minus sign in a list.
+const AXES = ["CLIMB", "SPRINT", "ENDURE", "WIND", "DESCEND", "FEED"];
+function riderProfile(st) {
+  const n = (v, lo, hi) => clamp((v - lo) / (hi - lo), 0, 1);
+  const inv = (v, lo, hi) => clamp((hi - v) / (hi - lo), 0, 1);
+  return [
+    inv(st.climbCost, 0.65, 1.35),
+    (n(st.attack, 1.15, 1.40) + n(st.kick, 0.92, 1.16)) / 2,
+    (n(st.recover, 0.95, 1.25) + n(st.resilience, 0.90, 1.25)) / 2,
+    (inv(st.windTax, 0.70, 1.15) + n(st.draft, 0.90, 1.20)) / 2,
+    (n(st.descend, 0.90, 1.15) + n(st.handling, 0.85, 1.25)) / 2,
+    (n(st.gut, 0.85, 1.40) + n(st.reach, 0.95, 2.20)
+      + inv(st.fuelUse, 0.85, 1.15) + inv(st.sweatRate, 0.80, 1.15)) / 4
+  ];
+}
+function drawRadar(canvas, stats, ghost) {
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth || 320, h = 190;
+  canvas.width = w * d; canvas.height = h * d;
+  const g = canvas.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2 + 2, R = Math.min(w * 0.26, h * 0.38);
+  const pt = (i, v) => {
+    const a = -Math.PI / 2 + i * Math.PI / 3;
+    return [cx + Math.cos(a) * R * v, cy + Math.sin(a) * R * v];
+  };
+  for (const ring of [0.33, 0.66, 1]) {
+    g.beginPath();
+    for (let i = 0; i < 6; i++) { const [x, y] = pt(i, ring); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.closePath(); g.strokeStyle = "rgba(46,49,47,.13)"; g.lineWidth = 1; g.stroke();
+  }
+  const shape = (vals, fill, stroke, dash) => {
+    g.save(); if (dash) g.setLineDash([4, 3]);
+    g.beginPath();
+    for (let i = 0; i < 6; i++) { const [x, y] = pt(i, 0.12 + 0.88 * vals[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.closePath();
+    if (fill) { g.fillStyle = fill; g.fill(); }
+    g.strokeStyle = stroke; g.lineWidth = 2; g.stroke(); g.restore();
+  };
+  if (ghost) shape(ghost, null, "rgba(46,49,47,.42)", true);
+  shape(riderProfile(stats), "rgba(204,0,102,.15)", PAL.you, false);
+  g.save();
+  g.font = '700 9px "Space Grotesk", system-ui, sans-serif';
+  g.fillStyle = "rgba(46,49,47,.5)"; g.textAlign = "center"; g.textBaseline = "middle";
+  for (let i = 0; i < 6; i++) { const [x, y] = pt(i, 1.36); g.fillText(AXES[i], x, y); }
+  g.restore();
+}
+
+// A rider's wake, drawn as a grey V opening rearward from their wheel. In a
+// crosswind the V leans to the sheltered side, so it doubles as an echelon guide.
+// It stays grey until YOU are sitting in it, then fills red/amber/green with the
+// quality you are actually getting. Terrain scales it: faint uphill where the
+// draft is weak, strong downhill where it is best.
+function draftColour(q, a) {
+  const r = q < 0.5 ? 213 : Math.round(213 - (q - 0.5) * 2 * 150);
+  const g = q < 0.5 ? Math.round(94 + q * 2 * 110) : Math.round(170 + (q - 0.5) * 2 * 30);
+  const b = q < 0.5 ? 20 : Math.round((q - 0.5) * 2 * 95);
+  return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+}
+function drawWakes() {
+  const you = race.you;
+  const g = Sim.gradeAt(race.course, you.dist);
+  // terrain strength: weak uphill, full flat, strongest downhill
+  const terr = g > 0 ? clamp(1 - g * 0.9, 0.25, 1) : clamp(1 - g * 0.7, 1, 1.5);
+  for (const lead of race.riders) {
+    if (lead === you) continue;
+    const gap = lead.dist - you.dist;
+    if (gap < 1.2 || gap > 16) continue;               // only nearby riders ahead
+    if (Math.abs(lead.x - you.x) > 4.2) continue;
+    const w = Sim.windAt(race.course, lead.dist);
+    const off = w.dir * w.str * 2.0;                    // wake leans to the sheltered side
+    const centre = lead.x + off;
+    const tol = 1.8 - 0.45 * w.str;
+    // is this MY wheel and am I in it?
+    // Only YOUR draft shows, and only when you are actually in it. No grey guide.
+    if (you.wheel !== lead || you.q <= 0.08) continue;
+    const len = Math.min(gap - 0.3, 9);                 // how far back the cone reaches
+    const tipX = sx(lead.dist, lead.x), tipY = sy(lead.dist);
+    const by = sy(lead.dist - len);
+    const spread = tol * (0.6 + 0.5 * terr);
+    const lx = sx(lead.dist - len, centre - spread), rx = sx(lead.dist - len, centre + spread);
+    ctx.save();
+    ctx.fillStyle = draftColour(you.q, 0.10 + 0.30 * you.q);   // same q, same colours as the bar
+    ctx.beginPath();
+    ctx.moveTo(lx, by); ctx.lineTo(tipX, tipY); ctx.lineTo(rx, by); ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = draftColour(you.q, 0.5);
+    ctx.lineWidth = Math.max(1.4, pxM * 0.05);
+    ctx.beginPath(); ctx.moveTo(lx, by); ctx.lineTo(tipX, tipY); ctx.lineTo(rx, by); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawRiders() {
+  const you = race.you;
+  drawWakes();
+  const ordered = race.riders.slice().sort((a, b) => b.dist - a.dist);
+  for (const r of ordered) {
+    const x = sx(r.dist, r.x), y = sy(r.dist);
+    if (y < -60 || y > H + 60) continue;
+    // The body IS the collision box, and at these scales that box is a circle.
+    const bw = riderR, bh = riderR;
+    ctx.fillStyle = "rgba(46,49,47,.12)";
+    ctx.beginPath(); ctx.ellipse(x + bw * 0.16, y + bh * 0.5, bw, bh, 0, 0, 7); ctx.fill();
+    const jc = race.leaders.gc === r.name ? PAL.yellow
+      : race.leaders.points === r.name ? PAL.green
+      : race.leaders.kom === r.name ? PAL.spot : null;
+    ctx.fillStyle = r.c;
+    ctx.beginPath(); ctx.ellipse(x, y, bw, bh, 0, 0, 7); ctx.fill();
+    if (jc) {                                         // the jersey is worn, not orbited
+      const lw = Math.max(2, bw * 0.30);
+      ctx.strokeStyle = jc; ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.arc(x, y, bw - lw / 2, 0, 7); ctx.stroke();
+    }
+    if (bh > 6) label(String(r.num), x, y + bh * 0.55, Math.min(bw * 0.78, bh * 1.6), 700,
+      "rgba(255,255,255,.92)", "center", 0);
+    if (r.bump > 0) {
+      ctx.strokeStyle = "rgba(213,94,0," + (0.35 + 0.55 * (r.bump / 0.65)) + ")";
+      ctx.lineWidth = Math.max(2, bh * 0.36);
+      ctx.beginPath(); ctx.ellipse(x, y, bw, bh, 0, 0, 7); ctx.stroke();
+    } else if (r.cracked || r.bonk) {
+      ctx.strokeStyle = "rgba(46,49,47,.45)"; ctx.lineWidth = Math.max(1.4, bh * 0.22);
+      ctx.beginPath(); ctx.ellipse(x, y, bw * 0.9, bh * 0.9, 0, 0, 7); ctx.stroke();
+    }
+    if (r === you) {                                  // jump charge, a bar rather than a ring
+      const cw = bw * 2.1, cy = y + bh + 8;
+      ctx.fillStyle = "rgba(46,49,47,.14)"; roundRect(x - cw / 2, cy, cw, 4, 2); ctx.fill();
+      ctx.fillStyle = (you.eff === "attack" || you.jump > 0.92) ? PAL.you : "rgba(204,0,102,.5)";
+      roundRect(x - cw / 2, cy, cw * (you.eff === "attack" ? 1 : you.jump), 4, 2); ctx.fill();
+    }
+  }
+}
+
+const seenTips = new Set();
+function tip(key, text, colour) {
+  if (seenTips.has(key)) return;
+  seenTips.add(key);
+  flashes.push({ text, colour, t: 0 });
+}
+function coach() {
+  const y = race.you;
+  if (y.q > 0.5) tip("shelter", "ON THE WHEEL. LEGS COMING BACK FAST", PAL.you);
+  if (y.q < 0.15 && y.energy < 45 && !y.cracked) tip("alone", "ALONE IN THE WIND. LEGS BARELY RECOVER", PAL.spot);
+  if (y.fuel < 55) tip("fuel", "FUEL LOW. EAT SOON", PAL.fuel);
+  if (y.fluid < 55) tip("fluid", "DRINK BEFORE YOU CRAMP", PAL.water);
+  if (y.absorb > 60) tip("absorb", "STILL DIGESTING. ONE AT A TIME", PAL.green);
+}
+
+function drawFlashes(dt) {
+  for (const e of race.events) flashes.push({ text: e.t, colour: PAL[e.c] || PAL.ink, t: 0 });
+  race.events.length = 0;
+  const x = sx(race.you.dist, race.you.x);
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    const f = flashes[i]; f.t += dt;
+    if (f.t > 1.5) { flashes.splice(i, 1); continue; }
+    const a = f.t < 0.15 ? f.t / 0.15 : 1 - Math.max(0, (f.t - 0.9) / 0.6);
+    ctx.save(); ctx.globalAlpha = clamp(a, 0, 1);
+    label(f.text, x, sy(race.you.dist) - riderR * 2 - f.t * 34 - i * 17, 14, 700, f.colour, "center", 1.6);
+    ctx.restore();
+  }
+}
+
+function profY(m, yTop, bh) {
+  const c = C(), t = (Sim.elevAt(c, m) - c.eMin) / (c.eMax - c.eMin);
+  return yTop + bh - t * (bh - 4) * 0.8;
+}
+function drawProfile() {
+  const c = C(), you = race.you;
+  const pad = Math.max(14, W * 0.045), x0 = pad, x1 = W - pad, bw = x1 - x0;
+  const yTop = Math.max(12, H * 0.022), bh = topBar - 26;
+  ctx.fillStyle = "rgba(244,242,236,.74)"; roundRect(x0 - 8, yTop - 6, bw + 16, bh + 26, 12); ctx.fill();
+  for (const f of c.feeds) {
+    ctx.fillStyle = "rgba(230,159,0,.22)";
+    ctx.fillRect(x0 + bw * (f.s / c.len), yTop + bh - 4, bw * ((f.e - f.s) / c.len), 6);
+  }
+  ctx.beginPath(); ctx.moveTo(x0, yTop + bh);
+  for (let i = 0; i <= 90; i++) ctx.lineTo(x0 + bw * (i / 90), profY((i / 90) * c.len, yTop, bh));
+  ctx.lineTo(x1, yTop + bh); ctx.closePath();
+  ctx.fillStyle = "rgba(46,49,47,.14)"; ctx.fill();
+  ctx.strokeStyle = "rgba(46,49,47,.32)"; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (let i = 0; i <= 90; i++) {
+    const px = x0 + bw * (i / 90), py = profY((i / 90) * c.len, yTop, bh);
+    i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  }
+  ctx.stroke();
+  for (const p of c.primes) {
+    if (p.kind === "finish") continue;
+    const px = x0 + bw * (p.d / c.len), py = profY(p.d, yTop, bh);
+    ctx.fillStyle = p.kind === "kom" ? PAL.spot : PAL.green;
+    ctx.beginPath(); ctx.moveTo(px, py - 11); ctx.lineTo(px + 4.5, py - 4); ctx.lineTo(px - 4.5, py - 4);
+    ctx.closePath(); ctx.fill();
+  }
+  for (const r of race.riders) {
+    if (r === you) continue;
+    ctx.fillStyle = r.c;
+    ctx.fillRect(x0 + bw * clamp(r.dist / c.len, 0, 1) - 1.5, yTop + bh - 5, 3, 10);
+  }
+  ctx.fillStyle = PAL.you;
+  roundRect(x0 + bw * clamp(you.dist / c.len, 0, 1) - 3, yTop + bh - 11, 6, 22, 3); ctx.fill();
+  const togo = Math.max(0, c.len - you.dist);
+  label(M.togo(togo), x0, yTop + bh + 17, 11, 700, "rgba(46,49,47,.55)", "left", 1.2);
+  const g = Sim.gradeAt(c, you.dist);
+  label(g > 0.35 ? "CLIMBING" : g < -0.35 ? "DESCENDING" : "FLAT", x1, yTop + bh + 17, 11, 700,
+    g > 0.35 ? PAL.spot : g < -0.35 ? PAL.water : "rgba(46,49,47,.45)", "right", 1.2);
+}
+
+function gauge(x, y, w, h, val, col, cap) {
+  ctx.fillStyle = "rgba(46,49,47,.12)"; roundRect(x, y, w, h, w / 2); ctx.fill();
+  const fh = h * clamp(val / 100, 0, 1);
+  ctx.fillStyle = col; roundRect(x, y + h - fh, w, fh, w / 2); ctx.fill();
+  label(cap, x + w / 2, y - 7, 9, 700, "rgba(46,49,47,.5)", "center", 0.3);
+}
+
+function drawWind() {
+  const w = Sim.windAt(C(), race.you.dist);
+  if (w.str < 0.06) return;
+  const cx = W / 2, cy = topBar + 22, len = 16 + 22 * w.str, dir = w.dir;
+  ctx.save(); ctx.translate(cx, cy);
+  ctx.strokeStyle = "rgba(46,49,47," + (0.28 + 0.5 * w.str) + ")";
+  ctx.lineWidth = 2.4; ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-len / 2 * dir, 0); ctx.lineTo(len / 2 * dir, 0);
+  ctx.moveTo(len / 2 * dir, 0); ctx.lineTo(len / 2 * dir - 7 * dir, -5);
+  ctx.moveTo(len / 2 * dir, 0); ctx.lineTo(len / 2 * dir - 7 * dir, 5);
+  ctx.stroke(); ctx.restore();
+  label("CROSSWIND", cx, cy + 16, 9.5, 700, "rgba(46,49,47," + (0.35 + 0.4 * w.str) + ")", "center", 1.6);
+}
+
+function drawHud(dt) {
+  drawProfile(); drawWind();
+  const c = C(), you = race.you, pad = Math.max(14, W * 0.045);
+  const st = Sim.liveOrder(race), pos = st.indexOf(you) + 1, leader = st[0];
+  const yTop = topBar + 10;
+  const suffix = ["ST", "ND", "RD"][pos - 1] || "TH";
+  label(String(pos), pad, yTop + 32, 40, 700, PAL.ink, "left", -1);
+  label(suffix, pad + textW(String(pos), 40, 700, -1) + 4, yTop + 32, 13, 700, "rgba(46,49,47,.5)", "left", 1);
+  label("OF " + race.riders.length, pad, yTop + 48, 10.5, 500, "rgba(46,49,47,.42)", "left", 1.4);
+
+  const gap = leader === you ? 0 : leader.dist - you.dist;
+  label(leader === you ? "LEADING" : "TO LEADER", W - pad, yTop + 14, 10.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
+  label(leader === you ? "-" : "+" + M.near(gap), W - pad, yTop + 42, 25, 700,
+    leader === you ? PAL.ink : (gap > 30 ? PAL.spot : PAL.ink), "right", -0.3);
+  label("SPRINT " + you.sprintPts, W - pad, yTop + 62, 11, 700, PAL.green, "right", 1);
+  label("MOUNTAIN " + you.komPts, W - pad, yTop + 78, 11, 700, PAL.spot, "right", 1);
+
+  const gw = Math.max(9, Math.min(13, W * 0.028)), gstep = gw + 16;
+  const gy = yTop + 84, gh = Math.max(110, H * 0.24);
+  let gx = pad;
+  gauge(gx, gy, gw, gh, you.energy, you.cracked ? PAL.spot : you.energy < 25 ? PAL.fuel : PAL.you, "LEG");
+  if (you.legCap < 99) {                                  // days in the legs
+    ctx.fillStyle = "rgba(213,94,0,.85)";
+    ctx.fillRect(gx - 3, gy + gh * (1 - you.legCap / 100) - 1, gw + 6, 2);
+  }
+  gx += gstep;
+  gauge(gx, gy, gw, gh, you.fuel, you.bonk ? PAL.spot : PAL.fuel, "FUEL"); gx += gstep;
+  gauge(gx, gy, gw, gh, you.fluid, you.dry ? PAL.spot : PAL.water, "FLUID");
+
+  if (!you.inBunch && you.dist > race.bunchHead + 8) {
+    const sw = Math.max(126, W * 0.36), sxp = W - pad - sw, syp = gy + 20;
+    ctx.fillStyle = "rgba(244,242,236,.9)"; roundRect(sxp, syp, sw, 50, 11); ctx.fill();
+    ctx.strokeStyle = race.chase > 0.4 ? PAL.spot : "rgba(46,49,47,.22)"; ctx.lineWidth = 1.5; ctx.stroke();
+    label("CLEAR BY " + M.near(you.dist - race.bunchHead), sxp + 12, syp + 18, 10.5, 700, PAL.ink, "left", 1.1);
+    label(race.chase > 0.55 ? "BUNCH CHASING" : race.chase > 0.2 ? "BUNCH STIRRING" : "THEY ARE LETTING YOU GO",
+      sxp + 12, syp + 31, 9, 700, race.chase > 0.55 ? PAL.spot : "rgba(46,49,47,.5)", "left", 1.1);
+    ctx.fillStyle = "rgba(46,49,47,.15)"; roundRect(sxp + 12, syp + 37, sw - 24, 6, 3); ctx.fill();
+    ctx.fillStyle = race.chase > 0.4 ? PAL.spot : "rgba(46,49,47,.45)";
+    roundRect(sxp + 12, syp + 37, (sw - 24) * race.chase, 6, 3); ctx.fill();
+  } else if (you.q > 0.08) {                            // matches the cone exactly
+    const sw = Math.max(96, W * 0.29), sxp = W - pad - sw, syp = gy + 20;
+    const col = draftColour(you.q, 1);
+    ctx.fillStyle = draftColour(you.q, 0.10);
+    roundRect(sxp, syp, sw, 42, 10); ctx.fill();
+    label("DRAFTING", sxp + 12, syp + 17, 10, 700, "rgba(46,49,47,.6)", "left", 1.2);
+    ctx.fillStyle = "rgba(46,49,47,.14)"; roundRect(sxp + 12, syp + 26, sw - 24, 7, 3.5); ctx.fill();
+    ctx.fillStyle = col; roundRect(sxp + 12, syp + 26, (sw - 24) * clamp(you.q, 0, 1), 7, 3.5); ctx.fill();
+  }
+
+  let banner = null;
+  const np = c.primes.find(p => p.d > you.dist && p.kind !== "finish");
+  if (np && np.d - you.dist < 300) banner = { t: (np.kind === "kom" ? "SUMMIT" : "SPRINT") + " IN " + M.near(np.d - you.dist), c: np.kind === "kom" ? PAL.spot : PAL.green };
+  const nf = c.feeds.find(f => you.dist > f.s - 200 && you.dist < f.e);
+  if (nf) banner = you.dist > nf.s ? { t: "FEED ZONE", c: PAL.fuel } : { t: "FEED ZONE IN " + M.near(nf.s - you.dist), c: PAL.fuel };
+  if (banner) {
+    const bwid = textW(banner.t, 12, 700, 2) + 30, bx = W / 2 - bwid / 2, by = topBar + 40;
+    ctx.fillStyle = "rgba(244,242,236,.92)"; roundRect(bx, by, bwid, 28, 14); ctx.fill();
+    ctx.strokeStyle = banner.c; ctx.lineWidth = 1.5; ctx.stroke();
+    label(banner.t, W / 2, by + 19, 12, 700, banner.c, "center", 2);
+  }
+
+  const b = btnR();
+  label(M.speed(you.speed).toFixed(0), W - pad, b.y - 16, 28, 700, PAL.ink, "right", -0.5);
+  label(M.speedTag(), W - pad, b.y - 2, 10, 500, "rgba(46,49,47,.42)", "right", 1.4);
+
+  for (const r of race.riders) {
+    if (r === you || sy(r.dist) > topBar + 116) continue;
+    const x = clamp(sx(r.dist, r.x), pad + 74, W - pad - 74), yy = topBar + 116;
+    ctx.fillStyle = r.c;
+    ctx.beginPath(); ctx.moveTo(x, yy - 9); ctx.lineTo(x + 7, yy + 2); ctx.lineTo(x - 7, yy + 2); ctx.closePath(); ctx.fill();
+    label(String(Math.round(r.dist - you.dist)), x, yy + 15, 10.5, 700, r.c, "center", 0);
+  }
+  coach();
+  drawFlashes(dt);
+
+  const cramp = you.fluid < 12;
+  const coast = you.eff === "ease";
+  const hot = you.eff === "attack" && !cramp;
+  const now = performance.now() / 1000;
+  const bad = now - stumbleAt < 0.45;
+  for (const d of [{ x: b.easeX, t: "L", side: "L" }, { x: b.atkX, t: "R", side: "R" }]) {
+    const lit = lastSide === d.side && now - (strokes[strokes.length - 1] || -9) < 0.22;
+    ctx.fillStyle = coast ? PAL.water : lit ? PAL.you : "rgba(244,242,236,.82)";
+    roundRect(d.x, b.y, b.w, b.h, b.h / 2); ctx.fill();
+    if (!coast && !lit) {                                  // jump charge sits behind the pedals
+      ctx.save(); roundRect(d.x, b.y, b.w, b.h, b.h / 2); ctx.clip();
+      ctx.fillStyle = "rgba(204,0,102,.18)";
+      ctx.fillRect(d.x, b.y + b.h * (1 - you.jump), b.w, b.h * you.jump);
+      ctx.restore();
+    }
+    ctx.strokeStyle = bad ? PAL.spot : hot ? PAL.you : "rgba(46,49,47,.22)";
+    ctx.lineWidth = bad ? 3 : hot ? 2.5 : 1.5;
+    roundRect(d.x, b.y, b.w, b.h, b.h / 2); ctx.stroke();
+    label(d.t, d.x + b.w / 2, b.y + b.h / 2 + 8, 22, 700,
+      (coast || lit) ? PAL.chalk : "rgba(46,49,47,.55)", "center", 0);
+  }
+  const mid = (b.easeX + b.w + b.atkX) / 2;
+  const spinning = performance.now() / 1000 - spinHint < 0.4;
+  label(cramp ? "CRAMPING" : bad ? "MISSED A PEDAL" : coast ? "COASTING"
+      : spinning ? "SPIN UP FOR THE JUMP" : hot ? "ON THE GAS" : "ALTERNATE TO GO HARDER",
+    mid, b.y + b.h / 2 + 4, 10, 700,
+    cramp || bad ? PAL.spot : coast ? PAL.water : (spinning || hot) ? PAL.you : "rgba(46,49,47,.4)", "center", 1.1);
+}
+
+function drawCountdown() {
+  const n = Math.ceil(countdown); if (n <= 0) return;
+  ctx.save(); ctx.globalAlpha = clamp((countdown - Math.floor(countdown)) * 1.6, 0, 1);
+  label(n > 3 ? "SET" : String(n), W / 2, H * 0.42, Math.min(140, W * 0.34), 700, PAL.ink, "center", -3);
+  ctx.restore();
+  label(Tilt.on && Tilt.ok ? "HOLD THE PHONE HOW YOU WANT TO RIDE"
+    : ARCHETYPES[playerType].name.toUpperCase(),
+    W / 2, H * 0.42 + 30, 12, 700, "rgba(46,49,47,.45)", "center", 2);
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1 / 20); last = now;
+  if (race && (phase === "race" || phase === "count")) {
+    if (phase === "count") {
+      countdown -= dt;
+      if (Tilt.on && Tilt.ok) Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * 0.88 + Tilt.gamma * 0.12;
+      if (countdown <= 0) phase = "race";
+    }
+    else { Sim.step(race, dt, readInput(dt)); }
+    camC = Sim.centreAt(race.you.dist);
+    ctx.fillStyle = PAL.paper; ctx.fillRect(0, 0, W, H);
+    drawRoad(); drawItems(); drawRiders(); drawHud(dt);
+    if (phase === "count") drawCountdown();
+    if (race.over) finishStage();
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------------------------------------------------------------- screens
+const $ = id => document.getElementById(id);
+const show = id => { for (const s of ["menu", "brief", "result"]) $(s).classList.toggle("hide", s !== id); };
+const hideAll = () => { for (const s of ["menu", "brief", "result"]) $(s).classList.add("hide"); };
+
+function board(el, list, render, mark) {
+  el.innerHTML = "";
+  list.forEach((r, i) => {
+    const row = document.createElement("div");
+    row.className = "row" + (r.you ? " me" : "");
+    row.innerHTML = '<span class="pos">' + (i + 1) + '</span>' +
+      '<span class="dot" style="background:' + r.c + '"></span>' +
+      "<span>" + r.name + (mark && mark(r) ? " " + mark(r) : "") + "</span>" +
+      '<span class="gap">' + render(r, i) + "</span>";
+    el.appendChild(row);
+  });
+}
+
+function drawMiniProfile(canvas, course) {
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth || 400, h = 74;
+  canvas.width = w * d; canvas.height = h * d;
+  const g = canvas.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const py = m => {
+    const t = (Sim.elevAt(course, m) - course.eMin) / (course.eMax - course.eMin);
+    return h - 14 - t * (h - 30);
+  };
+  g.beginPath(); g.moveTo(0, h - 14);
+  for (let i = 0; i <= 120; i++) g.lineTo(w * (i / 120), py((i / 120) * course.len));
+  g.lineTo(w, h - 14); g.closePath();
+  g.fillStyle = "rgba(46,49,47,.13)"; g.fill();
+  g.strokeStyle = "rgba(46,49,47,.4)"; g.lineWidth = 1.5; g.beginPath();
+  for (let i = 0; i <= 120; i++) { const x = w * (i / 120), y = py((i / 120) * course.len); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke();
+  for (const f of course.feeds) {
+    g.fillStyle = "rgba(230,159,0,.4)";
+    g.fillRect(w * (f.s / course.len), h - 12, w * ((f.e - f.s) / course.len), 5);
+  }
+  for (const p of course.primes) {
+    if (p.kind === "finish") continue;
+    const x = w * (p.d / course.len), y = py(p.d);
+    g.fillStyle = p.kind === "kom" ? PAL.spot : PAL.green;
+    g.beginPath(); g.moveTo(x, y - 11); g.lineTo(x + 4.5, y - 4); g.lineTo(x - 4.5, y - 4); g.closePath(); g.fill();
+  }
+}
+
+
+function showBriefing() {
+  const spec = STAGES[tour.stage];
+  const preview = Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.stage,
+    playerType, gc: tour.gc, leaders: tour.leaders, div: ladder.div, fatigue: tour.fatigue });
+  const c = preview.course;
+  $("bEyebrow").textContent = "Division " + ladder.div + " · " + spec.name + " of 3 · "
+    + spec.sub + " · " + M.long(c.len);
+  $("bTitle").textContent = spec.type === "flat" ? "One for the sprinters"
+    : spec.type === "hills" ? "A day for the brave" : "The mountains decide it";
+  const notes = [];
+  const ns = c.primes.filter(p => p.kind === "sprint").length;
+  const nk = c.primes.filter(p => p.kind === "kom").length;
+  notes.push(ns + " sprint line" + (ns === 1 ? "" : "s") + ", " + nk + " summit" + (nk === 1 ? "" : "s") + ", 2 feed zones.");
+  let maxWind = 0;
+  for (const w of c.winds) if (w.str > maxWind) maxWind = w.str;
+  if (maxWind > 0.5) notes.push("Strong crosswinds. Watch which side of the wheel the shelter sits on.");
+  else if (maxWind > 0.2) notes.push("Some wind about.");
+  const fat = preview.you.fatigue || 0;
+  if (fat > 6) notes.push(fat > 55 ? "You are deep into the tour. Your legs will not come back today."
+    : fat > 28 ? "There are days in your legs. You have fewer matches than you did on stage one."
+    : "A little tiredness from the days behind you.");
+  $("bNote").textContent = notes.join(" ");
+  requestAnimationFrame(() => drawMiniProfile($("bProf"), c));
+  const hasGC = tour.stage > 0;
+  $("bGCHead").style.display = hasGC ? "" : "none";
+  $("bGC").style.display = hasGC ? "" : "none";
+  if (hasGC) {
+    const rs = preview.riders.slice().sort((a, b) => a.gcTime - b.gcTime);
+    const lead = rs[0].gcTime;
+    board($("bGC"), rs.slice(0, 5), r => r.gcTime === lead ? fmt(r.gcTime) : "+" + (r.gcTime - lead).toFixed(1) + "s");
+  }
+  show("brief");
+}
+
+function finishStage() {
+  phase = "done";
+  const order = Sim.settle(race);
+  const you = race.you;
+  for (const r of race.riders) {
+    tour.gc[r.name] = { time: r.gcTime, sprintPts: r.sprintPts, komPts: r.komPts };
+    tour.fatigue[r.name] = Math.min(100, (r.fatigue || 0) * 0.50 + r.load * 0.9);   // sleep on it
+  }
+  const gc = race.riders.slice().sort((a, b) => (a.gcTime - b.gcTime) || (a.place - b.place));
+  const pts = Sim.byKey(race.riders, "sprintPts", "place");
+  const kom = Sim.byKey(race.riders, "komPts", "place");
+  tour.leaders = { gc: gc[0].name,
+    points: pts[0].sprintPts > 0 ? pts[0].name : null,
+    kom: kom[0].komPts > 0 ? kom[0].name : null };
+
+  const lastStage = tour.stage === STAGES.length - 1;
+  const words = ["Stage win", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Last"];
+  const gcPlace = gc.indexOf(you) + 1;
+  let earned = you.money - (tour.paid || 0);
+  if (lastStage) {
+    earned += Math.round((Sim.CFG.purse.tour[gcPlace - 1] || 0) * race.payScale);
+    if (pts[0] === you && you.sprintPts > 0) earned += Math.round(Sim.CFG.purse.jersey * race.payScale);
+    if (kom[0] === you && you.komPts > 0) earned += Math.round(Sim.CFG.purse.jersey * race.payScale);
+  }
+  tour.paid = you.money;
+  ladder.money += earned;
+  Store.save(ladder);
+  let moved = null;
+  if (lastStage) moved = applyLadder(gcPlace);
+  $("rEyebrow").textContent = lastStage
+    ? "Tour finished · Division " + (moved === "up" ? ladder.div + 1 : moved === "down" ? ladder.div - 1 : ladder.div)
+    : STAGES[tour.stage].name + " · " + fmt(you.time);
+  $("rVerdict").textContent = lastStage
+    ? (gcPlace === 1 ? "You win the tour" : gcPlace + "th overall")
+    : (words[you.place - 1] || you.place + "th");
+
+  let note;
+  if (you.bonk) note = "You emptied the tank. The food is on the road for a reason.";
+  else if (you.dry) note = "You ran dry and cramped. Bottles matter more in the bunch than you would think.";
+  else if (you.place === 1) note = "Right wheel, right moment.";
+  else if (you.dist > race.bunchHead) note = "You went up the road and they let you go. That is how tours are won.";
+  else if (you.energy > 45) note = "Plenty left at the line. You saved too much for too long.";
+  else note = "Emptied into the wind. Sit closer, eat earlier, go later.";
+  $("rSub").textContent = note;
+
+  const jer = $("rJerseys"); jer.innerHTML = "";
+  const add = (t, c) => { const s = document.createElement("span"); s.className = "jersey"; s.style.background = c; s.textContent = t; jer.appendChild(s); };
+  if (lastStage) {
+    if (moved === "up") add("Promoted to Division " + ladder.div, PAL.you);
+    else if (moved === "down") add("Relegated to Division " + ladder.div, PAL.spot);
+    else if (ladder.strikes) add("One more bad tour and you drop", PAL.spot);
+    else add("Holding Division " + ladder.div, PAL.ink);
+  }
+  if (gc[0] === you) add("Yellow jersey", PAL.yellow);
+  if (pts[0] === you && you.sprintPts > 0) add("Green · " + you.sprintPts, PAL.green);
+  if (kom[0] === you && you.komPts > 0) add("Polka dot · " + you.komPts, PAL.spot);
+
+  const winT = order[0].time;
+  board($("rBoard"), order, r => r.place === 1 ? fmt(r.time) : "+" + (r.time - winT).toFixed(1) + "s");
+  const gcLead = gc[0].gcTime;
+  board($("rGC"), gc, r => r.gcTime === gcLead ? fmt(r.gcTime) : "+" + (r.gcTime - gcLead).toFixed(1) + "s");
+  board($("rPts"), pts.slice(0, 4), r => r.sprintPts + " pts");
+  board($("rKom"), kom.slice(0, 4), r => r.komPts + " pts");
+  $("nextBtn").textContent = lastStage ? "Next tour" : "Next stage";
+  $("rFoot").textContent = (lastStage
+    ? "Division " + ladder.div + " of 8 · " + divDots(ladder.div)
+    : STAGES[tour.stage + 1].name + ": " + STAGES[tour.stage + 1].sub)
+    + "  ·  won " + earned + "  ·  " + ladder.money + " total";
+  $("result").scrollTop = 0;
+  show("result");
+}
+
+const picks = $("picks");
+for (const k of ["rouleur", "sprinter", "climber"]) {
+  const t = ARCHETYPES[k];
+  const b = document.createElement("button");
+  b.className = "pick"; b.type = "button"; b.dataset.k = k;
+  b.setAttribute("aria-pressed", String(k === playerType));
+  b.innerHTML = '<span class="nm">' + t.name + '</span><span class="ds">' + t.blurb + "</span>";
+  b.addEventListener("click", () => {
+    const was = playerType;
+    playerType = k;
+    for (const el of picks.children) el.setAttribute("aria-pressed", String(el.dataset.k === k));
+    showProfile(was === k ? null : was);
+  });
+  picks.appendChild(b);
+}
+$("unitBtn").addEventListener("click", () => {
+  ladder.units = ladder.units === "imperial" ? "metric" : "imperial";
+  Store.save(ladder); refreshMenu();
+});
+$("steerBtn").addEventListener("click", async () => {
+  if (ladder.steer === "tilt") { ladder.steer = "drag"; Tilt.disable(); }
+  else { ladder.steer = "tilt"; await Tilt.enable(); }     // must be inside the gesture
+  Store.save(ladder); refreshMenu();
+});
+$("startBtn").addEventListener("click", () => { newTour(); showBriefing(); });
+function showProfile(ghostKey) {
+  const base = Object.assign({}, Sim.BASE_STATS, ARCHETYPES[playerType].stats);
+  const ghost = ghostKey
+    ? riderProfile(Object.assign({}, Sim.BASE_STATS, ARCHETYPES[ghostKey].stats)) : null;
+  drawRadar($("mRadar"), base, ghost);
+}
+requestAnimationFrame(() => showProfile(null));
+refreshMenu();
+Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); ladder.steer = "drag"; refreshMenu(); } });
+$("rollBtn").addEventListener("click", () => { hideAll(); startStage(); });
+$("nextBtn").addEventListener("click", () => {
+  if (tour.stage === STAGES.length - 1) { refreshMenu(); show("menu"); return; }
+  tour.stage++; showBriefing();
+});
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
