@@ -74,17 +74,17 @@
   <div class="rules">
     <div class="rule"><b class="k1">Legs</b><span>Wind is what costs you. Sit on a wheel and they come back.</span></div>
     <div class="rule"><b class="k2">Fuel</b><span>Drains every stage and never returns on its own. Eat before you need to.</span></div>
-    <div class="rule"><b class="k3">Fluid</b><span>You sweat harder climbing, and harder still in the bunch where there is no air.</span></div>
+    <div class="rule"><b class="k3">Fluid</b><span>You sweat harder climbing, and harder still in the peloton where there is no air.</span></div>
     <div class="rule"><b class="k2">Gut</b><span>You only take on so much at once. Grab two things together and you waste the second.</span></div>
     <div class="rule"><b class="k4">Wind</b><span>A crosswind moves the shelter sideways. Get on the right side of the wheel or ride in the gutter.</span></div>
-    <div class="rule"><b class="k1">The jump</b><span>Alternate the L and R pedals to go above tempo, faster for more. Two strokes on the same side is a missed pedal and it costs you. Hold both to coast and recover.</span></div>
-    <div class="rule"><b class="k5">The bunch</b><span>They only chase what scares them. Go up the road before you are worth chasing.</span></div>
+    <div class="rule"><b class="k1">The jump</b><span>Alternate the L and R pedals to lift the pace, faster for more. Two strokes on the same side is a missed pedal and it costs you. Hold both to soft pedal and recover.</span></div>
+    <div class="rule"><b class="k5">The peloton</b><span>They only chase what scares them. Go up the road before you are worth chasing.</span></div>
   </div>
   <canvas class="radar" id="mRadar"></canvas>
   <div class="picks" id="picks"></div>
   <button class="go" id="startBtn">Start tour</button><button class="go ghost" id="unitBtn">Km</button><button class="go ghost" id="steerBtn">Drag</button>
   <div class="foot" id="mSteer"></div>
-  <div class="foot">Hold a side to steer · alternate L and R to pedal · hold both to coast</div>
+  <div class="foot">Hold a side to steer · alternate L and R to pedal · hold both to soft pedal</div>
 </div></div>
 
 <div class="screen hide" id="brief"><div class="inner">
@@ -92,7 +92,7 @@
   <h2 id="bTitle"></h2>
   <canvas class="prof" id="bProf"></canvas>
   <p class="sub" id="bNote"></p>
-  <div class="secthead" id="bGCHead">General classification</div>
+  <div class="secthead" id="bGCHead">General Classification</div>
   <div class="board" id="bGC"></div>
   <button class="go" id="rollBtn">Roll out</button>
 </div></div>
@@ -104,11 +104,11 @@
   <div class="jerseys" id="rJerseys"></div>
   <div class="secthead">Stage</div>
   <div class="board" id="rBoard"></div>
-  <div class="secthead">General classification</div>
+  <div class="secthead">General Classification</div>
   <div class="board" id="rGC"></div>
-  <div class="secthead">Points</div>
+  <div class="secthead">Points Classification</div>
   <div class="board" id="rPts"></div>
-  <div class="secthead">Mountains</div>
+  <div class="secthead">King of the Mountains</div>
   <div class="board" id="rKom"></div>
   <button class="go" id="nextBtn">Next stage</button>
   <div class="foot" id="rFoot"></div>
@@ -174,7 +174,7 @@ const ARCHETYPES = {
     blurb: "Cheap to ride alone in the wind, no great finish. Built for the breakaway.",
     stats: { attack: 1.23, climbCost: 1.00, fuelUse: 0.98, recover: 1.05, windTax: 0.78, kick: 0.99, descend: 1.08 } },
   sprinter: { key: "sprinter", name: "Sprinter",
-    blurb: "Huge finish, poor climber, eats and drinks hard. Win from the bunch.",
+    blurb: "Huge finish, poor climber, eats and drinks hard. Win from the peloton.",
     stats: { attack: 1.34, climbCost: 1.17, fuelUse: 1.10, recover: 1.02, windTax: 1.04, kick: 1.13, descend: 0.94 } },
   climber: { key: "climber", name: "Climber",
     blurb: "Flies uphill, suffers in the wind, recovers fast. Win on the summits.",
@@ -184,8 +184,42 @@ const ARCHETYPES = {
 const STAGES = [
   { name: "Stage 1", sub: "Flat", type: "flat", len: 1400, hilly: 0.16, wind: 0.85, sprints: 2 },
   { name: "Stage 2", sub: "Hills", type: "hills", len: 1550, hilly: 0.44, wind: 0.40, sprints: 2 },
-  { name: "Stage 3", sub: "Mountains", type: "mountain", len: 1700, hilly: 0.62, wind: 0.15, sprints: 1 }
+  { name: "Stage 3", sub: "Mountains", type: "mountain", len: 1700, hilly: 0.62, wind: 0.15, sprints: 1 },
+  // pure days, used to give longer tours a shape sprinters and climbers can plan around
+  { name: "Sprinters", sub: "Pan flat", type: "flat", len: 1350, hilly: 0.04, wind: 0.95, sprints: 3, flatDay: true },
+  { name: "Queen", sub: "High mountains", type: "mountain", len: 1780, hilly: 0.76, wind: 0.10, sprints: 1 }
 ];
+
+// A season mixes one-day classics with stage races. Length widens as you climb, so
+// the bottom of the ladder is short and quick and the top is where you have to
+// husband a week's legs. Both are drawn deterministically from the tour seed.
+function tourLength(seed, div) {
+  const R = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const t = clamp((8 - div) / 7, 0, 1);
+  const r = R();
+  if (t < 0.3) return r < 0.55 ? 1 : 3;
+  if (t < 0.7) return r < 0.35 ? 1 : r < 0.85 ? 3 : 5;
+  return r < 0.20 ? 1 : r < 0.50 ? 3 : r < 0.80 ? 5 : 7;
+}
+// Which stage template each day uses. A stage race opens flat for the sprinters
+// and finishes in the mountains; a classic is a single flat or hilly day.
+function tourSchedule(seed, len) {
+  const R = mulberry32((seed ^ 0x51ed2701) >>> 0);
+  if (len === 1) return [R() < 0.55 ? 0 : 1];
+  if (len === 3) return [0, R() < 0.5 ? 1 : 0, 2];
+  // Anything longer gets a shape you can plan a tour around: it opens flat,
+  // finishes in the mountains, and somewhere in the middle there is one day purely
+  // for the sprinters and one purely for the climbers. The rest are mixed.
+  const out = new Array(len);
+  out[0] = 0;
+  out[len - 1] = R() < 0.5 ? 4 : 2;
+  const mid = [];
+  for (let i = 1; i < len - 1; i++) mid.push(i);
+  out[mid.splice(Math.floor(R() * mid.length), 1)[0]] = 3;      // a sprinters' day
+  if (mid.length) out[mid.splice(Math.floor(R() * mid.length), 1)[0]] = 4;   // a climbers' day
+  for (const i of mid) { const r = R(); out[i] = r < 0.40 ? 0 : r < 0.80 ? 1 : 2; }
+  return out;
+}
 
 // The ladder. Division 8 is the bottom rung, Division 1 the top. Difficulty comes
 // from the race being harder to read, not from rivals being faster: sparser feeding,
@@ -230,7 +264,8 @@ function buildStage(seed, spec0, D) {
   const spec = {
     name: spec0.name, sub: spec0.sub, type: spec0.type, sprints: spec0.sprints,
     len: Math.round(spec0.len * D.len),
-    hilly: clamp(spec0.hilly + D.hilly, 0, 0.78),
+    hilly: clamp(spec0.hilly + D.hilly * (spec0.flatDay ? 0.25 : 1), 0, 0.88),
+    flatDay: spec0.flatDay,
     wind: clamp(spec0.wind * D.wind, 0, 1)
   };
   const R = mulberry32(seed);
@@ -244,7 +279,7 @@ function buildStage(seed, spec0, D) {
       const span = 140 + RR() * 180;
       let g = 0; const r = RR();
       if (r < spec.hilly) g = 0.55 + RR() * 0.45;
-      else if (r < spec.hilly + 0.32) g = -(0.5 + RR() * 0.5);
+      else if (r < spec.hilly + (spec.flatDay ? 0.10 : 0.32)) g = -(0.5 + RR() * 0.5);
       if (last !== 0 && Math.sign(g) === Math.sign(last)) g = 0;
       last = g;
       const end = Math.min(d + span, spec.len - 220);
@@ -252,7 +287,7 @@ function buildStage(seed, spec0, D) {
       if (g > 0 && end - d > 95) climbs.push({ s: d, e: end });
       d = end;
     }
-    if (climbs.length >= (spec.type === "flat" ? 1 : 2)) break;
+    if (climbs.length >= (spec.flatDay ? 0 : spec.type === "flat" ? 1 : 2)) break;
   }
   const grades = new Array(n).fill(0), K = 5;
   for (let i = 0; i < n; i++) {
@@ -273,7 +308,7 @@ function buildStage(seed, spec0, D) {
   for (const c of climbs) primes.push({ d: c.e + 12, kind: "kom", pts: [6, 4, 2, 1], crossed: [] });
   const flats = [];
   for (let m = 330; m < spec.len - 300; m += 20) if (Math.abs(gRaw(m)) < 0.22) flats.push(m);
-  const aims = spec.sprints === 2 ? [0.34, 0.7] : [0.42];
+  const aims = spec.sprints >= 3 ? [0.26, 0.5, 0.74] : spec.sprints === 2 ? [0.34, 0.7] : [0.42];
   for (const t of aims) {
     const aim = spec.len * t;
     let bm = null, bd = 1e9;
@@ -816,7 +851,7 @@ function stepRider(race, r, dt) {
       if (pr.kind === "sprint") r.bonus += CFG.bonusSprint[pr.crossed.length - 1] || 0;
       r.money += purse;
       if (r.you) race.events.push({
-        t: "+" + pts + " " + (pr.kind === "kom" ? "MOUNTAIN" : "SPRINT") + (purse ? "   +" + purse : ""),
+        t: "+" + pts + " " + (pr.kind === "kom" ? "KOM" : "POINTS") + (purse ? "   +" + purse : ""),
         c: pr.kind === "kom" ? "spot" : "green" });
     }
   }
@@ -936,6 +971,7 @@ function liveOrder(race) {
 const byKey = (riders, key, tie) => riders.slice().sort((a, b) => (b[key] - a[key]) || (a[tie] - b[tie]));
 
 return { CFG, ARCHETYPES, BASE_STATS, STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
+  tourLength, tourSchedule,
   createRace, step, tick, settle, liveOrder, byKey, gradeAt, elevAt, windAt, centreAt, danger };
 })();
 
@@ -1087,12 +1123,15 @@ function refreshMenu() {
 }
 
 function newTour() {
-  tour = { seed: (Math.random() * 1e9) | 0, stage: 0, gc: {}, leaders: {}, fatigue: {} };
+  const seed = (Math.random() * 1e9) | 0;
+  const len = Sim.tourLength(seed, ladder.div);
+  tour = { seed, stage: 0, gc: {}, leaders: {}, fatigue: {},
+    schedule: Sim.tourSchedule(seed, len) };
   const names = [Sim.YOU.name].concat(Sim.FIELD.map(f => f.name));
   for (const n of names) tour.gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
 }
 function startStage() {
-  race = Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.stage,
+  race = Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
     playerType, gc: tour.gc, leaders: tour.leaders, div: ladder.div, fatigue: tour.fatigue });
   flashes = []; countdown = 3.2; phase = "count"; Tilt.recentre();
   strokes = []; alt = []; lastSide = null; spinHint = 0;
@@ -1590,13 +1629,13 @@ function drawHud(dt) {
   label(leader === you ? "LEADING" : "TO LEADER", W - pad, yTop + 14, 10.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
   label(leader === you ? "-" : "+" + M.near(gap), W - pad, yTop + 42, 25, 700,
     leader === you ? PAL.ink : (gap > 30 ? PAL.spot : PAL.ink), "right", -0.3);
-  label("SPRINT " + you.sprintPts, W - pad, yTop + 62, 11, 700, PAL.green, "right", 1);
-  label("MOUNTAIN " + you.komPts, W - pad, yTop + 78, 11, 700, PAL.spot, "right", 1);
+  label("POINTS " + you.sprintPts, W - pad, yTop + 62, 11, 700, PAL.green, "right", 1);
+  label("KOM " + you.komPts, W - pad, yTop + 78, 11, 700, PAL.spot, "right", 1);
 
   const gw = Math.max(9, Math.min(13, W * 0.028)), gstep = gw + 16;
   const gy = yTop + 84, gh = Math.max(110, H * 0.24);
   let gx = pad;
-  gauge(gx, gy, gw, gh, you.energy, you.cracked ? PAL.spot : you.energy < 25 ? PAL.fuel : PAL.you, "LEG");
+  gauge(gx, gy, gw, gh, you.energy, you.cracked ? PAL.spot : you.energy < 25 ? PAL.fuel : PAL.you, "LEGS");
   if (you.legCap < 99) {                                  // days in the legs
     ctx.fillStyle = "rgba(213,94,0,.85)";
     ctx.fillRect(gx - 3, gy + gh * (1 - you.legCap / 100) - 1, gw + 6, 2);
@@ -1610,7 +1649,7 @@ function drawHud(dt) {
     ctx.fillStyle = "rgba(244,242,236,.9)"; roundRect(sxp, syp, sw, 50, 11); ctx.fill();
     ctx.strokeStyle = race.chase > 0.4 ? PAL.spot : "rgba(46,49,47,.22)"; ctx.lineWidth = 1.5; ctx.stroke();
     label("CLEAR BY " + M.near(you.dist - race.bunchHead), sxp + 12, syp + 18, 10.5, 700, PAL.ink, "left", 1.1);
-    label(race.chase > 0.55 ? "BUNCH CHASING" : race.chase > 0.2 ? "BUNCH STIRRING" : "THEY ARE LETTING YOU GO",
+    label(race.chase > 0.55 ? "PELOTON CHASING" : race.chase > 0.2 ? "PELOTON STIRRING" : "THEY ARE LETTING YOU GO",
       sxp + 12, syp + 31, 9, 700, race.chase > 0.55 ? PAL.spot : "rgba(46,49,47,.5)", "left", 1.1);
     ctx.fillStyle = "rgba(46,49,47,.15)"; roundRect(sxp + 12, syp + 37, sw - 24, 6, 3); ctx.fill();
     ctx.fillStyle = race.chase > 0.4 ? PAL.spot : "rgba(46,49,47,.45)";
@@ -1674,8 +1713,8 @@ function drawHud(dt) {
   }
   const mid = (b.easeX + b.w + b.atkX) / 2;
   const spinning = performance.now() / 1000 - spinHint < 0.4;
-  label(cramp ? "CRAMPING" : bad ? "MISSED A PEDAL" : coast ? "COASTING"
-      : spinning ? "SPIN UP FOR THE JUMP" : hot ? "ON THE GAS" : "ALTERNATE TO GO HARDER",
+  label(cramp ? "CRAMPING" : bad ? "MISSED A PEDAL" : coast ? "SOFT PEDALLING"
+      : spinning ? "WIND IT UP" : hot ? "ON THE GAS" : "ALTERNATE TO WIND IT UP",
     mid, b.y + b.h / 2 + 4, 10, 700,
     cramp || bad ? PAL.spot : coast ? PAL.water : (spinning || hot) ? PAL.you : "rgba(46,49,47,.4)", "center", 1.1);
 }
@@ -1757,12 +1796,18 @@ function drawMiniProfile(canvas, course) {
 }
 
 
+// "One-day classic" or "Stage 3 of 7"
+function stageLabel(i) {
+  const n = tour.schedule.length;
+  return n === 1 ? "One-day classic" : "Stage " + ((i === undefined ? tour.stage : i) + 1) + " of " + n;
+}
+function specAt(i) { return STAGES[tour.schedule[i]]; }
 function showBriefing() {
-  const spec = STAGES[tour.stage];
-  const preview = Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.stage,
+  const spec = specAt(tour.stage);
+  const preview = Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
     playerType, gc: tour.gc, leaders: tour.leaders, div: ladder.div, fatigue: tour.fatigue });
   const c = preview.course;
-  $("bEyebrow").textContent = "Division " + ladder.div + " · " + spec.name + " of 3 · "
+  $("bEyebrow").textContent = "Division " + ladder.div + " · " + stageLabel() + " · "
     + spec.sub + " · " + M.long(c.len);
   $("bTitle").textContent = spec.type === "flat" ? "One for the sprinters"
     : spec.type === "hills" ? "A day for the brave" : "The mountains decide it";
@@ -1806,7 +1851,8 @@ function finishStage() {
     points: pts[0].sprintPts > 0 ? pts[0].name : null,
     kom: kom[0].komPts > 0 ? kom[0].name : null };
 
-  const lastStage = tour.stage === STAGES.length - 1;
+  const lastStage = tour.stage === tour.schedule.length - 1;
+  const oneDay = tour.schedule.length === 1;
   const words = ["Stage win", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Last"];
   const gcPlace = gc.indexOf(you) + 1;
   let earned = you.money - (tour.paid || 0);
@@ -1821,15 +1867,16 @@ function finishStage() {
   let moved = null;
   if (lastStage) moved = applyLadder(gcPlace);
   $("rEyebrow").textContent = lastStage
-    ? "Tour finished · Division " + (moved === "up" ? ladder.div + 1 : moved === "down" ? ladder.div - 1 : ladder.div)
-    : STAGES[tour.stage].name + " · " + fmt(you.time);
+    ? (oneDay ? "Race finished · Division " : "Tour finished · Division ")
+      + (moved === "up" ? ladder.div + 1 : moved === "down" ? ladder.div - 1 : ladder.div)
+    : stageLabel() + " · " + fmt(you.time);
   $("rVerdict").textContent = lastStage
-    ? (gcPlace === 1 ? "You win the tour" : gcPlace + "th overall")
+    ? (gcPlace === 1 ? (oneDay ? "You win the race" : "You win the tour") : gcPlace + "th overall")
     : (words[you.place - 1] || you.place + "th");
 
   let note;
   if (you.bonk) note = "You emptied the tank. The food is on the road for a reason.";
-  else if (you.dry) note = "You ran dry and cramped. Bottles matter more in the bunch than you would think.";
+  else if (you.dry) note = "You ran dry and cramped. Bottles matter more in the peloton than you would think.";
   else if (you.place === 1) note = "Right wheel, right moment.";
   else if (you.dist > race.bunchHead) note = "You went up the road and they let you go. That is how tours are won.";
   else if (you.energy > 45) note = "Plenty left at the line. You saved too much for too long.";
@@ -1844,9 +1891,9 @@ function finishStage() {
     else if (ladder.strikes) add("One more bad tour and you drop", PAL.spot);
     else add("Holding Division " + ladder.div, PAL.ink);
   }
-  if (gc[0] === you) add("Yellow jersey", PAL.yellow);
-  if (pts[0] === you && you.sprintPts > 0) add("Green · " + you.sprintPts, PAL.green);
-  if (kom[0] === you && you.komPts > 0) add("Polka dot · " + you.komPts, PAL.spot);
+  if (gc[0] === you) add("GC Leader", PAL.yellow);
+  if (pts[0] === you && you.sprintPts > 0) add("Points Leader · " + you.sprintPts, PAL.green);
+  if (kom[0] === you && you.komPts > 0) add("KOM Leader · " + you.komPts, PAL.spot);
 
   const winT = order[0].time;
   board($("rBoard"), order, r => r.place === 1 ? fmt(r.time) : "+" + (r.time - winT).toFixed(1) + "s");
@@ -1854,10 +1901,10 @@ function finishStage() {
   board($("rGC"), gc, r => r.gcTime === gcLead ? fmt(r.gcTime) : "+" + (r.gcTime - gcLead).toFixed(1) + "s");
   board($("rPts"), pts.slice(0, 4), r => r.sprintPts + " pts");
   board($("rKom"), kom.slice(0, 4), r => r.komPts + " pts");
-  $("nextBtn").textContent = lastStage ? "Next tour" : "Next stage";
+  $("nextBtn").textContent = lastStage ? "Next race" : "Next stage";
   $("rFoot").textContent = (lastStage
     ? "Division " + ladder.div + " of 8 · " + divDots(ladder.div)
-    : STAGES[tour.stage + 1].name + ": " + STAGES[tour.stage + 1].sub)
+    : stageLabel(tour.stage + 1) + ": " + specAt(tour.stage + 1).sub)
     + "  ·  won " + earned + "  ·  " + ladder.money + " total";
   $("result").scrollTop = 0;
   show("result");
@@ -1899,7 +1946,7 @@ refreshMenu();
 Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); ladder.steer = "drag"; refreshMenu(); } });
 $("rollBtn").addEventListener("click", () => { hideAll(); startStage(); });
 $("nextBtn").addEventListener("click", () => {
-  if (tour.stage === STAGES.length - 1) { refreshMenu(); show("menu"); return; }
+  if (tour.stage === tour.schedule.length - 1) { refreshMenu(); show("menu"); return; }
   tour.stage++; showBriefing();
 });
 requestAnimationFrame(frame);
