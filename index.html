@@ -32,12 +32,14 @@
   .rule b{font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;min-width:78px;flex:0 0 78px}
   .rule span{font-size:13px;line-height:1.45;opacity:.82}
   .k1{color:var(--you)} .k2{color:var(--fuel)} .k3{color:var(--water)} .k4{color:var(--green)} .k5{color:var(--spot)}
-  button.go{margin-top:22px;background:var(--ink);color:var(--paper);border:0;
+  button.go{margin-top:12px;background:var(--ink);color:var(--paper);border:0;
     border-radius:999px;padding:15px 32px;font-family:var(--font);font-size:13.5px;font-weight:700;
-    letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+    letter-spacing:.14em;text-transform:uppercase;cursor:pointer;
+    display:block;width:100%;box-sizing:border-box}
   button.go:active{transform:translateY(1px)}
   button.go:focus-visible{outline:3px solid var(--you);outline-offset:3px}
-  button.ghost{background:none;color:var(--ink);border:1.5px solid rgba(46,49,47,.3);margin-left:8px}
+  /* the old margin-left shifted every secondary button right of the primary one */
+  button.ghost{background:none;color:var(--ink);border:1.5px solid rgba(46,49,47,.3)}
   .picks{margin-top:18px;display:flex;flex-direction:column;gap:8px}
   .pick{display:block;text-align:left;padding:13px 15px;border-radius:14px;
     border:1.5px solid rgba(46,49,47,.2);background:none;font-family:var(--font);color:var(--ink);cursor:pointer}
@@ -65,6 +67,11 @@
   .earn div:last-child{border:0;font-weight:700}
   .prof{margin-top:14px;width:100%;height:74px;display:block}
   .radar{margin-top:16px;width:100%;height:210px;display:block}
+  /* top:-24px cancels .screen's 24px top padding: that padding scrolls away in an
+     overflow container, and without this the list rows show through in the band
+     above the pinned header. Keep in step with .screen's padding-top. */
+  .stickytop{position:sticky;top:-24px;z-index:8;background:var(--paper);padding-bottom:8px;
+    box-shadow:0 8px 10px -8px rgba(46,49,47,.16)}
   .kits{display:flex;gap:9px;margin-top:14px}
   .kits button{width:30px;height:30px;border-radius:50%;border:2px solid transparent;
     padding:0;cursor:pointer;font:inherit}
@@ -73,18 +80,48 @@
   .chips button{font:inherit;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
     padding:8px 11px;border-radius:9px;border:1.5px solid rgba(46,49,47,.22);background:none;cursor:pointer}
   .chips button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-  .up{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid rgba(46,49,47,.10)}
-  .up .nm{flex:1;min-width:0}
-  .up .nm b{display:block;font-size:13px}
-  .up .nm span{display:block;font-size:10.5px;opacity:.55;line-height:1.35}
-  .up button{font:inherit;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-    padding:7px 9px;border-radius:8px;border:1.5px solid rgba(46,49,47,.25);background:none;cursor:pointer;white-space:nowrap}
-  .up button.on{background:var(--you);color:#fff;border-color:var(--you)}
-  .up button:disabled{opacity:.3;cursor:default}
-  .pips{font-size:11px;letter-spacing:.22em;color:var(--you);min-width:34px}
-  .up .nm{cursor:pointer}
-  .up.sel{background:rgba(204,0,102,.06)}
+  .strip{display:flex;gap:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scroll-snap-type:x proximity;padding:8px 2px 6px;scrollbar-width:none}
+  .strip::-webkit-scrollbar{display:none}
+  .card{scroll-snap-align:start;flex:0 0 234px;box-sizing:border-box;display:flex;flex-direction:column;
+    border:1px solid rgba(46,49,47,.16);border-radius:14px;padding:13px 14px;
+    background:rgba(255,255,255,.22);cursor:pointer}
+  .card.sel{border-color:var(--you);background:rgba(204,0,102,.07)}
+  .card .top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .card .top b{font-size:14.5px}
+  .card .pips{font-size:11px;letter-spacing:.2em;color:var(--you);white-space:nowrap}
+  .card .tier{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.5;
+    font-weight:700;margin-top:3px}
+  .card .note{font-size:11.5px;line-height:1.4;opacity:.62;margin-top:7px}
+  .card .fx{font-size:11px;line-height:1.5;margin-top:9px;padding-top:9px;
+    border-top:1px solid rgba(46,49,47,.12)}
+  .card .fx .lead{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    font-weight:700;opacity:.5;margin-bottom:2px}
+  .card .fx b{color:var(--you)}
+  .card .btns{display:flex;gap:8px;margin-top:auto;padding-top:13px}
+  .card .btns button{flex:1;font:inherit;font-size:10.5px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;padding:9px 0;border-radius:9px;border:1.5px solid rgba(46,49,47,.25);
+    background:none;color:var(--ink);cursor:pointer}
+  .card .btns button.on{background:var(--you);color:#fff;border-color:var(--you)}
+  .card .btns button:disabled{opacity:.3;cursor:default}
   .prev{min-height:34px;font-size:11.5px;line-height:1.5;opacity:.75;margin-top:2px}
+  .meters{display:flex;gap:8px;margin:10px 0 2px}
+  .meter{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .meter .bar{position:relative;width:100%;height:32px;border-radius:5px;
+    background:rgba(46,49,47,.10);overflow:hidden}
+  .meter .fill{position:absolute;left:0;right:0;bottom:0;background:var(--you)}
+  .meter .tick{position:absolute;left:0;right:0;border-top:1.5px dashed rgba(46,49,47,.55)}
+  .meter .lbl{font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;opacity:.5;font-weight:700}
+  .meter.on .lbl{opacity:1;color:var(--you)}
+  .meter.on .bar{box-shadow:0 0 0 1.5px var(--you)}
+  .empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 24px 24px;gap:13px}
+  .empty .ic{width:64px;height:64px;border-radius:18px;border:1.5px solid rgba(46,49,47,.18);
+    display:flex;align-items:center;justify-content:center;color:var(--ink);opacity:.5}
+  .empty h3{font-size:17px;margin:2px 0 0}
+  .empty p{font-size:13.5px;line-height:1.55;opacity:.62;max-width:34ch;margin:0}
+  .empty .cats{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-top:6px}
+  .empty .cats span{font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;
+    opacity:.5;border:1px solid rgba(46,49,47,.16);border-radius:999px;padding:5px 10px}
   /* a sheet up from the bottom, so the road and the gauges stay visible */
   #tutCard{position:fixed;left:0;right:0;bottom:0;z-index:40;
     background:var(--paper);border-top:1.5px solid rgba(46,49,47,.16);
@@ -105,11 +142,28 @@
   .tcStep{font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;opacity:.45}
   .tcInner h3{font-size:20px;margin:4px 0 6px;letter-spacing:-.02em}
   .tcInner p{font-size:13.5px;line-height:1.5;opacity:.78;margin:0 0 12px}
-  #tcGo,#tcSkip{width:100%}
-  #brief .inner, #shop .inner{padding-top:50px}
+  #tcGo,#tcSkip,#tcMore{width:100%}
+  #tcMore{margin-top:7px}
+  #brief .inner, #shop .inner, #practice .inner, #daily .inner, #rules .inner, #drills .inner,
+  #drillBrief .inner, #data .inner{padding-top:50px}
+  #settings .inner{padding-top:12px}
+  #settings h2{margin-top:0}
+  .navgear{position:fixed;top:14px;right:14px;z-index:25;width:40px;height:40px;
+    border-radius:12px;border:1.5px solid rgba(46,49,47,.2);background:none;
+    font:inherit;font-size:19px;line-height:1;color:var(--ink);cursor:pointer}
   .navback{position:fixed;top:14px;left:14px;z-index:25;width:40px;height:40px;
     border-radius:12px;border:1.5px solid rgba(46,49,47,.2);background:none;
     font:inherit;font-size:19px;line-height:1;color:var(--ink);cursor:pointer}
+  .navicon{position:fixed;top:14px;right:14px;z-index:25;width:40px;height:40px;
+    border-radius:12px;border:1.5px solid rgba(46,49,47,.2);background:none;
+    display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer}
+  .segmented{display:flex;margin:2px 0 4px;border:1.5px solid rgba(46,49,47,.2);
+    border-radius:11px;overflow:hidden}
+  .segmented button{flex:1;font:inherit;font-size:12px;font-weight:700;letter-spacing:.02em;
+    padding:10px 4px;border:0;border-right:1.5px solid rgba(46,49,47,.2);background:none;
+    color:var(--ink);opacity:.5;cursor:pointer;white-space:nowrap}
+  .segmented button:last-child{border-right:0}
+  .segmented button[aria-pressed="true"]{background:var(--ink);color:var(--paper);opacity:1}
   #tcSkip{margin-top:7px}
   #tutPrompt{position:fixed;left:0;right:0;bottom:118px;z-index:30;display:flex;
     align-items:center;justify-content:center;gap:10px;pointer-events:none}
@@ -117,6 +171,13 @@
   #tutPrompt span{background:var(--you);color:#fff;padding:9px 14px;border-radius:10px;
     font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
   #tutPrompt b{background:var(--ink);color:#fff;padding:9px 11px;border-radius:10px;font-size:12px}
+  /* clear of the pads and the road: the old bar sat straight over the controls */
+  #drillDone{position:fixed;top:10px;right:12px;z-index:36;padding:9px 13px;border-radius:10px;
+    border:1.5px solid rgba(46,49,47,.22);background:rgba(244,242,236,.9);font:inherit;font-size:11px;
+    font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);cursor:pointer}
+  #tutQuit{position:fixed;top:10px;right:12px;z-index:36;padding:9px 13px;border-radius:10px;
+    border:1.5px solid rgba(46,49,47,.22);background:rgba(244,242,236,.9);font:inherit;font-size:11px;
+    font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);cursor:pointer}
   .prev b{color:var(--you)}
 </style>
 </head>
@@ -124,10 +185,10 @@
 <canvas id="game"></canvas>
 
 <div class="screen" id="menu"><div class="inner">
+  <button class="navgear" id="setBtn" aria-label="Settings">&#9881;</button>
   <div class="eyebrow" id="mDiv">Division 8 of 8</div>
   <h1>SLIP<span class="cut">STREAM</span></h1>
   <div class="ladder"><span id="mDots">○○○○○○○●</span><span id="mStat"></span></div>
-  <button class="go hide" id="resumeBtn">Resume tour</button>
   <p class="lede">Three things run down. Only your legs come back for free.</p>
   <div class="rules">
     <div class="rule"><b class="k1">Legs</b><span>Wind is what costs you. Sit on a wheel and they come back.</span></div>
@@ -138,10 +199,14 @@
     <div class="rule"><b class="k1">The jump</b><span>Alternate the L and R pedals to lift the pace, faster for more. Two strokes on the same side is a missed pedal and it costs you. Hold both to soft pedal and recover.</span></div>
     <div class="rule"><b class="k5">The peloton</b><span>They only chase what scares them. Go up the road before you are worth chasing.</span></div>
   </div>
+  <div class="secthead">Your kit colour</div>
   <div class="kits" id="mKits"></div>
   <canvas class="radar" id="mRadar"></canvas>
   <div class="picks" id="picks"></div>
-  <button class="go" id="startBtn">Start tour</button><button class="go ghost" id="dailyBtn">Daily challenge</button><button class="go ghost" id="pracBtn">Practice</button><button class="go ghost" id="howBtn">How to play</button><button class="go ghost" id="shopBtn">Upgrades</button><button class="go ghost" id="unitBtn">Km</button><button class="go ghost" id="steerBtn">Drag</button>
+  <button class="go" id="dailyBtn">Daily challenge</button>
+  <button class="go ghost" id="startBtn">Start tour</button>
+  <button class="go ghost" id="pracBtn">Practice</button>
+  <button class="go ghost" id="shopBtn">Upgrades</button>
   <div class="foot" id="mSteer"></div>
   <div class="foot">Hold a side to steer · alternate L and R to pedal · hold both to soft pedal</div>
 </div></div>
@@ -153,18 +218,66 @@
     <h3 id="tcTitle"></h3>
     <p id="tcBody"></p>
     <button class="go" id="tcGo">Let me try</button>
+    <button class="go ghost" id="tcMore">Learn more</button>
     <button class="go ghost" id="tcSkip">Skip the tutorial</button>
   </div>
 </div>
 <div id="tutPrompt" class="hide"><span id="tpText"></span><b id="tpCount"></b></div>
+<button id="tutQuit" class="hide">Skip</button>
+<button id="drillDone" class="hide">Done</button>
 <button id="pauseBtn" class="hide">II</button>
 <div id="pauseCard" class="hide"><div class="tcInner">
   <div class="tcGrip"></div>
   <div class="tcStep">Paused</div>
   <h3 id="pTitle">Stage paused</h3>
   <p id="pBody"></p>
-  <button class="go" id="pResume">Resume</button>
+  <button class="go" id="pResume">Back on</button>
   <button class="go ghost" id="pQuit">Leave the race</button>
+  <p id="pFoot" class="sub"></p>
+</div></div>
+
+<div class="screen hide" id="settings"><div class="inner">
+  <button class="navback" id="setBack" aria-label="Back">&#8592;</button>
+  <h2>Settings</h2>
+  <div class="secthead">Steering</div>
+  <button class="go ghost" id="steerBtn">Drag</button>
+  <div class="secthead">Units</div>
+  <button class="go ghost" id="unitBtn">Km</button>
+  <div class="secthead">Help</div>
+  <button class="go ghost" id="howBtn">How to play</button>
+  <button class="go ghost" id="dataBtnMenu">Riding data</button>
+  <button class="go ghost" id="rulesBtn">The rules</button>
+</div></div>
+
+<div class="screen hide" id="data"><div class="inner">
+  <button class="navback" id="dataBack" aria-label="Back">&#8592;</button>
+  <h2>Riding data</h2>
+  <p class="sub" id="dataSub"></p>
+  <div id="dataBody"></div>
+</div></div>
+
+<div class="screen hide" id="drillBrief"><div class="inner">
+  <button class="navback" id="dbBack" aria-label="Back">&#8592;</button>
+  <div class="eyebrow">Drill</div>
+  <h2 id="dbTitle"></h2>
+  <p class="sub" id="dbSub"></p>
+  <div class="rule" id="dbTips"></div>
+  <button class="go" id="dbGo">Start the drill</button>
+</div></div>
+
+<div class="screen hide" id="drills"><div class="inner">
+  <button class="navback" id="drillBack" aria-label="Back">&#8592;</button>
+  <h2>Drills</h2>
+  <p class="sub">One technique at a time, on a loop. Nothing is scored and nothing is lost.</p>
+  <div id="drillList"></div>
+</div></div>
+
+<div class="screen hide" id="rules"><div class="inner">
+  <button class="navback" id="rulesBack" aria-label="Back">&#8592;</button>
+  <h2>The rules</h2>
+  <p class="sub">Commissaires judge you and your rivals alike. Lower divisions forgive a second offence; Division 1 forgives nothing.</p>
+  <div class="earn" id="rulesList"></div>
+  <p class="sub">Fines come out of your prize money. Time penalties are added to your finishing time. Losing a sprint means you take no points and no money at that line.</p>
 </div></div>
 
 <div class="screen hide" id="practice"><div class="inner">
@@ -172,7 +285,8 @@
   <div class="eyebrow">Practice</div>
   <h2>Pick a stage</h2>
   <p class="sub">Any parcours, any division. Nothing is won or lost: no prize money, no ladder, no fatigue carried.</p>
-  <div class="secthead">Parcours</div>
+  <button class="go ghost" id="drillBtn">Drills · one technique at a time</button>
+  <div class="secthead">Or ride a stage</div>
   <div id="pStages"></div>
   <div class="secthead">Division</div>
   <div id="pDivs"></div>
@@ -192,13 +306,17 @@
 
 <div class="screen hide" id="shop"><div class="inner">
   <button class="navback" id="shopBack2" aria-label="Back">&#8592;</button>
+  <button class="navicon" id="dataBtnShop" aria-label="Riding data"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="13"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="9"/><line x1="21" y1="20" x2="3" y2="20"/></svg></button>
   <div class="eyebrow" id="sMoney"></div>
   <h2>Upgrades</h2>
   <p class="sub">Buy levels in order. Fit two per section, swap them free between races.</p>
-  <canvas class="radar" id="sRadar"></canvas>
-  <div class="prev" id="sPrev"></div>
+  <div class="stickytop">
+    <canvas class="radar" id="sRadar"></canvas>
+    <div class="meters" id="sMeters"></div>
+    <div class="prev" id="sPrev"></div>
+  </div>
+  <div class="segmented" id="sSegs"></div>
   <div id="sList"></div>
-  <button class="go" id="shopBack">Done</button>
 </div></div>
 
 <div class="screen hide" id="brief"><div class="inner">
@@ -227,6 +345,7 @@
   <div class="board" id="rPts"></div>
   <div class="secthead">King of the Mountains</div>
   <div class="board" id="rKom"></div>
+  <button class="go ghost" id="dataBtnRes">Riding data</button>
   <button class="go" id="nextBtn">Next stage</button>
   <div class="foot" id="rFoot"></div>
 </div></div>
@@ -247,6 +366,44 @@ const CFG = {
   // most of a bike length. It also stretches you out, so you stop pedalling for a
   // moment afterwards, which is free at the finish and costly at an intermediate.
   throwWindow: 12, throwPeak: 2.0, throwGain: 1.4, throwCool: 0.45,
+  // Empties you are still carrying. Barely felt on the flat, real on a climb, and
+  // you can only hold three: so the decision is whether to lug them to the next
+  // litter zone or bin them where you are and take the fine.
+  carryMax: 3, carryDrag: 0.008, carryClimb: 0.030,
+  // You may change your line in a sprint. You may not change it INTO someone. The
+  // offence needs all three: you are off your line, you are moving toward them, and
+  // they are close enough to be affected.
+  lineTol: 1.45, lineNear: 1.75,
+  // The team car: how fast it paces you, how long it will stay with you, and how far
+  // off the back you must be before the sticky bottle is worth offering.
+  // A long steady pull rather than a slingshot, and you have to stay in its draft:
+  // drift out of the shelter and it rides away without you.
+  // Holding the car's shelter feeds you back: legs and a bottle from the window.
+  // What the car hands you back. Musettes as well as bottles, so food returns too.
+  towSpeed: 1.16, towMax: 26, stickyNeed: 25,
+  towRecover: 5.2, towBottle: 2.4, towFood: 3.1,
+  // How badly losing the wheel hurts, by division. At the bottom the car looks after
+  // you either way; at the top the shelter is nearly all of it.
+  towSlack: 0.55,
+  // The car has to be FOLLOWABLE. Built at full sway it moved sideways at 3.1 m/s
+  // against 2.6 m/s of steering, so holding its wheel was arithmetically impossible
+  // however well you rode: the same mistake as corner drift outrunning the bars.
+  towGap: 5.5,       // how far up the road the car sits
+  towSway: 2.2,      // how far it wanders across the road
+  towSwayW: 0.52,    // and how quickly at the bottom of the ladder
+  // At the top the car is nearly quicker than you can steer: about a third of a
+  // metre a second in hand, so holding its wheel takes real attention rather than
+  // just pointing at it. At the bottom it is unchanged and gentle.
+  towSwayDiv: 1.03,
+  towShelter: 1.5,   // how close to its line counts as being in the draft
+  // Bunny hop. You get a short window in the air to cross an island. Time it well
+  // and you take the short line for a penalty; time it badly and you come down on
+  // the island, which is a crash. Going round remains free and slow.
+  // Two hops, not one. Up onto the island, ride along the top of it, then down the
+  // other side. That is why crossing works at all: you are never asked to clear the
+  // whole width in one airborne moment. Get either hop wrong and you go down.
+  hopGap: 0.75, hopLead: 1.75, hopAir: 0.5, hopCost: 0.04, islandDrag: 0.14,
+  roundLong: 2.1,   // how much longer a roundabout island is than it is wide
   // Crashes. The trigger is identical at every division: what changes up the ladder
   // is the road, not a hidden dial turned against you. Going down is always your own
   // line, never something a rival did, and the message always names the mistake.
@@ -297,6 +454,7 @@ const BASE_STATS = {
   fatigueResist: 1.00, // lower carries less damage into tomorrow
   danger: 1.00,      // lower means the peloton is slower to chase you
   radio: 0,          // see the chase building and who is spent
+  sticky: 0,         // illegal tows your team will risk for you
   powerMeter: 0,     // a pacing target on the legs gauge
   carbMix: 0,        // bottles deliver fuel as well as fluid
   feedSmooth: 0      // take a bottle wide without losing your line
@@ -350,9 +508,9 @@ const UPGRADES = {
     { id: "radio", name: "Race radio", note: "They tell you what is happening behind",
       tiers: ["Earpiece", "Team channel", "Full comms"],
       max: { radio: 3 } },
-    { id: "tactics", name: "Team tactics", note: "Teammates block, and the chase is slower to organise",
+    { id: "tactics", name: "Team tactics", note: "They block for you, and at full support they will tow you back",
       tiers: ["Basic", "Blocking", "Full support"],
-      max: { danger: -0.18 } },
+      max: { danger: -0.18, sticky: 1 } },
     { id: "wheelcraft", name: "Wheel craft", note: "You know exactly where the shelter sits",
       tiers: ["Learning", "Good", "Glued on"],
       max: { draft: 0.12 } },
@@ -631,7 +789,7 @@ function buildStage(seed, spec0, D) {
       // Random draws almost never threaded the gaps between primes and pinches, so
       // junctions were being dropped on most stages.
       const big = R() < 0.68;
-      const rlen = big ? 96 : 90;
+      const rlen = MAKE.roundLen(big);
       const spots = [];
       for (let cand = spec.len * 0.14; cand < spec.len - 320; cand += 18) {
         if (rounds.some(x => Math.abs(x.s - cand) < 320)) continue;
@@ -649,18 +807,7 @@ function buildStage(seed, spec0, D) {
       // A roundabout is SHORT and WIDE: you are round it in a few seconds, but the
       // island is big enough to hide the riders who chose the other way. A divider
       // is the opposite: a long thin island in an otherwise normal road.
-      const rad = 0;
-      rounds.push(big
-        ? { s: at, e: at + rlen, side: R() < 0.5 ? -1 : 1, big: true,
-            // Offset well off centre so the SLOW lane is nearly on your line and the
-            // FAST one takes real commitment to reach. You can always avoid the island;
-            // taking the short way round is the decision.
-            // swing: how far the road arcs sideways. wall: how far the island eats
-            // into the inside of it. gapMin: the sliver of tarmac left at the apex.
-            swing: 4.0 + R() * 0.8, wall: 4.6 + R() * 0.7, gapMin: 0.5,
-            road: 10.4, gain: 0.055 + R() * 0.025 }
-        : { s: at, e: at + rlen, side: R() < 0.5 ? -1 : 1,
-            iw: 1.0, tight: 2.2 + R() * 0.4, gain: 0.038 + R() * 0.022 });
+      rounds.push(MAKE.round(R, at, big));
     }
   }
 
@@ -680,7 +827,7 @@ function buildStage(seed, spec0, D) {
         if (surfaces.some(x => at < x.e + 90 && at + len > x.s - 90)) continue;
         if (rounds.some(x => at < x.e + 60 && at + len > x.s - 60)) continue;
         const sev = 0.45 + 0.55 * D.t;                   // bites harder up the ladder
-        surfaces.push({ s: at, e: at + len, kind, sev });
+        surfaces.push(MAKE.surface(kind, at, len, sev));
       }
     }
   }
@@ -694,9 +841,22 @@ function buildStage(seed, spec0, D) {
     const density = S0.hazard * sf.sev;
     for (let m = sf.s + 25; m < sf.e - 15; m += 34 + R() * 46) {
       if (R() > density) continue;
-      hazards.push({ d: m, x: (R() * 2 - 1) * 2.6, r: 0.55 + R() * 0.4, hit: new Set() });
+      hazards.push(MAKE.hazard(m, (R() * 2 - 1) * 2.6, R));
     }
   }
+
+  // Where you are allowed to get rid of them. Real races put these after the feed
+  // and before the big climbs, for the same reason: that is when riders want rid.
+  const litters = [];
+  const addLitter = at => {
+    if (at < 90 || at > spec.len - 160) return;
+    if (litters.some(l => Math.abs(l.s - at) < 200)) return;
+    const len = 105 - 55 * D.t;
+    if (narrows.some(n => at < n.e + 60 && at + len > n.s - 60)) return;
+    if (rounds.some(rb => at < rb.e + 50 && at + len > rb.s - 50)) return;
+    // Shorter the higher you race, so binning them cleanly takes real positioning
+    litters.push(MAKE.litter(at, R() < 0.5 ? -1 : 1, D.t));
+  };
 
   const feeds = [];
   const clean = m => !conflicts(m) && gRaw(m) < 0.3 && gRaw(m + FEEDLEN) < 0.3;
@@ -723,14 +883,33 @@ function buildStage(seed, spec0, D) {
   }
 
   const items = [];
+  for (const f of feeds) addLitter(f.e + 55);
+  for (const c of climbs) addLitter(c.s - 140);
+  // You must always have somewhere legal to bin them. High divisions are so full of
+  // pinches and junctions that every candidate spot was being rejected.
+  if (!litters.length) {
+    const len = 105 - 55 * D.t;
+    for (let at = spec.len * 0.28; at < spec.len - 200 && !litters.length; at += 30) {
+      if (narrows.some(n => at < n.e + 20 && at + len > n.s - 20)) continue;
+      if (rounds.some(rb => at < rb.e + 20 && at + len > rb.s - 20)) continue;
+      litters.push(MAKE.litter(at, R() < 0.5 ? -1 : 1, D.t));
+    }
+  }
+
   const put = (d, x, kind) => {
     if (d < 60 || d > spec.len - 40) return;
     // Clamp to the road AS IT IS HERE. A fixed limit put items in the verge wherever
     // the road narrowed, so a feed zone in a pinch was unreachable.
+    // Clamp to the road AS IT IS HERE, whatever is narrowing it: a pinch, a
+    // junction, anything. A fixed limit left food in the hedge.
     let lim = CFG.roadW / 2 - 1.0;
     for (const n of narrows) {
       if (d < n.s - n.taper || d > n.e + n.taper) continue;
       lim = Math.min(lim, n.w / 2 - 0.9);
+    }
+    for (const rb of rounds) {
+      if (!rb.big || d < rb.s - 40 || d > rb.e + 40) continue;
+      lim = Math.min(lim, rb.road / 2 - 1.0);
     }
     items.push({ d, x: clamp(x, -lim, lim), kind, taken: new Set() });
   };
@@ -772,7 +951,7 @@ function buildStage(seed, spec0, D) {
   }
 
   return { spec, len: spec.len, grades, elev, eMin, eMax, climbs,
-    primes, feeds, items, winds, scenery, narrows, rounds, surfaces, hazards,
+    primes, feeds, items, winds, scenery, narrows, rounds, surfaces, hazards, litters,
     // twistier in the mountains and twistier up the ladder
     // Tighter, more frequent corners rather than long sweeping ones. Drift scales
     // with the road's SLOPE while the inside-line advantage scales with its
@@ -834,6 +1013,42 @@ function surfaceAt(c, m) {
   return null;
 }
 
+// ---- course feature factories ----
+// The ONLY place these shapes are built. The drills used to write their own object
+// literals, so when the roundabout model changed they kept handing out the old one
+// and silently produced junctions that neither drew nor collided. Anything that
+// wants a feature asks for it here, and a model change reaches everything at once.
+const MAKE = {
+  round(R, at, big) {
+    const len = big ? 32 : 90;
+    return big
+      ? { s: at, e: at + len, side: R() < 0.5 ? -1 : 1, big: true,
+          // rad: the circle itself. road: how wide it opens so there is a lane each
+          // side. off: nudged, so one way round is the shorter one.
+          // The circle has to fit inside the APPROACH road, not just the widened
+          // one: at 3.6m radius its edge sat beyond the 3.95m approach verge, so a
+          // rider coming in had no legal line that cleared it.
+          // Wide enough for a bunch, not just for you: at 16.4 each lane held about
+          // three riders, so eight arriving together meant constant contact. The
+          // island has to stay inside the APPROACH road though, or a rider coming in
+          // has no legal line and gets shoved through it whatever they do.
+          rad: 2.9 + R() * 0.4, road: 22.5, off: 0.25, gain: 0.05 + R() * 0.025 }
+      : { s: at, e: at + len, side: R() < 0.5 ? -1 : 1,
+          // The road opens through a median so the SLOW side is genuinely wide and
+          // the short side is the squeeze. At nine metres both sides held about two
+          // riders, so a bunch arriving together had nowhere to go.
+          iw: 1.0, tight: 2.35 + R() * 0.4, road: 13.0,
+          gain: 0.038 + R() * 0.022 };
+  },
+  roundLen(big) { return big ? 32 : 90; },
+  surface(kind, at, len, sev) { return { s: at, e: at + len, kind, sev }; },
+  hazard(d, x, R) { return { d, x, r: 0.55 + (R ? R() : 0.5) * 0.4, hit: new Set() }; },
+  litter(at, side, t) { return { s: at, e: at + (105 - 55 * t), side }; }
+};
+// Every feature a course can carry, so anything building one can be checked against
+// the same list rather than guessing.
+const FEATURE_KEYS = ["rounds", "surfaces", "hazards", "litters", "narrows", "primes"];
+
 function widthAt(c, m) {
   let w = CFG.roadW;
   for (const n of c.narrows) {
@@ -843,18 +1058,31 @@ function widthAt(c, m) {
     else if (m > n.e) k = ((n.e + n.taper) - m) / n.taper;
     w = Math.min(w, CFG.roadW + (n.w - CFG.roadW) * clamp(k, 0, 1));
   }
-  // A roundabout FUNNELS you in rather than opening out: the road closes to about
-  // four riders across on the approach and stays there through the junction, which is
-  // what one feels like on a bike. Widening it made a plaza you could not read.
-  // The road opens a little through the arc so there is room to choose a line, and
-  // never funnels: the old pinch left lanes barely a rider wide.
+  // The outer edge of a roundabout is a CIRCLE, concentric with the island: one ring
+  // inside another. Flaring the road out on straight tapers gave it square shoulders,
+  // which is the boxy look. The outer ellipse is the island scaled up by a lane, so
+  // the two are always the same shape.
   if (c.rounds) for (const rb of c.rounds) {
-    if (!rb.big || m < rb.s - 40 || m > rb.e + 40) continue;
-    const in1 = clamp((m - (rb.s - 40)) / 40, 0, 1), out1 = clamp(((rb.e + 40) - m) / 40, 0, 1);
-    w = Math.max(w, CFG.roadW + (rb.road - CFG.roadW) * Math.min(in1, out1));
+    if (!rb.big) {
+      // A median widens too, tapered over its own nose and tail.
+      if (!rb.road || m < rb.s - 12 || m > rb.e + 12) continue;
+      const inM = clamp((m - (rb.s - 12)) / 12, 0, 1);
+      const outM = clamp(((rb.e + 12) - m) / 12, 0, 1);
+      w = w + (rb.road - w) * smooth(Math.min(inM, outM));
+      continue;
+    }
+    const rad = rb.rad || 0;
+    if (!(rad > 0)) continue;
+    const outW = rb.road / 2;                       // outer half width at the middle
+    const outZ = rad * CFG.roundLong * (outW / rad);// and the matching half length
+    const dz = m - (rb.s + rb.e) / 2;
+    if (Math.abs(dz) >= outZ) continue;
+    const ring = outW * Math.sqrt(Math.max(0, 1 - (dz / outZ) * (dz / outZ)));
+    w = Math.max(w, ring * 2);
   }
   return w;
 }
+function smooth(t) { return t * t * (3 - 2 * t); }
 function edgeAt(c, m) { return widthAt(c, m) / 2 - 0.55; }
 // A roundabout is an impassable island with a lane either side. The island sits
 // OFF centre, so one lane is tight and one is roomy, and the tight one is the
@@ -869,22 +1097,28 @@ function islandAt(c, m) {
     if (m < rb.s || m > rb.e) continue;
     const lane = edgeAt(c, m);
     if (!rb.big) {
+      // Pointed, not blunt: at 0.62 the nose came up so fast it was effectively a
+      // wall across the lane. A median tapers to nothing at each end.
       const t = (m - rb.s) / (rb.e - rb.s);
-      const iw = rb.iw * Math.pow(Math.sin(Math.PI * t), 0.62);
+      const iw = rb.iw * Math.pow(Math.sin(Math.PI * t), 1.6);
       if (iw < 0.06) return null;
       const mid = rb.side * (lane - rb.tight - rb.iw);
       return { lo: mid - iw, hi: mid + iw, rb, lane, part: "divider" };
     }
-    // The island hugs the inside of the arc: a wall you can run close to for the
-    // short line, or stay off for the safe one. It never crosses your path.
-    const t = (m - rb.s) / (rb.e - rb.s);
-    const bite = Math.sin(Math.PI * t);                  // fattest at the apex
-    if (bite < 0.04) return null;
-    const inner = rb.side * (lane - rb.gapMin);          // the side the arc sweeps toward
-    const depth = rb.wall * bite;
-    const lo = rb.side > 0 ? inner - depth : inner - 40;
-    const hi = rb.side > 0 ? inner + 40 : inner + depth;
-    return { lo, hi, rb, lane, part: "circle" };
+    // A circle in the middle of the road: round in BOTH directions, so it occupies
+    // as much road lengthways as it does across. Spreading it over the whole junction
+    // gave an invisible band you collided with long before reaching the thing drawn
+    // on screen. rb.s..rb.e is the junction; the circle is only its middle.
+    // Longer than it is wide. A perfectly round island was eight metres of road at
+    // thirteen metres a second: you were over it before the button settled.
+    const rad = rb.rad || 0;
+    const radZ = rad * CFG.roundLong;
+    const dz = m - (rb.s + rb.e) / 2;
+    if (!(rad > 0) || Math.abs(dz) >= radZ) return null;
+    const w2 = rad * Math.sqrt(Math.max(0, 1 - (dz / radZ) * (dz / radZ)));
+    if (!(w2 >= 0.05)) return null;
+    const mid = rb.side * rb.off;                        // nudged, so one lane is tighter
+    return { lo: mid - w2, hi: mid + w2, rb, lane, part: "circle" };
   }
   return null;
 }
@@ -897,15 +1131,6 @@ function centreAt(c, m) {
   let v = Math.sin(m * 0.0071 * b.f + b.p) * 2.5 * b.a
     + Math.sin(m * 0.0163 * b.f + 1.7 + b.p) * 1.2 * b.a
     + Math.sin(m * 0.031 * b.f + 0.6) * 0.4 * b.a;
-  // A roundabout is a hard arc in the ROAD, not an obstacle sitting on a straight
-  // one. The centreline swings out, sweeps past the island and comes back, so a
-  // rider holding their line follows it for free and nobody has to cross the
-  // island's path. That is what every previous version got wrong.
-  if (c && c.rounds) for (const rb of c.rounds) {
-    if (!rb.big || m < rb.s || m > rb.e) continue;
-    const t = (m - rb.s) / (rb.e - rb.s);
-    v += rb.side * rb.swing * Math.sin(Math.PI * t);
-  }
   return v;
 }
 // sideways metres per metre forward: how hard the road is turning here
@@ -930,7 +1155,15 @@ function makeRider(cfg, i, isYou, typeKey, R, extra) {
     finished: false, time: 0, rawTime: 0, place: 0, sprintPts: 0, komPts: 0, gcTime: 0, rep: 0.5, money: 0,
     earn: { sprint: 0, kom: 0, stage: 0, tour: 0, jersey: 0 },
     load: 0, fatigue: 0, legCap: 100, bonus: 0, splitSprint: 0, splitClimb: 0, burnHot: 0, hardTurn: false,
-    flat: 0, down: 0, out: false,
+    flat: 0, down: 0, out: false, empties: 0, penalties: [], hop: 0, hopQ: 0, onIsl: false, hopHead: false,
+    // Telemetry. Every rider carries the same counters so the results page can put
+    // your numbers beside the winner's, which is what lets you draw your own
+    // conclusion instead of being handed one.
+    log: { wind: 0, shelter: 0, edge: 0, corner: 0, junction: 0, bumps: 0,
+           flats: 0, falls: 0, lowLegs: 0, lowFood: 0, lowFluid: 0, attack: 0, front: 0 },
+    sprintLine: null, forfeit: null, lineDrift: 0,
+    tow: 0, towReason: "", sticky: 0, needTow: false, towHeld: 0, towTime: 0,
+    towX: undefined, towBase: undefined, towT: 0,
     threw: null, throwCool: 0, throwQ: 0,
     strength: isYou ? 1 : 0.995 + R() * 0.035, plan: null, think: R() * 0.4
   };
@@ -987,6 +1220,41 @@ function createRace(opts) {
   return race;
 }
 
+// Every penalty lands here, so they all read and stack the same way. Real racing
+// fines almost everything, so a fine rides along with the sporting penalty.
+const PENALTY = {
+  litter:  { name: "Littering",        fine: 60,  time: 0 },
+  sprint:  { name: "Off your line",    fine: 120, time: 0, points: true },
+  cut:     { name: "Cutting the median", fine: 80, time: 2.2 },
+  sticky:  { name: "Sticky bottle",    fine: 100, time: 3.0 }
+};
+function penalise(race, r, kind, n) {
+  const P = PENALTY[kind]; if (!P) return;
+  // Lower divisions forgive a second offence; at the top nothing is forgiven.
+  const cap = Math.round(1 + 3 * race.D.t);
+  if (r.penalties.length >= cap && race.div > 1) return;
+  r.penalties.push({ kind, name: P.name, fine: P.fine * (n || 1), time: P.time, points: !!P.points });
+}
+
+// The team car. Used by both the automatic pace-back after misfortune and the
+// sticky bottle. It delivers you to the TAIL of the peloton and no further forward,
+// and drops you further back the higher the division: the rescue softens the blow
+// without undoing it.
+function towTarget(race, self) {
+  // Measured back from the FRONT of the race, not from the tail. Once you puncture
+  // the tail is whichever straggler is level with you, so a tail-relative target sat
+  // behind where you already were and the car decided it was not needed at all.
+  const head = race.pelotonHead || 0;
+  return head - (26 + 24 * race.D.t);
+}
+function startTow(race, r, reason) {
+  if (r.tow > 0 || r.out) return;
+  if (r.dist >= towTarget(race, r)) return;              // already close enough
+  r.tow = CFG.towMax;
+  r.towReason = reason;
+  if (r.you) race.events.push({ t: reason === "sticky" ? "STICKY BOTTLE" : "TEAM CAR", c: "water" });
+}
+
 // One place decides how badly an impact went, so every cause reads the same way.
 function impact(race, r, bite, why) {
   if (!r.you || r.out) return;
@@ -1000,8 +1268,53 @@ function impact(race, r, bite, why) {
     return;
   }
   r.down = CFG.downTime;
+  r.needTow = true;
   r.speed *= 0.22;
   race.events.push({ t: why, c: "spot" });
+}
+
+// Can you hop right now, and which way? Up onto the island if you are alongside its
+// kerb; down off it if you are on it. Returns the edge you would be jumping.
+function hopTarget(C, r) {
+  // Judge the kerb against the island AT ITS WIDEST, which is what you will actually
+  // meet. Measuring it against a narrow slice further up the road put the kerb in a
+  // different place every metre, so the button appeared and vanished on the approach.
+  const rb = (C.rounds || []).find(x => r.dist > x.s - 45 && r.dist < x.e + 4);
+  if (!rb) return null;
+  const wide = islandAt(C, (rb.s + rb.e) / 2);
+  if (!wide) return null;
+  if (r.onIsl) {
+    const here = islandAt(C, r.dist) || wide;
+    const off = Math.abs(r.x - here.lo) < Math.abs(r.x - here.hi) ? here.lo : here.hi;
+    if (Math.abs(off) > here.lane) return null;             // that side is off the road
+    return { dir: "off", edge: off, isl: here, lead: 0 };
+  }
+  const kerb = Math.abs(r.x - wide.lo) < Math.abs(r.x - wide.hi) ? wide.lo : wide.hi;
+  // Offered when you are beside a kerb OR on a line straight into the island. Riding
+  // dead at it you are metres from either edge, so gating on kerb distance alone
+  // meant the button only blinked as the collision shoved you sideways.
+  const headOn = r.x > wide.lo - 0.3 && r.x < wide.hi + 0.3;
+  if (!headOn && Math.abs(r.x - kerb) > 2.1) return null;
+  // How far up the road the island actually starts. That is the thing you are timing.
+  // Scanned a long way ahead: a roundabout island is eight metres long, so a short
+  // scan meant the button appeared for a fraction of a second and was gone.
+  let lead = null;
+  for (let d = 0; d <= 26; d += 0.4) { if (islandAt(C, r.dist + d)) { lead = d; break; } }
+  if (lead === null) return null;                           // still too far back
+  // headOn has to travel with the target: computed and then dropped, every caller
+  // saw undefined and the straight-over-the-top hop could never score above 0.7.
+  return { dir: "on", edge: kerb, isl: wide, lead, headOn };
+}
+
+// The line you are held to: any contested line, sprint, summit or finish.
+function sprintZone(C, r) {
+  for (const pr of C.primes) {
+    // Only the run to the line itself. Held over the whole final two hundred metres
+    // it governed far more of the race than a commissaire ever would.
+    const d = pr.d - r.dist;
+    if (d > 0 && d < 26) return pr;
+  }
+  return null;
 }
 
 function throwLine(C, r) {
@@ -1219,14 +1532,23 @@ function aiThink(race, r, dt) {
     const il = islandAt(C, Math.min(r.dist + 9, rbA.e - 1));
     if (il) {
       if (rbA.big) {
-        // The island is a wall on the inside of the arc, so there is one open
-        // corridor. What varies is how tight you take it: close to the wall is the
-        // short way, out wide is the safe one.
-        if (!r.rbSide) r.rbSide = race.rnd() < 0.4 ? 1 : 2;
-        const wall = rbA.side > 0 ? il.lo : il.hi;
-        const outer = rbA.side > 0 ? -il.lane : il.lane;
-        r.tx = wall + (outer - wall) * (r.rbSide === 1 ? 0.28 : 0.66);
-        return;
+        // A circle in the middle of the road: you go round one side or the other and
+        // you commit before you get there. Aim at the lane AT THE WIDEST POINT, since
+        // that is where the circle will be when you actually reach it.
+        const wide = islandAt(C, (rbA.s + rbA.e) / 2);
+        if (wide) {
+          const mid = (wide.lo + wide.hi) / 2;
+          if (!r.rbSide) r.rbSide = (r.x > mid || (Math.abs(r.x - mid) < 0.8 && rbA.side > 0)) ? 1 : -1;
+          // Aim just CLEAR of the island, not at the middle of a lane that only
+          // exists once the road has opened. A lane-centre target is unreachable on
+          // the narrow approach, so it clamps to the verge and leaves riders pointing
+          // straight at the island right up until it appears.
+          const clearBy = 1.1 + 0.9 * (r.i % 3) / 2;      // they spread out a little
+          const want = r.rbSide > 0 ? wide.hi + clearBy : wide.lo - clearBy;
+          const here = edgeAt(C, r.dist);
+          r.tx = clamp(want, -here + 0.2, here - 0.2);
+          return;
+        }
       }
       if (!r.rbSide) {
         const mid = (il.lo + il.hi) / 2;
@@ -1270,12 +1592,104 @@ function aiThink(race, r, dt) {
 function stepRider(race, r, dt) {
   if (r.finished) return;
   const C = race.course;
+  {                                              // telemetry for the data page
+    const g = r.log;
+    if (r.q > 0.30) g.shelter += dt; else g.wind += dt;
+    if (r.energy < 20) g.lowLegs += dt;
+    if (r.fuel < 25) g.lowFood += dt;
+    if (r.fluid < 25) g.lowFluid += dt;
+    if (r.eff === "attack") g.attack += dt;
+  }
   r.prev = r.dist;
   const g = gradeAt(C, r.dist), w = windAt(C, r.dist), st = r.stats;
   draftFor(race, r);
+  const zone = sprintZone(C, r);
+  if (zone) {
+    if (r.sprintLine === null) r.sprintLine = r.x;
+    // A bunch sprint jostles constantly and every rider's lateral velocity flickers,
+    // so judging on the instantaneous sign booked people for wobbling. This builds
+    // only while you keep moving the same way off your line, and decays fast.
+    const away = r.x - r.sprintLine;
+    const moving = Math.abs(r.vx) > 0.4 && Math.sign(r.vx) === Math.sign(away);
+    r.lineDrift = clamp((r.lineDrift || 0) + (moving ? dt : -dt * 2.2), 0, 1);
+  } else { r.sprintLine = null; r.lineDrift = 0; }
   if (r.you) {
     r.stumble = Math.max(0, r.stumble - dt);
     r.throwCool = Math.max(0, r.throwCool - dt);
+    const wasAir = r.hop;
+    r.hop = Math.max(0, r.hop - dt);
+    if (r.wantHop) {
+      r.wantHop = false;
+      const t = hopTarget(C, r);
+      if (t && r.hop <= 0) {
+        // best from about three quarters of a metre off the kerb: crowd it and you
+        // clip it, sit too wide and you never reach the top
+        // Two halves: WHEN you leave the ground relative to the kerb ahead, and how
+        // close in you are when you do. Judged on position alone, the button was
+        // green while you sat still beside an island, which is not a jump.
+        const d = Math.abs(r.x - t.edge);
+        const near = clamp(1 - Math.abs(d - CFG.hopGap) / 1.3, 0, 1);
+        const time = clamp(1 - Math.abs(t.lead - CFG.hopLead) / 4.5, 0, 1);
+        // Head-on: pure timing, so it can actually reach the top. Off a kerb: timing
+        // plus your line. Already alongside: your line, since nothing is left to time.
+        // Stepping down off an island you are often metres from either edge, exactly
+        // as when going over the top: a tight kerb-distance term made it impossible
+        // to score well. Generous, and it tops out anywhere sensible.
+        const offQ = clamp(1 - Math.max(0, d - 1.3) / 2.4, 0, 1);
+        r.hopQ = t.dir === "off" ? offQ
+          : t.headOn ? time
+          : t.lead > 0.2 ? clamp(near * 0.3 + time * 0.7, 0, 1)
+          : clamp(near * 0.85 + 0.15, 0, 1);
+        r.hopHead = !!t.headOn;
+        r.hop = CFG.hopAir;
+        r.hopDir = t.dir;
+        r.hopEdge = t.edge;
+        r.speed *= 1 - CFG.hopCost;
+      }
+    }
+    if (wasAir > 0 && r.hop <= 0) {                        // landing
+      if (r.hopQ > 0.30) {
+        if (r.hopDir === "on") {
+          r.onIsl = true;
+          // Only slide onto the island if you came at it from the side. Going over
+          // the top you are already above it, and being flicked across to the kerb
+          // is the "it shot me sideways" that made this feel broken.
+          if (!r.hopHead) r.x = r.hopEdge + (r.hopEdge > r.x ? 0.55 : -0.55);
+          race.events.push({ t: r.hopHead ? "UP AND OVER" : "UP ON THE MEDIAN", c: "you" });
+        } else {
+          r.onIsl = false;
+          r.x = r.hopEdge + (r.hopEdge > r.x ? 0.55 : -0.55);
+          penalise(race, r, "cut");
+          race.events.push({ t: "CUT THE MEDIAN", c: "spot" });
+        }
+      } else {
+        r.onIsl = false;
+        impact(race, r, 2.6, r.hopDir === "on" ? "CAUGHT THE KERB" : "FELL OFF THE MEDIAN");
+        r.speed *= 0.6;
+      }
+    }
+    // Riding off the far end of an island completes the crossing. A roundabout's
+    // island is barely five metres long, so it ends under you almost at once: without
+    // this you were dumped off it silently, having gained nothing and risked nothing.
+    if (r.onIsl && !islandAt(C, r.dist)) {
+      r.onIsl = false;
+      penalise(race, r, "cut");
+      if (r.you) race.events.push({ t: "STRAIGHT OVER THE TOP", c: "spot" });
+    }
+    if (r.wantDiscard) {
+      r.wantDiscard = false;
+      if (r.empties > 0) {
+        const zone = (C.litters || []).find(l => r.dist >= l.s && r.dist <= l.e
+          && Math.sign(r.x) === l.side && Math.abs(r.x) > 0.7);
+        const n = r.empties;
+        r.empties = 0;
+        if (zone) race.events.push({ t: "BOTTLES AWAY", c: "water" });
+        else {
+          penalise(race, r, "litter", n);
+          race.events.push({ t: "LITTERING", c: "spot" });
+        }
+      }
+    }
     if (r.wantThrow) {
       r.wantThrow = false;
       const line = throwLine(C, r);
@@ -1346,7 +1760,12 @@ function stepRider(race, r, dt) {
   let p = effVal * r.strength * fresh * dryPen * heavy * (1 + 0.30 * r.burst) * (1 + 0.14 * r.spin)
     * (r.stumble > 0 ? 0.88 : 1) * (r.throwCool > 0 ? 0.80 : 1)
     * (SFP ? 1 - SFP.drag * sfP.sev : 1)
-    * (r.flat > 0 ? 0.42 : 1) * (r.down > 0 ? 0.05 : 1) * (r.out ? 0 : 1);
+    // A puncture is a stop, not a slow ride: you are off the bike waiting for a
+    // wheel. At 42% power you barely lost twenty metres and the team car had
+    // nothing to rescue you from.
+    * (r.flat > 0 ? 0.07 : 1) * (r.down > 0 ? 0.05 : 1) * (r.out ? 0 : 1)
+    * (1 - r.empties * (CFG.carryDrag + CFG.carryClimb * Math.max(0, g)))
+    * (r.onIsl ? 1 - CFG.islandDrag : 1);
   if (togo < 300) p *= st.kick;
   if (r.bonk) p = Math.min(p, 0.87 * r.strength);
   if (r.cracked) p = Math.min(p, Math.min(0.80, 0.66 * st.resilience) * r.strength);
@@ -1479,11 +1898,13 @@ function stepRider(race, r, dt) {
   let nx = r.x + r.vx * dt;
   // the island is solid: clip it and you lose speed exactly as you would the verge
   const isl = islandAt(C, r.dist);
-  if (isl && nx > isl.lo && nx < isl.hi) {
+  if (isl && r.hop <= 0 && !r.onIsl && nx > isl.lo && nx < isl.hi) {
     const out = (nx - isl.lo) < (isl.hi - nx) ? isl.lo : isl.hi;
+    const lossJ = r.speed * clamp((Math.abs(r.vx) + 0.5) * 0.05, 0, 0.14);
+    r.log.junction += lossJ * dt;                // metres given away at junctions
     r.speed *= 1 - clamp((Math.abs(r.vx) + 0.5) * 0.05, 0, 0.14);
     r.bump = Math.max(r.bump, 0.45);
-    impact(race, r, Math.abs(r.vx) + 1.4, "HIT THE ISLAND");
+    impact(race, r, Math.abs(r.vx) + 1.4, "HIT THE MEDIAN");
     r.vx *= -0.15;
     nx = out;
   }
@@ -1492,6 +1913,10 @@ function stepRider(race, r, dt) {
     // proportional to how fast you were carried into it, so resting against the
     // gutter is cheap and arriving at speed is not
     const bite = Math.abs(r.vx) + into / Math.max(dt, 1e-4) * 0.35;
+    // Cornering and simply drifting wide are different mistakes and worth separating.
+    const lossE = r.speed * clamp(bite * 0.055, 0, 0.16);
+    if (Math.abs(bendAt(C, r.dist)) > 0.05) r.log.corner += lossE * dt;
+    else r.log.edge += lossE * dt;
     r.speed *= 1 - clamp(bite * 0.055, 0, 0.16);
     if (r.you || Math.abs(r.vx) > 0.6) r.bump = Math.max(r.bump, 0.45);
     impact(race, r, bite, Math.abs(bendAt(C, r.dist)) > 0.05 ? "TOO FAST INTO THE CORNER" : "CAUGHT THE VERGE");
@@ -1521,7 +1946,10 @@ function stepRider(race, r, dt) {
       const got = Math.min(give, 100 - r.fuel);
       r.fuel = clamp(r.fuel + give, 0, 100);
       if (r.you) race.events.push({ t: "+" + Math.round(got) + " FOOD", c: got < 18 ? "spot" : "fuel" });
-    } else if (it.kind === "water") {
+    } else if (it.kind === "water" || it.kind === "salt") {
+      if (r.empties < CFG.carryMax) r.empties++;
+    }
+    if (it.kind === "water") {
       const got = Math.min(give, 100 - r.fluid);
       r.fluid = clamp(r.fluid + give, 0, 100);
       if (st.carbMix) r.fuel = clamp(r.fuel + give * 0.10 * st.carbMix, 0, 100);
@@ -1536,11 +1964,12 @@ function stepRider(race, r, dt) {
   for (const pr of C.primes) {
     if (pr.d <= r.prev || pr.d > r.dist || pr.crossed.indexOf(r) >= 0) continue;
     pr.crossed.push(r);
-    const pts = pr.pts[pr.crossed.length - 1] || 0;
-    const purse = pr.kind === "finish" ? 0
+    let pts = pr.pts[pr.crossed.length - 1] || 0;
+    let purse = pr.kind === "finish" ? 0
       : Math.round((CFG.purse[pr.kind][pr.crossed.length - 1] || 0) * race.payScale);
     if (pts > 0) {
       if (pr.kind === "kom") r.komPts += pts; else r.sprintPts += pts;
+      if (r.forfeit === pr.d) { pts = 0; purse = 0; }                 // relegated here
       if (pr.kind === "sprint") r.bonus += CFG.bonusSprint[pr.crossed.length - 1] || 0;
       r.money += purse; r.earn[pr.kind === "kom" ? "kom" : "sprint"] += purse;
       if (r.you) race.events.push({
@@ -1550,18 +1979,71 @@ function stepRider(race, r, dt) {
   }
   // Hit a hole and you always lose speed. Whether it punctures is down to your
   // tires, which is the first time an upgrade has a wrong answer.
+  if (r.bump > 0.05) r.log.bumps += dt;
   r.flat = Math.max(0, r.flat - dt);
   r.down = Math.max(0, r.down - dt);
+  if (r.tow > 0) {
+    r.tow = Math.max(0, r.tow - dt);
+    if (r.dist >= towTarget(race, r)) {                     // delivered
+      r.tow = 0;
+      const q = r.towTime > 0.5 ? clamp(r.towHeld / r.towTime, 0, 1) : 0;
+      if (r.you) race.events.push({
+        t: q > 0.8 ? "BACK ON, LEGS INTACT" : q > 0.45 ? "BACK ON" : "BACK ON, AND EMPTY",
+        c: q > 0.45 ? "water" : "spot" });
+      r.towHeld = 0; r.towTime = 0;
+    }
+    else {
+      // The car drives ITSELF, wandering across the road the way one actually does
+      // picking its way up the convoy. Drawn on your own position it looked like you
+      // were steering it, and there was nothing to hold.
+      r.towT = (r.towT || 0) + dt;
+      const base = r.towBase === undefined ? (r.towBase = clamp(r.x, -2, 2)) : r.towBase;
+      const lane = edgeAt(C, r.dist + CFG.towGap) - 0.8;
+      // Quicker across the road the higher you race, but never quicker than you can
+      // follow: the margin against your own steering is checked, not assumed.
+      const sw = CFG.towSwayW * (1 + CFG.towSwayDiv * race.D.t);
+      r.towX = clamp(base + Math.sin(r.towT * sw) * CFG.towSway
+        + Math.sin(r.towT * sw * 0.42 + 1.9) * CFG.towSway * 0.4, -lane, lane);
+      // A team car does not ride away from its own rider, so it never drops you.
+      // What sitting well on it buys is CONDITION: hold the shelter and you rejoin
+      // with something left, sit in the wind behind it and you arrive empty.
+      const off = Math.abs(r.x - r.towX);
+      const held = off < CFG.towShelter;
+      r.towHeld = (r.towHeld || 0) + (held ? dt : 0);
+      r.towTime = (r.towTime || 0) + dt;
+      // Out of the shelter you still get something at Division 8, where the car
+      // shepherds you home, and almost nothing at Division 1, where you have to earn
+      // it. Food comes back too: they hand you a musette through the window.
+      const slack = CFG.towSlack * (1 - race.D.t);
+      const k = held ? 1 : slack;
+      if (k > 0) {
+        r.energy = Math.min(r.legCap, r.energy + CFG.towRecover * k * dt);
+        r.fluid = Math.min(100, r.fluid + CFG.towBottle * k * dt);
+        r.fuel = Math.min(100, r.fuel + CFG.towFood * k * dt);
+      }
+      r.speed = Math.max(r.speed, (race.pelotonPace || CFG.base) * CFG.towSpeed);
+    }
+  } else { r.towX = undefined; r.towBase = undefined; r.towT = 0; }
+  // Once the wheel is changed or you are back on the bike, the car paces you up. It
+  // never returns you to where you were, only to the back of the group.
+  if (r.needTow && r.flat <= 0 && r.down <= 0 && r.tow <= 0 && !r.out) {
+    r.needTow = false;
+    if ((race.pelotonHead || 0) - r.dist > 14) startTow(race, r, "recovery");
+  }
   for (const hz of C.hazards) {
     if (hz.hit.has(r)) continue;
     if (Math.abs(hz.d - r.dist) > 1.6 || Math.abs(hz.x - r.x) > hz.r + 0.5) continue;
     hz.hit.add(r);
-    r.speed *= 0.90;
+    r.log.edge += r.speed * 0.16 * dt;
+    r.speed *= 0.84;
     r.bump = Math.max(r.bump, 0.5);
+    r.stumble = Math.max(r.stumble, 0.35);
+    if (r.you) race.events.push({ t: "HIT A HOLE", c: "spot" });
     impact(race, r, 1.7, "CLIPPED A HOLE");
     const resist = clamp((st.resilience - 0.9) * 1.4, 0, 0.75);   // better tires, fewer flats
     if (race.rnd() > 0.30 * (1 - resist)) continue;
     r.flat = 6.5 - 2.5 * clamp(st.reach - 1, 0, 1);               // the car comes sooner with reach
+    r.needTow = true; r.log.flats++;
     if (r.you) race.events.push({ t: "PUNCTURE", c: "spot" });
   }
   if (r.out && !r.finished) { r.finished = true; r.time = race.clock + 9999; r.rawTime = r.time; }
@@ -1576,6 +2058,7 @@ function stepRider(race, r, dt) {
 //                          gentle touch costs them nothing and a real hit costs both
 const HIT_LAT = 1.15, HIT_LON = 1.9;
 function separate(race, dt) { resolve(race, dt); resolve(race, 0); }   // second pass settles chains
+function zoneOf(race, r) { const z = sprintZone(race.course, r); return z ? z.d : null; }
 function resolve(race, dt) {
   const rs = race.riders;
   const edgeHere = edgeAt(race.course, race.riders[0].dist);
@@ -1608,6 +2091,24 @@ function resolve(race, dt) {
       const avg = (A.vx + B.vx) * 0.5;                      // no leaning through
       A.vx = avg; B.vx = avg;
       if (A.you || B.you) bump(race, A.you ? A : B, null);
+      // Deviating INTO a rider while contesting a sprint. Judged identically for
+      // everyone, including the AI.
+      for (const [X, Y] of [[A, B], [B, A]]) {
+        if (X.sprintLine === null) continue;
+        if (Math.abs(X.x - X.sprintLine) < CFG.lineTol) continue;      // still on your line
+        if (Math.sign(X.x - X.sprintLine) !== Math.sign(Y.x - X.x)) continue;  // not toward them
+        if (Math.abs(Y.x - X.x) > CFG.lineNear) continue;              // not close enough
+        // and it has to be a deliberate move: sustained, not a flicker
+        if ((X.lineDrift || 0) < 0.34) continue;
+        if (Math.sign(X.vx) !== Math.sign(Y.x - X.x)) continue;
+        let ahead = 0;
+        for (const o of rs) if (o !== X && o.dist > X.dist) ahead++;
+        if (ahead > 3) continue;                                       // not contesting the places
+        if (X.forfeit === zoneOf(race, X)) continue;                   // already booked here
+        X.forfeit = zoneOf(race, X);
+        penalise(race, X, "sprint");
+        if (X.you) race.events.push({ t: "OFF YOUR LINE", c: "spot" });
+      }
     } else {
       // ---------------- one is in front
       const front = dd > 0 ? B : A, rear = dd > 0 ? A : B;
@@ -1659,14 +2160,41 @@ function step(race, frameDt, input) {
       you.spin = clamp((input.rate - CFG.strokeFull) / 2.0, 0, 1);
       you.launch = !!input.launch;                    // three alternating strokes earned a jump
       if (input.throwIt) you.wantThrow = true;
+      if (input.discard) you.wantDiscard = true;
+      if (input.hopIt) you.wantHop = true;
       you.hardTurn = !!input.hardTurn;
       if (input.stumble) you.stumble = 0.25;
-      if (input.tx !== null && input.tx !== undefined) you.tx = clamp(input.tx, -3.8, 3.8);
+      // Clamp to the road AS IT IS HERE. A fixed 3.8 was the old nine-metre road's
+      // edge, so anywhere wider than that you simply could not steer to the verge.
+      if (input.tx !== null && input.tx !== undefined) {
+        const lim = Sim.edgeAt(race.course, you.dist);
+        you.tx = clamp(input.tx, -lim, lim);
+      }
     }
     tick(race, CFG.fixedDt);
     race.acc -= CFG.fixedDt;
     if (race.you.finished) { race.over = true; break; }
   }
+}
+
+// One stage's numbers, yours beside the winner's. Deliberately every figure and no
+// verdict: reading it and working out what to do about it is the point.
+function raceData(race, order) {
+  const you = race.you, win = order[0];
+  const pick = (r) => {
+    const g = r.log, ride = Math.max(g.wind + g.shelter, 1e-6);
+    return {
+      name: r.name, place: r.place, time: r.time,
+      windPct: 100 * g.wind / ride,
+      shelterPct: 100 * g.shelter / ride,
+      attackPct: 100 * g.attack / ride,
+      corner: g.corner, edge: g.edge, junction: g.junction,
+      bumps: g.bumps, flats: g.flats,
+      lowLegs: g.lowLegs, lowFood: g.lowFood, lowFluid: g.lowFluid,
+      pens: r.penalties.length, fines: r.penalties.reduce((a, p) => a + (p.fine || 0), 0)
+    };
+  };
+  return { you: pick(you), win: pick(win), sameRider: win === you };
 }
 
 function settle(race) {
@@ -1683,10 +2211,13 @@ function settle(race) {
   order.forEach((r, i) => {
     r.place = i + 1;
     r.bonus += CFG.bonusStage[i] || 0;
-    r.gcTime += r.time - r.bonus;
+    // time penalties land on your classification time, as they do in the sport
+    const tp = (r.penalties || []).reduce((a, x) => a + (x.time || 0), 0);
+    r.gcTime += r.time - r.bonus + tp;
     const sp = Math.round((CFG.purse.stage[i] || 0) * race.payScale);
     r.money += sp; r.earn.stage += sp;
   });
+  race.data = raceData(race, order);           // captured before anything is reset
   return order;
 }
 
@@ -1699,7 +2230,8 @@ const SAVE_KEYS = ["dist", "prev", "x", "tx", "txS", "vx", "speed", "energy", "f
   "q", "shelterOff", "inPeloton", "stack", "finished", "time", "place", "sprintPts", "komPts",
   "gcTime", "rep", "money", "bonus", "launch", "launched", "strength", "dodgeSide",
   "splitSprint", "splitClimb", "rawTime", "threw", "throwCool", "throwQ",
-  "windUp", "attackFor", "atkCool", "windSide", "burnHot", "flat", "down", "out", "rbSide"];
+  "windUp", "attackFor", "atkCool", "windSide", "burnHot", "flat", "down", "out", "rbSide", "empties",
+  "hop", "hopQ", "onIsl", "sprintLine", "forfeit", "lineDrift", "tow", "towReason", "sticky", "needTow", "towHeld", "towTime", "towX", "towBase", "towT"];
 function snapshot(race) {
   const ix = r => race.riders.indexOf(r);
   return {
@@ -1760,7 +2292,8 @@ return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
   createRace, snapshot, restore, step, tick, settle, liveOrder, byKey, gradeAt, elevAt, windAt, centreAt,
-  danger, throwLine, widthAt, edgeAt, bendAt, curveAt, islandAt, surfaceAt, SURFACES };
+  danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
+  surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
 
 /* ============================================================================
@@ -1796,7 +2329,7 @@ function resize() {
 }
 addEventListener("resize", resize); resize();
 
-let race = null, tour = null, camC = 0, camFollow = 0, flashes = [], phase = "menu", countdown = 0;
+let race = null, tour = null, camC = 0, camPan = 0, flashes = [], phase = "menu", countdown = 0;
 let playerType = "rouleur";
 let playerKit = "magenta";
 let dailyRun = false;
@@ -1838,7 +2371,10 @@ const Tilt = {
     let d = Tilt.gamma - Tilt.zero;
     const dead = 1.4;
     if (Math.abs(d) < dead) d = 0; else d -= Math.sign(d) * dead;
-    return clamp(d / 20, -1, 1) * (CFG.roadW * 0.44);
+    // Scaled to whatever road you are on, not to the default width: on a junction
+    // this stopped you well short of the verge.
+    const road = race ? Sim.widthAt(race.course, race.you.dist) : CFG.roadW;
+    return clamp(d / 20, -1, 1) * (road * 0.46);
   },
   label() {
     if (ladder.steer !== "tilt") return "";
@@ -1855,7 +2391,13 @@ const Tilt = {
 // and real seconds underneath. The trade is that the near-field warnings read in
 // kilometres, and a stage takes three minutes rather than the three hours the
 // numbers imply: a deliberate choice for authentic stage data.
+const CFGROUNDLONG = 2.1;      // mirrors Sim.CFG.roundLong for the road markings
 const SCALE = 100;
+// The simulation's grade is a normalised -1..1 steepness, not a gradient, and its
+// elevation is that integrated over game metres. Neither is a real number, so both
+// are mapped for display: full steepness reads as 15%, which is a hard mountain
+// ramp, and the climbing total lands where a real stage of this kind would.
+const GRADE_PCT = 15, CLIMB_M = 7;
 const M = {
   get imp() { return ladder.units === "imperial"; },
   speed(ms) { return M.imp ? ms * 2.23694 : ms * 3.6; },
@@ -1873,6 +2415,14 @@ const M = {
     const d = m * SCALE;
     if (M.imp) return d >= 1609 ? (d / 1609.344).toFixed(1) + " MI" : Math.round(d * 1.09361) + " YD";
     return d >= 1000 ? (d / 1000).toFixed(1) + " KM" : Math.round(d) + " M";
+  },
+  grade(g) {                                  // steepness as a real gradient
+    const pct = g * GRADE_PCT;
+    return (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%";
+  },
+  climb(units) {                              // total climbing on a stage
+    const m2 = units * CLIMB_M;
+    return M.imp ? Math.round(m2 * 3.28084) + " ft" : Math.round(m2) + " m";
   },
   gap(m) {                                    // rider to rider, on the road
     const d = m * SCALE;
@@ -1902,8 +2452,51 @@ const Store = {
   },
   async save(v) {
     try { await window.storage.set("slipstream:ladder", JSON.stringify(v)); } catch (e) { }
+  },
+
+  // ==== PORT NOTE: riding history ============================================
+  // This keeps the last N stages as one JSON blob under a single key, which is
+  // what the browser gives us and is fine for a prototype. Do NOT port it this
+  // way. On iOS this should be a SwiftData model:
+  //
+  //   @Model final class StageRecord {
+  //     var date: Date; var division: Int; var parcours: String
+  //     var place: Int; var time: TimeInterval
+  //     var windPct: Double; var corner: Double; ...        // one field each
+  //     var winnerWindPct: Double; ...                      // the rival column
+  //   }
+  //
+  // Reasons the blob is wrong for the real app: it rewrites every record on
+  // every save, it cannot be queried (the data page wants "average windPct on
+  // mountain stages", which is a fetch descriptor, not a filter over an array
+  // in memory), it has no migration path when we add a field, and it caps the
+  // history at whatever fits in one value. A career's worth of stages is
+  // exactly what SwiftData is for.
+  // ===========================================================================
+  async loadData() {
+    try { const r = await window.storage.get("slipstream:history"); return r ? JSON.parse(r.value) : []; }
+    catch (e) { return []; }
+  },
+  async saveData(v) {
+    try { await window.storage.set("slipstream:history", JSON.stringify(v)); } catch (e) { }
   }
 };
+
+// The riding history, in memory. PORT: on iOS this is a @Query, not an array.
+let history = [];
+const HISTORY_MAX = 60;                        // PORT: no cap once it is a real store
+
+function recordStage(race, spec, div) {
+  if (!race || !race.data) return;
+  const d = race.data;
+  history.push({
+    t: Date.now(), div, parcours: spec.sub || "", len: race.course.len,
+    place: d.you.place, time: d.you.time,
+    you: d.you, win: d.win
+  });
+  while (history.length > HISTORY_MAX) history.shift();
+  Store.saveData(history);
+}
 
 // One rule up, one rule down. The equilibrium of that is "wins sometimes".
 function applyLadder(place) {
@@ -1938,12 +2531,15 @@ function refreshMenu() {
     : "Hold the left or right half to turn. Let go and you hold your line.";
   $("mDiv").textContent = "Division " + ladder.div + " of 8";
   $("mDots").textContent = divDots(ladder.div);
+  // Start and Resume are the same button. Two buttons meant one could leak through
+  // whenever the hiding logic missed a case, which it did.
   const sv = ladder.savedTour;
   const canResume = !!(sv && sv.schedule && sv.schedule.length
     && sv.stage < sv.schedule.length);
-  $("resumeBtn").classList.toggle("hide", !canResume);
-  if (canResume) $("resumeBtn").textContent = (sv.race ? "Resume mid-race · " : "Resume · ")
-    + "stage " + (sv.stage + 1) + " of " + sv.schedule.length;
+  $("startBtn").textContent = canResume
+    ? (sv.race ? "Resume mid-race · stage " : "Resume · stage ")
+      + (sv.stage + 1) + " of " + sv.schedule.length
+    : "Start tour";
   $("mStat").textContent = ladder.tours === 0 ? "Win a tour to move up. Two bad tours and you drop."
     : ladder.tours + " tours · " + ladder.wins + " won · " + ladder.money + " prize money"
       + (ladder.strikes ? " · one more bad tour and you drop" : "");
@@ -1992,6 +2588,7 @@ function startStage() {
 const keys = new Set();
 let btn = { ease: false, attack: false };
 const touches = new Map();     // id -> { x, y, t }
+let binRect = null, binHit = false;
 function btnR() {
   const h = Math.max(56, Math.min(74, H * 0.088));
   const m = Math.max(14, W * 0.045);
@@ -2003,7 +2600,10 @@ function btnR() {
     thX: m, thY: y - 62, thW: W - m * 2, thH: 56,
     // The outer quarter of each side leans it in hard. Steer with your thumb near
     // the middle, commit by sliding out to the edge.
-    hardW: W * 0.22 };
+    // Narrower again: two thirds of what they were, so the steering area keeps most
+    // of the screen and the lean zones stay a deliberate reach rather than somewhere
+    // your thumb ends up by accident.
+    hardW: W * 0.097 };
 }
 // The whole bottom band is pedals, split down the middle, so one thumb can
 // alternate by rocking side to side. Everything above it steers.
@@ -2043,11 +2643,15 @@ function strokeRate(now) {
 function down(id, x, y) {
   const now = performance.now() / 1000;
   touches.set(id, { x, y, t: now });
+  if (binRect && race && race.you.empties > 0
+      && x > binRect.x && x < binRect.x + binRect.w
+      && y > binRect.y && y < binRect.y + binRect.h) { binHit = true; return; }
   const bb = btnR();
-  if (race && !race.over && x > bb.thX && x < bb.thX + bb.thW && y > bb.thY && y < bb.thY + bb.thH
-      && Sim.throwLine(race.course, race.you)
-      && race.you.threw !== Sim.throwLine(race.course, race.you).d) {
-    btn.throwHit = true; return;
+  if (race && !race.over && x > bb.thX && x < bb.thX + bb.thW && y > bb.thY && y < bb.thY + bb.thH) {
+    const tl = Sim.throwLine(race.course, race.you);
+    if (tl && race.you.threw !== tl.d) { btn.throwHit = true; return; }
+    if (Sim.hopTarget(race.course, race.you) && race.you.hop <= 0) { btn.hopHit = true; return; }
+    btn.stickyHit = true; return;
   }
   if (inBtn(x, y, "ease")) { btn.ease = id; stroke("L", now); }
   else if (inBtn(x, y, "attack")) { btn.attack = id; stroke("R", now); }
@@ -2092,6 +2696,8 @@ function readInput(dt) {
   const bothDown = (btn.ease !== false && btn.attack !== false) || keys.has("ArrowDown");
   const throwIt = btn.throwHit || keys.has("ArrowUp");
   btn.throwHit = false;
+  const hopIt = btn.hopHit; btn.hopHit = false;
+  const sticky = btn.stickyHit; btn.stickyHit = false;
   const ease = bothDown;
   const bh2 = btnR();
   let hardTurn = keys.has("Shift");
@@ -2114,10 +2720,15 @@ function readInput(dt) {
   if (keys.has("ArrowLeft")) d = -1;
   if (keys.has("ArrowRight")) d = 1;
   // A held side steers. Otherwise tilt, if it is working. Otherwise hold your line.
-  const tx = d !== 0 ? clamp(race.you.x + d * 1.2, -3.8, 3.8)
-    : lean !== null ? lean
+  // Every lateral limit comes from the road here, never from a constant. This was
+  // the second copy of a hardcoded 3.8: fixing it downstream did nothing because the
+  // input itself was already capped before the simulation ever saw it.
+  const lim = Sim.edgeAt(race.course, race.you.dist);
+  const tx = d !== 0 ? clamp(race.you.x + d * 1.2, -lim, lim)
+    : lean !== null ? clamp(lean, -lim, lim)
     : race.you.x;
-  return { rate, ease, stumble, launch, throwIt, hardTurn, tx };
+  const discard = binHit; binHit = false;
+  return { rate, ease, stumble, launch, throwIt, hopIt, sticky, hardTurn, discard, tx };
 }
 
 // ---------------------------------------------------------------- draw
@@ -2149,9 +2760,15 @@ function fmt(s) { return M.time(s); }
 function drawRoad() {
   const c = C(), you = race.you;
   const dBot = you.dist - (H - playerY) / yS - 20, dTop = you.dist + playerY / yS + 20;
-  const rows = 46, L = [], Rr = [];
+  // Sampled on a FIXED grid in road metres, not as a fraction of the visible span.
+  // Sliding samples meant the few points that landed on a ten-metre junction taper
+  // crawled along it as the camera moved, and the road edge appeared to wriggle.
+  const STEP_M = 1.1;
+  const from = Math.floor(dBot / STEP_M) * STEP_M, to = dTop + STEP_M;
+  const rows = Math.max(8, Math.ceil((to - from) / STEP_M));
+  const L = [], Rr = [];
   for (let i = 0; i <= rows; i++) {
-    const d = lerp(dBot, dTop, i / rows), cx = sx(d, 0), y = sy(d);
+    const d = from + i * STEP_M, cx = sx(d, 0), y = sy(d);
     // The road edges follow the real width. Drawn at a fixed width they made every
     // pinch an invisible wall you rode into while apparently still on tarmac.
     const hw = Sim.widthAt(c, d) / 2 * pxM;
@@ -2169,11 +2786,20 @@ function drawRoad() {
   for (let i = rows; i >= 0; i--) ctx.lineTo(Rr[i][0], Rr[i][1]);
   ctx.closePath(); ctx.fillStyle = PAL.tarmac; ctx.fill();
 
+  // Everything from here on is painted ON the tarmac, so it is clipped to the tarmac.
+  // Markings that ran past the verge were the single most obviously wrong thing on
+  // screen, and clipping once is more reliable than bounds-checking each of them.
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i <= rows; i++) ctx.lineTo(L[i][0], L[i][1]);
+  for (let i = rows; i >= 0; i--) ctx.lineTo(Rr[i][0], Rr[i][1]);
+  ctx.closePath(); ctx.clip();
+
   // surface texture: flat geometric marks, in keeping with the rest of the look
   for (const sf of (c.surfaces || [])) {
     if (sf.e < dBot || sf.s > dTop) continue;
-    const a = Math.max(sf.s, dBot), b2 = Math.min(sf.e, dTop);
-    const st2 = 14;
+    const a = Math.max(sf.s, Math.floor(dBot / 1.1) * 1.1), b2 = Math.min(sf.e, dTop + 1.1);
+    const st2 = Math.max(4, Math.ceil((b2 - a) / 1.1));
     ctx.beginPath();
     for (let i = 0; i <= st2; i++) { const d = lerp(a, b2, i / st2), hw = Sim.widthAt(c, d) / 2 * pxM;
       i ? ctx.lineTo(sx(d, 0) - hw, sy(d)) : ctx.moveTo(sx(d, 0) - hw, sy(d)); }
@@ -2226,24 +2852,283 @@ function drawRoad() {
   }
   for (const rb of (c.rounds || [])) {
     if (rb.e < dBot || rb.s > dTop) continue;
+    if (rb.big) {
+      // An actual circle on the road, drawn as one shape. Sampling it band by band
+      // never read as anything but a stripe.
+      const midD = (rb.s + rb.e) / 2, ilM = Sim.islandAt(c, midD);
+      const cx2 = ilM ? (ilM.lo + ilM.hi) / 2 : 0;
+      const px = sx(midD, cx2), py = sy(midD);
+      // Matches the simulation: longer than it is wide, not a circle.
+      const rx = rb.rad * pxM, ry = rb.rad * Sim.CFG.roundLong * yS;
+      ctx.save();
+      ctx.fillStyle = PAL.verge;
+      ctx.beginPath(); ctx.ellipse(px, py, rx, ry, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = PAL.chalk; ctx.lineWidth = Math.max(3, pxM * 0.12); ctx.stroke();
+      // No inner ring. It was only shading, but it read as a solid core you had to
+      // ride around, which is the opposite of the point: you go straight over.
+      ctx.restore();
+      // No dashed lane line in the circle. It sat at the lane midpoint, which is
+      // exactly where the circulation arrow goes, so the two drew on top of each
+      // other. The arrows carry the direction on their own.
+      // Circulation arrows in the lanes either side, curving round the island the
+      // way traffic actually flows. Drawn in road metres so they sit on the tarmac
+      // rather than being pasted on at screen scale.
+      {
+        const ilA = Sim.islandAt(c, midD);
+        if (ilA) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(244,242,236,.8)";
+          ctx.fillStyle = "rgba(244,242,236,.8)";
+          ctx.lineCap = "round"; ctx.lineJoin = "round";
+          ctx.lineWidth = Math.max(2.5, pxM * 0.13);
+          const radZ2 = rb.rad * Sim.CFG.roundLong;
+          for (const sgn of [-1, 1]) {
+            const laneX = sgn > 0 ? (ilA.hi + ilA.lane) / 2 : (ilA.lo - ilA.lane) / 2;
+            if (Math.abs(laneX) > ilA.lane - 0.5) continue;
+            // Centred on the lane and bowing only slightly, so the whole arrow sits
+            // in the lane instead of starting centred and ending at the verge.
+            const pts = [];
+            for (let t = -1; t <= 1.001; t += 0.2) {
+              const dd = midD + t * radZ2 * 0.58;
+              const bow = (1 - t * t) * 0.34 * sgn - 0.11 * sgn;
+              pts.push([dd, laneX + bow]);
+            }
+            ctx.beginPath();
+            pts.forEach((q, i) => i ? ctx.lineTo(sx(q[0], q[1]), sy(q[0]))
+                                    : ctx.moveTo(sx(q[0], q[1]), sy(q[0])));
+            ctx.stroke();
+            const [d1, x1] = pts[pts.length - 1], [d0b, x0b] = pts[pts.length - 3];
+            const vd = d1 - d0b, vx = x1 - x0b, L = Math.hypot(vd, vx) || 1;
+            const ud = vd / L, ux = vx / L, pd = -ux, px2 = ud;
+            const hl = 1.5, hw = 0.7;
+            ctx.beginPath();
+            ctx.moveTo(sx(d1 + ud * hl, x1 + ux * hl), sy(d1 + ud * hl));
+            ctx.lineTo(sx(d1 + pd * hw, x1 + px2 * hw), sy(d1 + pd * hw));
+            ctx.lineTo(sx(d1 - pd * hw, x1 - px2 * hw), sy(d1 - pd * hw));
+            ctx.closePath(); ctx.fill();
+          }
+          ctx.restore();
+        }
+      }
+      continue;
+    }
     ctx.fillStyle = PAL.verge;
     ctx.beginPath();
     const steps = 16;
-    let started = false;
-    for (let i = 0; i <= steps; i++) {
-      const d = lerp(rb.s, rb.e, i / steps), il = Sim.islandAt(c, d);
-      if (!il) continue;                                // the nose tapers to nothing
-      const px = sx(d, il.lo), py = sy(d);
-      started ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-      started = true;
-    }
-    for (let i = steps; i >= 0; i--) {
+    const clipL = il2 => Math.max(il2.lo, -il2.lane - 1.2);
+    const clipH = il2 => Math.min(il2.hi, il2.lane + 1.2);
+    // Start and end at the exact tip, so the median comes to a point instead of
+    // beginning at whatever width the first sample happened to land on.
+    const midX = rb.side * (Sim.edgeAt(c, (rb.s + rb.e) / 2) - rb.tight - rb.iw);
+    ctx.moveTo(sx(rb.s, midX), sy(rb.s));
+    for (let i = 1; i < steps; i++) {
       const d = lerp(rb.s, rb.e, i / steps), il = Sim.islandAt(c, d);
       if (!il) continue;
-      ctx.lineTo(sx(d, il.hi), sy(d));
+      ctx.lineTo(sx(d, clipL(il)), sy(d));
+    }
+    ctx.lineTo(sx(rb.e, midX), sy(rb.e));
+    for (let i = steps - 1; i >= 1; i--) {
+      const d = lerp(rb.s, rb.e, i / steps), il = Sim.islandAt(c, d);
+      if (!il) continue;
+      ctx.lineTo(sx(d, clipH(il)), sy(d));
     }
     ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = PAL.chalk; ctx.lineWidth = Math.max(2, pxM * 0.07); ctx.stroke();
+    ctx.strokeStyle = PAL.chalk; ctx.lineWidth = Math.max(2.5, pxM * (rb.big ? 0.11 : 0.07));
+    ctx.stroke();
+    if (rb.big) {                                        // kerb hatching, so it reads as an island
+      ctx.save(); ctx.clip();
+      ctx.strokeStyle = "rgba(244,242,236,.42)";
+      ctx.lineWidth = Math.max(1.6, pxM * 0.05);
+      for (let d = rb.s - 12; d < rb.e + 12; d += 2.4) {
+        const il = Sim.islandAt(c, d); if (!il) continue;
+        const a0 = clipL(il), a1 = clipH(il);
+        ctx.beginPath();
+        ctx.moveTo(sx(d, a0), sy(d));
+        ctx.lineTo(sx(d + 1.6, a1), sy(d + 1.6));
+        ctx.stroke();
+      }
+      ctx.restore();
+      const midD = (rb.s + rb.e) / 2, ilM = Sim.islandAt(c, midD);
+      if (ilM && midD > dBot && midD < dTop) {
+        const cx2 = (clipL(ilM) + clipH(ilM)) / 2;
+        label("ROUNDABOUT", sx(midD, cx2), sy(midD), 11, 700, "rgba(46,49,47,.5)", "center", 2);
+      }
+    }
+    // ---- splitter island ----
+    // The wedge that divides entry from exit on every approach to a roundabout.
+    // Drawn as a hatched ghost island, which is a real marking and needs no new
+    // collision. Without it the centre line simply ran into the circle.
+    if (rb.big) {
+      const wideS = Sim.islandAt(c, (rb.s + rb.e) / 2);
+      if (wideS) {
+        const nose1 = (rb.s + rb.e) / 2 - (rb.rad || 0) * Sim.CFG.roundLong;
+        const tail1 = (rb.s + rb.e) / 2 + (rb.rad || 0) * Sim.CFG.roundLong;
+        for (const [from, to, grow] of [[nose1 - 17, nose1 - 1, true], [tail1 + 1, tail1 + 17, false]]) {
+          if (to < dBot || from > dTop) continue;
+          const halfAt = (d0) => {
+            const t0 = grow ? (d0 - from) / (to - from) : 1 - (d0 - from) / (to - from);
+            return 0.18 + 1.15 * clamp(t0, 0, 1) * clamp(t0, 0, 1);
+          };
+          ctx.save();
+          ctx.beginPath();
+          const st3 = 12;
+          for (let i = 0; i <= st3; i++) { const d0 = lerp(from, to, i / st3);
+            const px = sx(d0, -halfAt(d0)), py = sy(d0);
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+          for (let i = st3; i >= 0; i--) { const d0 = lerp(from, to, i / st3);
+            ctx.lineTo(sx(d0, halfAt(d0)), sy(d0)); }
+          ctx.closePath();
+          ctx.strokeStyle = "rgba(244,242,236,.8)";
+          ctx.lineWidth = Math.max(2, pxM * 0.07);
+          ctx.stroke();
+          ctx.save(); ctx.clip();
+          ctx.strokeStyle = "rgba(244,242,236,.5)";
+          ctx.lineWidth = Math.max(1.6, pxM * 0.05);
+          for (let d0 = from - 3; d0 < to + 3; d0 += 1.5) {     // hatching
+            ctx.beginPath();
+            ctx.moveTo(sx(d0, -2.2), sy(d0));
+            ctx.lineTo(sx(d0 + 2.2, 2.2), sy(d0 + 2.2));
+            ctx.stroke();
+          }
+          ctx.restore();
+          ctx.restore();
+        }
+      }
+    }
+    // ---- crosswalk on the approach ----
+    // Ladder bars running with the traffic, set back from the give way line, exactly
+    // as in every reference. Decoration only: nothing to ride over or avoid.
+    if (rb.big) {
+      const wideX = Sim.islandAt(c, (rb.s + rb.e) / 2);
+      const noseX = (rb.s + rb.e) / 2 - (rb.rad || 0) * Sim.CFG.roundLong;
+      for (const cd of [noseX - 12, (rb.s + rb.e) / 2 + (rb.rad || 0) * Sim.CFG.roundLong + 9]) {
+        if (!wideX || cd < dBot - 4 || cd > dTop) continue;
+        const eX = Sim.edgeAt(c, cd);
+        ctx.save();
+        ctx.fillStyle = "rgba(244,242,236,.72)";
+        const barW = 0.45, barGap = 0.5, barLen = 2.6;
+        for (let px3 = -eX + 0.3; px3 < eX - 0.3; px3 += barW + barGap) {
+          const xa = px3, xb = Math.min(px3 + barW, eX - 0.3);
+          ctx.beginPath();
+          ctx.moveTo(sx(cd, xa), sy(cd));
+          ctx.lineTo(sx(cd, xb), sy(cd));
+          ctx.lineTo(sx(cd + barLen, xb), sy(cd + barLen));
+          ctx.lineTo(sx(cd + barLen, xa), sy(cd + barLen));
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    // ---- give way line at the entry ----
+    // A row of blocks across the road, which is what every roundabout in the world
+    // has painted at its mouth. Without one the junction just began.
+    // Roundabouts only. A median is not a junction: you do not give way to it, you
+    // just pick a side. Drawing a yield line there put a curved dashed arc across
+    // the road that meant nothing at all.
+    if (rb.big) {
+      const wide0 = Sim.islandAt(c, (rb.s + rb.e) / 2);
+      const nose0 = (rb.s + rb.e) / 2 - (rb.rad || 0) * Sim.CFG.roundLong;
+      const gd = nose0 - 3.5;
+      if (wide0 && gd > dBot - 6 && gd < dTop) {
+        // The give way line follows the circulatory edge, so it BOWS toward the
+        // circle in the middle and falls back at the verges. Straight across the road
+        // is a stop line at a junction, not a yield line at a roundabout.
+        const e0 = Sim.edgeAt(c, gd);
+        ctx.save();
+        ctx.fillStyle = "rgba(244,242,236,.82)";
+        const bw2 = 0.5, gap2 = 0.45;
+        for (let px2 = -e0; px2 < e0; px2 += bw2 + gap2) {
+          const xa = px2, xb = Math.min(px2 + bw2, e0);
+          const bow = (xx) => gd + (1 - (xx / e0) * (xx / e0)) * 1.9;
+          const da = bow((xa + xb) / 2);
+          ctx.beginPath();
+          ctx.moveTo(sx(da, xa), sy(da));
+          ctx.lineTo(sx(da, xb), sy(da));
+          ctx.lineTo(sx(da + 0.55, xb), sy(da + 0.55));
+          ctx.lineTo(sx(da + 0.55, xa), sy(da + 0.55));
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    // ---- cones round the island, and painted arrows on the approach ----
+    // Cones say where the edge IS; the arrows say a choice exists. Between them you
+    // can read a junction at a glance instead of inferring it from the shape.
+    {
+      const wide = Sim.islandAt(c, (rb.s + rb.e) / 2);
+      if (wide) {
+        // Lane arrows: a shaft that bends the way you go, ending in a SOLID head.
+        // Stroking the head drew two lines meeting in a V, which is why the points
+        // looked wrong. A real road arrow is a filled triangle.
+        const nose = rb.big ? (rb.s + rb.e) / 2 - rb.rad * Sim.CFG.roundLong : rb.s;
+        for (const aAt of (rb.big ? [nose - 30, nose - 14] : [nose - 24])) {
+          if (aAt < dBot - 12 || aAt > dTop) continue;
+          ctx.save();
+          ctx.strokeStyle = "rgba(244,242,236,.85)";
+          ctx.fillStyle = "rgba(244,242,236,.85)";
+          ctx.lineCap = "round"; ctx.lineJoin = "round";
+          ctx.lineWidth = Math.max(3, pxM * 0.17);
+          for (const sgn of [-1, 1]) {
+            // The lane centre comes from the WIDENED section, but the arrow is painted
+            // back on the approach where the road is still narrow. Held there it sat
+            // off the tarmac and the road clip sliced it in half, so it is pulled in
+            // to whatever road actually exists at the arrow's own position.
+            const localE = Sim.edgeAt(c, aAt + 2.5) - 1.15;
+            let lane = sgn > 0 ? (wide.hi + wide.lane) / 2 : (wide.lo - wide.lane) / 2;
+            lane = clamp(lane, -localE, localE);
+            if (localE < 1.0) continue;                  // no room for an arrow at all
+            // shaft: straight, then bending out late, the way a turn arrow does
+            const pts = [];
+            for (let t = 0; t <= 1.001; t += 0.125) {
+              pts.push([aAt + t * 3.6, lane - sgn * 0.34 + sgn * 0.72 * t * t]);
+            }
+            ctx.beginPath();
+            pts.forEach((q, i) => i ? ctx.lineTo(sx(q[0], q[1]), sy(q[0]))
+                                    : ctx.moveTo(sx(q[0], q[1]), sy(q[0])));
+            ctx.stroke();
+            // solid head, aligned with the shaft's last direction
+            const [d1, x1] = pts[pts.length - 1], [d0b, x0b] = pts[pts.length - 3];
+            const vd = d1 - d0b, vx = x1 - x0b, L = Math.hypot(vd, vx) || 1;
+            const ud = vd / L, ux = vx / L, pd = -ux, px2 = ud;
+            const hl = 1.35, hw = 0.62;
+            ctx.beginPath();
+            ctx.moveTo(sx(d1 + ud * hl, x1 + ux * hl), sy(d1 + ud * hl));
+            ctx.lineTo(sx(d1 + pd * hw, x1 + px2 * hw), sy(d1 + pd * hw));
+            ctx.lineTo(sx(d1 - pd * hw, x1 - px2 * hw), sy(d1 - pd * hw));
+            ctx.closePath(); ctx.fill();
+          }
+          ctx.restore();
+        }
+        // Cones funnel you IN, ahead of the island, the way a race marshals one.
+        // Sitting on the island itself they marked something you could already see
+        // and told you nothing on the way to it.
+        // A coned taper: a point well before the island, splaying out to its full
+        // width at the nose. That is a WARNING, telling you to get to one side or the
+        // other. Sat against the island it only marked something already in view.
+        const apex = nose - 20;
+        const cMid = (wide.lo + wide.hi) / 2;
+        const halfEnd = (wide.hi - wide.lo) / 2 + 0.5;
+        for (let d0 = apex; d0 < nose + 1; d0 += 1.5) {
+          if (d0 < dBot || d0 > dTop) continue;
+          const t3 = clamp((d0 - apex) / (nose - apex), 0, 1);
+          const half = 0.16 + (halfEnd - 0.16) * t3 * t3;   // opens gently, then wide
+          for (const e2 of [cMid - half, cMid + half]) {
+            if (Math.abs(e2) > Sim.edgeAt(c, d0)) continue;
+            const px2 = sx(d0, e2), py2 = sy(d0), h2 = Math.max(7, pxM * 0.30);
+            ctx.save();
+            ctx.fillStyle = PAL.spot;
+            ctx.beginPath();
+            ctx.moveTo(px2, py2 - h2);
+            ctx.lineTo(px2 + h2 * 0.42, py2 + h2 * 0.30);
+            ctx.lineTo(px2 - h2 * 0.42, py2 + h2 * 0.30);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "rgba(244,242,236,.9)";
+            ctx.fillRect(px2 - h2 * 0.26, py2 - h2 * 0.28, h2 * 0.52, h2 * 0.20);
+            ctx.restore();
+          }
+        }
+      }
+    }
     // Mark the short lane where it actually is, not at a fixed offset: on a big
     // roundabout that put the label inside the island. Drawn at the nose so you can
     // read it on the approach, while you still have room to choose.
@@ -2268,9 +3153,54 @@ function drawRoad() {
       label("SHORT", lx2, ly2 - pxM * 0.34, 10.5, 700, "rgba(46,49,47,.72)", "center", 1.6);
     }
   }
+  // Your line through a sprint, so you can see exactly what you are held to.
+  if (you.sprintLine !== null) {
+    const tol = Sim.CFG.lineTol, off = Math.abs(you.x - you.sprintLine);
+    ctx.save();
+    ctx.fillStyle = off > tol ? "rgba(213,94,0,.10)" : "rgba(46,49,47,.055)";
+    const top = Math.max(dBot, you.dist - 6), bot = Math.min(dTop, you.dist + 34);
+    ctx.beginPath();
+    for (let i = 0; i <= 8; i++) { const d = lerp(top, bot, i / 8);
+      const px = sx(d, you.sprintLine - tol), py = sy(d);
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+    for (let i = 8; i >= 0; i--) { const d = lerp(top, bot, i / 8);
+      ctx.lineTo(sx(d, you.sprintLine + tol), sy(d)); }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = off > tol ? "rgba(213,94,0,.55)" : "rgba(46,49,47,.20)";
+    ctx.lineWidth = 1.5; ctx.setLineDash([7, 6]);
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      for (let i = 0; i <= 8; i++) { const d = lerp(top, bot, i / 8);
+        const px = sx(d, you.sprintLine + sgn * tol), py = sy(d);
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      ctx.stroke();
+    }
+    ctx.restore();
+    if (off > tol) label("HOLD YOUR LINE", sx(you.dist + 20, you.sprintLine), sy(you.dist + 20),
+      10, 700, PAL.spot, "center", 1.4);
+  }
+  for (const l of (c.litters || [])) {
+    if (l.e < dBot || l.s > dTop) continue;
+    const a = Math.max(l.s, Math.floor(dBot / 1.1) * 1.1), b2 = Math.min(l.e, dTop + 1.1);
+    const st2 = Math.max(4, Math.ceil((b2 - a) / 1.1));
+    ctx.save();
+    ctx.fillStyle = "rgba(0,114,178,.16)";
+    ctx.beginPath();
+    // Drawn in metres against the real road width, so a pinch under the zone cannot
+    // leave a corner of it hanging out over the verge.
+    for (let i = 0; i <= st2; i++) { const d = lerp(a, b2, i / st2), e = Sim.edgeAt(c, d);
+      const px = sx(d, l.side > 0 ? e * 0.34 : -e), y = sy(d);
+      i ? ctx.lineTo(px, y) : ctx.moveTo(px, y); }
+    for (let i = st2; i >= 0; i--) { const d = lerp(a, b2, i / st2), e = Sim.edgeAt(c, d);
+      ctx.lineTo(sx(d, l.side > 0 ? e : -e * 0.34), sy(d)); }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+    if (l.s > dBot && l.s < dTop)
+      label("LITTER ZONE", sx(l.s, l.side * 2.4), sy(l.s) - 6, 10, 700, PAL.water, "center", 1.5);
+  }
   for (const f of c.feeds) {
     if (f.e < dBot || f.s > dTop) continue;
-    const a = Math.max(f.s, dBot), b = Math.min(f.e, dTop), st = 10;
+    const a = Math.max(f.s, Math.floor(dBot / 1.1) * 1.1), b = Math.min(f.e, dTop + 1.1);
+    const st = Math.max(4, Math.ceil((b - a) / 1.1));
     ctx.beginPath();
     for (let i = 0; i <= st; i++) { const d = lerp(a, b, i / st), hw = Sim.widthAt(c, d) / 2 * pxM;
       i ? ctx.lineTo(sx(d, 0) - hw, sy(d)) : ctx.moveTo(sx(d, 0) - hw, sy(d)); }
@@ -2285,23 +3215,35 @@ function drawRoad() {
     for (let i = 0; i <= rows; i++) i ? ctx.lineTo(side[i][0], side[i][1]) : ctx.moveTo(side[i][0], side[i][1]);
     ctx.stroke();
   }
+  // ---- centre line ----
+  // A real broken centre line is mostly gap: about three metres of paint every
+  // twelve. Ours was six on six, which reads as a ladder rather than a road.
   ctx.strokeStyle = "rgba(244,242,236,.75)"; ctx.lineWidth = Math.max(2, pxM * 0.07);
-  for (let m = Math.floor(dBot / 12) * 12; m < dTop; m += 12) {
-    const y1 = sy(m), y2 = sy(m + 6);
+  const DASH = 3, PERIOD = 12;
+  for (let m = Math.floor(dBot / PERIOD) * PERIOD; m < dTop; m += PERIOD) {
+    // Solid, not broken, for the last stretch into a junction: no overtaking, which
+    // is exactly what a real road paints there.
+    const solidHere = (c.rounds || []).some(x => {
+      const nose = x.big ? (x.s + x.e) / 2 - (x.rad || 0) * CFGROUNDLONG : x.s;
+      return m > nose - 36 && m < nose - 19;             // up to where the splitter starts
+    });
+    const y1 = sy(m), y2 = sy(m + (solidHere ? PERIOD : DASH));
     if (y1 < -30 || y2 > H + 30) continue;
-    // Real roads do not paint a dashed line through a traffic island. Where one
-    // sits, the markings step aside into each lane instead of running over it.
-    const il = Sim.islandAt(c, m), il2 = Sim.islandAt(c, m + 6);
-    if (il || il2) {
-      const a = il || il2, b2 = il2 || il;
-      for (const sgn of [-1, 1]) {
-        const x1 = sgn < 0 ? (a.lo + -a.lane) / 2 : (a.hi + a.lane) / 2;
-        const x2 = sgn < 0 ? (b2.lo + -b2.lane) / 2 : (b2.hi + b2.lane) / 2;
-        ctx.beginPath(); ctx.moveTo(sx(m, x1), y1); ctx.lineTo(sx(m + 6, x2), y2); ctx.stroke();
-      }
-      continue;
-    }
-    ctx.beginPath(); ctx.moveTo(sx(m, 0), y1); ctx.lineTo(sx(m + 6, 0), y2); ctx.stroke();
+    // A single-lane roundabout carries NO markings through the circulatory area:
+    // just a give way line at its mouth, the island kerb and the road edges. I had
+    // been painting lanes sweeping round it, sampled every twelve metres across a
+    // twenty-six metre ramp, which drew as long diagonals crossing the whole road.
+    // The centre line stops at the give way line and picks up again after the exit.
+    const inJunction = (c.rounds || []).some(x => {
+      const nose = x.big ? (x.s + x.e) / 2 - (x.rad || 0) * CFGROUNDLONG : x.s;
+      const tail = x.big ? (x.s + x.e) / 2 + (x.rad || 0) * CFGROUNDLONG : x.e;
+      return m > nose - 19 && m < tail + 19;              // the splitter takes over here
+    });
+    if (inJunction) continue;
+    ctx.beginPath();
+    ctx.moveTo(sx(m, 0), y1);
+    ctx.lineTo(sx(m + (solidHere ? PERIOD : DASH), 0), y2);
+    ctx.stroke();
   }
   for (let m = Math.floor(dBot / 25) * 25; m < dTop; m += 25) {
     const g = Sim.gradeAt(c, m);
@@ -2336,7 +3278,9 @@ function drawRoad() {
       ctx.fillRect(sx(c.len, 0) - roadPx / 2 + i * cw, fy - 9, cw + 0.6, 18);
     }
   }
-  for (const s of c.scenery) {
+  ctx.restore();                               // end of the road-surface clip
+
+  for (const s of c.scenery) {                 // trees and posts live off the road
     if (s.d < dBot - 10 || s.d > dTop + 10) continue;
     const y = sy(s.d), x = sx(s.d, s.side * (CFG.roadW / 2 + s.off));
     if (Sim.gradeAt(c, s.d) > 0.4 && s.k > 0.45) {
@@ -2503,6 +3447,63 @@ function drawRiders() {
     }
     if (bh > 6) label(String(r.num), x, y + bh * 0.55, Math.min(bw * 0.78, bh * 1.6), 700,
       "rgba(255,255,255,.92)", "center", 0);
+    if (r.tow > 0 && r.towX !== undefined) {           // the team car, up the road
+      // Drawn where the CAR is, not where you are. Pinned to your own position it
+      // looked like you were driving it, and there was no wheel to hold.
+      const cd = r.dist + Sim.CFG.towGap;
+      const cx3 = sx(cd, r.towX), cy2 = sy(cd);
+      const cw = riderR * 1.9, ch = riderR * 3.2;
+      // its draft, so you can see where the shelter actually is
+      const off3 = Math.abs(r.x - r.towX);
+      const good = clamp(1 - off3 / Sim.CFG.towShelter, 0, 1);
+      ctx.save();
+      ctx.fillStyle = draftColour(good, 0.10 + 0.32 * good);
+      ctx.beginPath();
+      ctx.moveTo(cx3, cy2);
+      ctx.lineTo(sx(r.dist - 1.5, r.towX - Sim.CFG.towShelter), sy(r.dist - 1.5));
+      ctx.lineTo(sx(r.dist - 1.5, r.towX + Sim.CFG.towShelter), sy(r.dist - 1.5));
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = draftColour(good, 0.55); ctx.lineWidth = Math.max(1.5, pxM * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(sx(r.dist - 1.5, r.towX - Sim.CFG.towShelter), sy(r.dist - 1.5));
+      ctx.lineTo(cx3, cy2);
+      ctx.lineTo(sx(r.dist - 1.5, r.towX + Sim.CFG.towShelter), sy(r.dist - 1.5));
+      ctx.stroke();
+      ctx.restore();
+      const x = cx3;
+      ctx.save();
+      ctx.fillStyle = "rgba(46,49,47,.14)";              // shadow
+      roundRect(x - cw + riderR * 0.2, cy2 - ch / 2 + riderR * 0.3, cw * 2, ch, riderR * 0.5);
+      ctx.fill();
+      ctx.fillStyle = "#2E312F";                         // body
+      roundRect(x - cw, cy2 - ch / 2, cw * 2, ch, riderR * 0.5);
+      ctx.fill();
+      ctx.strokeStyle = PAL.water; ctx.lineWidth = Math.max(2.5, riderR * 0.16); ctx.stroke();
+      ctx.fillStyle = "rgba(244,242,236,.75)";           // windscreen
+      roundRect(x - cw * 0.62, cy2 - ch * 0.34, cw * 1.24, ch * 0.30, riderR * 0.22);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(244,242,236,.85)";         // bikes on the roof
+      ctx.lineWidth = Math.max(1.6, riderR * 0.10);
+      for (const k of [-0.35, 0, 0.35]) {
+        ctx.beginPath();
+        ctx.moveTo(x - cw * 0.8, cy2 + ch * k * 0.5);
+        ctx.lineTo(x + cw * 0.8, cy2 + ch * k * 0.5);
+        ctx.stroke();
+      }
+      ctx.fillStyle = PAL.spot;                          // lights
+      for (const k of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(x + k * cw * 0.66, cy2 - ch * 0.44, riderR * 0.20, riderR * 0.14, 0, 0, 7);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    if (r.hop > 0) {                                   // airborne: a shadow under you
+      ctx.save();
+      ctx.fillStyle = "rgba(46,49,47,.18)";
+      ctx.beginPath(); ctx.ellipse(x, y + bh * 0.9, bw * 0.9, bh * 0.4, 0, 0, 7); ctx.fill();
+      ctx.restore();
+    }
     if (r.down > 0 || r.out) {
       ctx.save();
       ctx.strokeStyle = PAL.spot; ctx.lineWidth = Math.max(2.5, bh * 0.34); ctx.lineCap = "round";
@@ -2584,6 +3585,11 @@ function drawProfile() {
       : sf.kind === "gravel" ? "rgba(122,96,70,.7)" : "rgba(46,49,47,.24)";
     const a = x0 + bw * (sf.s / c.len), b2 = x0 + bw * (sf.e / c.len);
     ctx.fillRect(a, yTop + bh + 2, Math.max(2.5, b2 - a), 5);
+  }
+  for (const l of (c.litters || [])) {
+    ctx.fillStyle = "rgba(0,114,178,.6)";
+    const a = x0 + bw * (l.s / c.len), b2 = x0 + bw * (l.e / c.len);
+    ctx.fillRect(a, yTop + bh + 8, Math.max(2, b2 - a), 4);
   }
   for (const rb of (c.rounds || [])) {
     ctx.fillStyle = "rgba(46,49,47,.75)";
@@ -2682,6 +3688,25 @@ function drawHud(dt) {
   gx += gstep;
   gauge(gx, gy, gw, gh, you.fuel, you.bonk ? PAL.spot : PAL.fuel, "FOOD"); gx += gstep;
   gauge(gx, gy, gw, gh, you.fluid, you.dry ? PAL.spot : PAL.water, "FLUID");
+  // Empties you are carrying, and the tap target for getting rid of them. Semantic,
+  // top-left, and clear of both thumbs.
+  binRect = { x: pad - 6, y: gy + gh + 10, w: gw * 3 + 34, h: 34 };
+  if (you.empties > 0) {
+    const inZone = (race.course.litters || []).some(l => you.dist >= l.s && you.dist <= l.e
+      && Math.sign(you.x) === l.side && Math.abs(you.x) > 0.7);
+    ctx.save();
+    ctx.fillStyle = inZone ? "rgba(0,114,178,.20)" : "rgba(46,49,47,.07)";
+    roundRect(binRect.x, binRect.y, binRect.w, binRect.h, 10); ctx.fill();
+    ctx.strokeStyle = inZone ? PAL.water : "rgba(46,49,47,.24)";
+    ctx.lineWidth = inZone ? 2.5 : 1.5; ctx.stroke();
+    for (let i = 0; i < you.empties; i++) {
+      ctx.fillStyle = inZone ? PAL.water : "rgba(46,49,47,.45)";
+      roundRect(binRect.x + 9 + i * 13, binRect.y + 9, 8, 16, 3); ctx.fill();
+    }
+    ctx.restore();
+    label(inZone ? "BIN" : "CARRY", binRect.x + binRect.w - 8, binRect.y + 22, 9, 700,
+      inZone ? PAL.water : "rgba(46,49,47,.42)", "right", 1.2);
+  }
 
   if (!you.inPeloton && you.dist > race.pelotonHead + 8) {
     const sw = Math.max(126, W * 0.36), sxp = W - pad - sw, syp = gy + 20;
@@ -2707,14 +3732,21 @@ function drawHud(dt) {
   if (nf) cands.push(you.dist > nf.s
     ? { at: you.dist, t: "FEED ZONE", c: PAL.fuel }
     : { at: nf.s, t: "FEED ZONE IN " + M.near(nf.s - you.dist), c: PAL.fuel });
+  const nl = (c.litters || []).find(x => you.dist < x.e && x.s - you.dist < 150);
+  if (nl && you.empties > 0) cands.push(you.dist > nl.s
+    ? { at: you.dist, t: "LITTER ZONE", c: PAL.water }
+    : { at: nl.s, t: "LITTER ZONE IN " + M.near(nl.s - you.dist), c: PAL.water });
   const ns = (c.surfaces || []).find(x => x.kind !== "rough" && you.dist < x.e && x.s - you.dist < 190);
   if (ns) cands.push(you.dist > ns.s
     ? { at: you.dist, t: Sim.SURFACES[ns.kind].name.toUpperCase(), c: PAL.ink }
     : { at: ns.s, t: Sim.SURFACES[ns.kind].name.toUpperCase() + " IN " + M.near(ns.s - you.dist), c: PAL.ink });
-  const nr = (c.rounds || []).find(x => you.dist < x.e && x.s - you.dist < 200);
-  if (nr) cands.push(you.dist > nr.s
-    ? { at: you.dist, t: "ROUNDABOUT", c: PAL.ink }
-    : { at: nr.s, t: "ROUNDABOUT IN " + M.near(nr.s - you.dist), c: PAL.ink });
+  const nr = (c.rounds || []).find(x => you.dist < x.e && x.s - you.dist < 100);
+  if (nr) {
+    const nm = nr.big ? "ROUNDABOUT" : "MEDIAN";
+    cands.push(you.dist > nr.s
+      ? { at: you.dist, t: nm, c: PAL.ink }
+      : { at: nr.s, t: nm + " IN " + M.near(nr.s - you.dist), c: PAL.ink });
+  }
   // Only warn about a pinch that actually pinches. A banner over a road that stays
   // essentially full width just taught you to ignore the banner.
   const nn2 = c.narrows.find(n => n.w < 6.6 && you.dist < n.e && n.s - you.dist < 170);
@@ -2731,6 +3763,12 @@ function drawHud(dt) {
   }
 
   const b = btnR();
+  // Live gradient, only when the road is doing something. Uphill reads warm,
+  // downhill cool, so you can tell at a glance without reading the sign.
+  const gNow2 = Sim.gradeAt(race.course, you.dist);
+  if (Math.abs(gNow2) > 0.06)
+    label(M.grade(gNow2), W - pad, b.y - 50, 15, 700,
+      gNow2 > 0 ? PAL.spot : PAL.water, "right", 0.4);
   label(M.speed(you.speed).toFixed(0), W - pad, b.y - 16, 28, 700, PAL.ink, "right", -0.5);
   label(M.speedTag(), W - pad, b.y - 2, 10, 500, "rgba(46,49,47,.42)", "right", 1.4);
 
@@ -2781,6 +3819,49 @@ function drawHud(dt) {
   }
   // Above the pads, not between them: level with the pedals it sits under your
   // thumbs and cannot be read while you are actually pedalling.
+  // Only offered when you are genuinely off the back, which is the one moment the
+  // game otherwise gives you nothing to do.
+  const gapBack = (race.pelotonHead || 0) - you.dist;
+  const canSticky = you.sticky > 0 && you.tow <= 0 && !you.inPeloton
+    && gapBack > Sim.CFG.stickyNeed && you.dist < race.pelotonHead;
+  if (canSticky) {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,114,178,.18)";
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.fill();
+    ctx.strokeStyle = PAL.water; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.restore();
+    label("STICKY BOTTLE  ·  TAKES A PENALTY", W / 2, b.thY + b.thH / 2 + 5, 12, 700,
+      PAL.ink, "center", 1.4);
+  }
+  const hopT = Sim.hopTarget(race.course, you);
+  const canHop = !!hopT && you.hop <= 0 && !Sim.throwLine(race.course, you);
+  if (canHop) {
+    // A gauge that fills as the kerb comes at you and empties once you are on top of
+    // it. Tap at the top. Colouring the whole button by quality only ever flashed
+    // green for an instant and gave you nothing to aim at.
+    const d = Math.abs(you.x - hopT.edge);
+    const near = clamp(1 - Math.abs(d - Sim.CFG.hopGap) / 1.3, 0, 1);
+    const time = clamp(1 - Math.abs(hopT.lead - Sim.CFG.hopLead) / 4.5, 0, 1);
+    const offQ = clamp(1 - Math.max(0, d - 1.3) / 2.4, 0, 1);
+    const fill = hopT.dir === "off" ? offQ
+      : hopT.headOn ? time
+      : hopT.lead > 0.2 ? clamp(near * 0.3 + time * 0.7, 0, 1)
+      : clamp(near * 0.85 + 0.15, 0, 1);
+    const col = fill > 0.72 ? PAL.green : fill > 0.42 ? PAL.fuel : PAL.spot;
+    ctx.save();
+    ctx.fillStyle = "rgba(46,49,47,.06)";
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.fill();
+    ctx.save();
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.clip();
+    ctx.fillStyle = col + "3a";
+    ctx.fillRect(b.thX, b.thY + b.thH * (1 - fill), b.thW, b.thH * fill);
+    ctx.restore();
+    ctx.strokeStyle = col; ctx.lineWidth = fill > 0.72 ? 3.5 : 2;
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.stroke();
+    ctx.restore();
+    label(hopT.dir === "on" ? "HOP UP" : "HOP DOWN",
+      W / 2, b.thY + b.thH / 2 + 6, 15, 700, PAL.ink, "center", 2.2);
+  }
   const tl = Sim.throwLine(race.course, you);
   const canThrow = tl && you.threw !== tl.d;
   if (canThrow) {                              // its own target, so you can keep pedalling
@@ -2794,10 +3875,9 @@ function drawHud(dt) {
     label("THROW", W / 2, b.thY + b.thH / 2 + 6, 15, 700, PAL.ink, "center", 2.2);
   }
   const gNow = Sim.gradeAt(race.course, you.dist);
-  const inRb = (race.course.rounds || []).some(x => you.dist > x.s - 45 && you.dist < x.e + 10);
-  const tightHere = Sim.widthAt(race.course, you.dist) < 7.4
-    || Math.abs(Sim.bendAt(race.course, you.dist)) > 0.055;
-  if (inRb || (gNow < -0.2 && tightHere)) {    // fast descents AND junctions
+  {
+    // Always there rather than appearing only where the game thinks you need it: a
+    // control that comes and goes is harder to learn than one you can always reach.
     const leaning = you.hardTurn;
     ctx.save();
     ctx.fillStyle = leaning ? "rgba(204,0,102,.13)" : "rgba(46,49,47,.05)";
@@ -2809,13 +3889,18 @@ function drawHud(dt) {
     label("LEAN", W - b.hardW / 2, b.thY - 14, 10, 700,
       leaning ? PAL.you : "rgba(46,49,47,.35)", "center", 1.6);
   }
-  const msg = you.out ? "OUT OF THE RACE"
+  const towOff = you.tow > 0 && you.towX !== undefined ? Math.abs(you.x - you.towX) : 0;
+  const msg = you.tow > 0
+    ? (towOff > Sim.CFG.towShelter ? "GET ON ITS WHEEL"
+      : you.towReason === "sticky" ? "ON THE CAR  ·  PENALTY TAKEN" : "ON THE CAR")
+    : you.out ? "OUT OF THE RACE"
     : you.down > 0 ? "DOWN  ·  GETTING BACK ON"
     : you.flat > 0 ? "PUNCTURE  ·  WAITING ON THE CAR"
     : cramp ? "CRAMPING" : bad ? "MISSED A PEDAL" : coast ? "SOFT PEDALLING"
-    : ladder.tutorialDone ? "" : "PEDAL  ·  ALTERNATE SIDES";
+    : "";
   if (msg) {
-    const col = you.out || you.down > 0 || you.flat > 0 || cramp || bad
+    const col = you.tow > 0 ? (towOff > Sim.CFG.towShelter ? PAL.spot : PAL.water)
+      : you.out || you.down > 0 || you.flat > 0 || cramp || bad
       ? PAL.spot : coast ? PAL.water : "rgba(46,49,47,.5)";
     label(msg, W / 2, b.y - 14, 11, 700, col, "center", 1.2);
   }
@@ -2855,18 +3940,30 @@ function tutInTarget(r) {
   const gap = t.lead.dist - r.you.dist;
   return Math.abs(r.you.x - t.x) < TUT_TOL && gap > 1.2 && gap < 9.5;
 }
-function tutCalm(race) { race.course.winds = [{ s: -1e6, e: 1e9, dir: 1, str: 0 }]; }
-function tutClear(race) { tutCalm(race); for (const o of race.riders) if (!o.you) o.dist = race.you.dist - 500; }
+// Wind became a field of nodes with a distance and an interpolated direction, but
+// this was still writing the old start/end block form. It happened to survive, which
+// is worse than failing: exactly the kind of drift the drill checker exists to catch.
+function tutCalm(race) {
+  race.course.winds = [{ d: -1e6, dir: 0, str: 0 }, { d: 1e9, dir: 0, str: 0 }];
+}
+function tutClear(race) {
+  tutCalm(race);
+  for (const o of race.riders) if (!o.you) o.dist = race.you.dist - 500;
+  tutNoPrimes(race);
+}
+// Sprint and summit banners during a lesson about something else are just noise.
+function tutNoPrimes(race) {
+  race.course.primes = race.course.primes.filter(p => p.kind === "finish" && p.d > race.you.dist + 4000);
+}
 function tutWheel(race, gap) {
   tutCalm(race);
+  tutNoPrimes(race);
   const o = race.riders[1];
   o.dist = race.you.dist + (gap || 6); o.x = race.you.x; o.speed = race.you.speed;
   for (const q of race.riders) if (!q.you && q !== o) q.dist = race.you.dist - 500;
   return o;
 }
 const TUTORIAL = [
-  { t: "The race", demo: "intro", info: 1, setup: tutClear,
-    b: "Eight riders, one road, and whoever crosses the line first wins. Everything else in this game exists to get you there with something left in the tank. The wind is what takes it out of you, and hiding from the wind is how you keep it." },
   { t: "Your three bars", demo: "bars", info: 1, setup: tutClear,
     b: "LEGS is your effort. Spend it and it comes back on its own. FOOD and FLUID do not. Food burns all race and only food picked up off the road refills it. You sweat fluid out, faster when you are boxed in among other riders, and only bottles bring it back. Run either one dry and your legs stop returning." },
   { t: "Pedal", demo: "pedal", setup: tutClear,
@@ -2874,18 +3971,21 @@ const TUTORIAL = [
     p: "Turn the pads green and hold it", need: 120, timed: 1, get: () => tutCadence },
   { t: "Steer", demo: "steer",
     setup: r => { tutClear(r); const y = r.you; y.x = 0; y.tx = 0; y.txS = 0; y.vx = 0; },
-    b: "You are in the middle of the road. Hold anywhere on the RIGHT half of the screen to move right, the LEFT half to move left. Let go and you hold your line. Ride all the way to the right edge first, then all the way back to the left edge.",
+    b: () => (Tilt.on && Tilt.ok)
+      ? "TILT the phone to steer: lean it right to go right, left to go left. Holding a side of the screen still works too, so use whichever suits the moment. Ride to the right edge first, then all the way back to the left."
+      : "Hold anywhere on the RIGHT half of the screen to move right, the LEFT half to move left. Let go and you hold your line. Ride to the right edge first, then all the way back to the left.",
     p: "Right edge first, then the left", need: 2, get: () => tutLeft + tutRight },
   { t: "Get on a wheel", demo: "draft",
     setup: r => { const o = tutWheel(r, 6); o.x = r.you.x + 2.4; },
     hold: r => {
       const o = r.riders[1];
       o.speed = r.you.speed * 1.002; o.eff = "tempo";
-      // he keeps changing sides, so you have to track him rather than park once
+      // they keep changing sides, so you have to track them rather than park once
       o.x = Math.tanh(Math.sin(performance.now() / 1000 * 0.85) * 1.6) * 1.5;
     },
     b: "Behind every rider is a cone of shelter. Sit anywhere inside it, from just off their wheel to several bike lengths back, and the wind stops fighting you. Get it right and you do not need to pedal at all. Steer into the circle, take your hands off the pads, and stay with him as he moves across the road.",
     p: "In the circle, hands off, 3 seconds", need: 180, timed: 1, get: () => Math.round(tutDraft) },
+  { t: "__coreEnd", demo: "coreEnd", info: 1, setup: tutClear, b: "" },
   { t: "Wind from the side", demo: "wind",
     b: "Out in the wind your legs drain; in the shelter they come back. But when the wind blows across the road the shelter moves with it. It is no longer straight behind the rider ahead, it sits off to one side. Watch the cone lean, and follow it across.",
     setup: r => {
@@ -2897,7 +3997,7 @@ const TUTORIAL = [
     hold: r => {
       const o = r.riders[1];
       o.speed = r.you.speed * 1.002; o.eff = "tempo";
-      o.x = -1.7; o.tx = -1.7; o.txS = -1.7; o.vx = 0;   // he holds his line
+      o.x = -1.7; o.tx = -1.7; o.txS = -1.7; o.vx = 0;   // they hold their line
     },
     p: "Hold the shelter for 3 seconds", need: 180, timed: 1, get: () => Math.round(tutWind) },
   { t: "Food and bottles", demo: "feed",
@@ -2915,20 +4015,77 @@ const TUTORIAL = [
   { t: "Soft pedal", demo: "coast", setup: tutClear,
     b: "Hold BOTH pads at once to soft pedal. You drift back, but your legs come back faster. Watch the LEGS bar on the left refill.",
     p: "Hold both pads for 2 seconds", need: 120, timed: 1, get: () => Math.round(tutCoast) },
+  { t: "The bike throw", demo: "throwIt",
+    setup: r => {
+      tutWheel(r, 0);
+      const o = r.riders[1];
+      o.dist = r.you.dist; o.x = r.you.x + 1.35;         // level with you, so you see who wins
+      r.course.primes = [
+        { d: r.you.dist + 60, kind: "sprint", pts: [5, 3, 2, 1], crossed: [] },
+        { d: r.you.dist + 190, kind: "sprint", pts: [5, 3, 2, 1], crossed: [] },
+        { d: r.you.dist + 9000, kind: "finish", pts: [12], crossed: [] }
+      ];
+    },
+    hold: r => {
+      const o = r.riders[1];
+      o.speed = r.you.speed; o.eff = "tempo";
+      o.x = r.you.x + 1.35;                              // stays alongside
+    },
+    b: "At a sprint line, a summit, or the finish, a THROW button appears above the pads. Hit it about two metres out and you shove the bike most of a length forward, which wins close finishes. Too early and you are freewheeling before the line. The button turns green when your timing is right. There is a rider alongside you and two lines coming up: throw well and you take them.",
+    p: "Throw at both lines", need: 2, get: () => tutThrew },
+  { t: "Leaning", demo: "lean",
+    setup: r => {
+      tutClear(r);
+      const y = r.you; y.x = 0; y.tx = 0; y.txS = 0; y.vx = 0;
+      // holes strung across the road, so leaning is the only way to thread them
+      r.course.hazards = [];
+      for (let i = 0; i < 7; i++)
+        r.course.hazards.push({ d: y.dist + 70 + i * 42, x: (i % 2 ? 1 : -1) * 1.7,
+          r: 1.15, hit: new Set() });
+    },
+    b: "The LEAN zones sit at the far left and right edges of the screen, and they are always there. Hold one and you change your line almost twice as fast, at the cost of a little speed. Holes are coming up across the road: lean to thread between them.",
+    p: "Lean past the holes", need: 100, timed: 1, get: () => Math.round(tutLean) },
+  { t: "What the road does", demo: "surfaces", info: 1, setup: tutClear,
+    b: "Cobbles and gravel slow you down, throw you about, and on cobbles they break up the shelter that holds the bunch together. Holes in the road cost you speed and can puncture you, which means waiting on the team car. Run into the verge or a traffic island hard enough and you go down, or out of the race. All of it is your line: the briefing tells you what is coming before you roll out." },
   { t: "The jump", demo: "jump",
     setup: r => tutWheel(r, 5),
     hold: r => { const o = r.riders[1]; o.speed = r.you.speed * 0.999; o.eff = "tempo"; },
     b: "Three quick strokes in under a second, swapping sides each time, fires a jump: a burst of hard acceleration. Either side can start it. It spends the charge you build while sitting quietly on a wheel, so save it for when it counts.",
     p: "Three quick strokes", need: 3, get: () => tutJumps }
 ];
-let tutDraft = 0, tutRest = 0, tutJumps = 0, tutWind = 0, tutLeft = 0, tutRight = 0, tutCadence = 0, tutFed = 0, tutWaiting = false;
+let tutDraft = 0, tutRest = 0, tutJumps = 0, tutWind = 0, tutLeft = 0, tutRight = 0, tutCadence = 0, tutFed = 0,
+  tutThrew = 0, tutLean = 0, tutWaiting = false;
+function armCard(ms) {                         // buttons dead briefly on appearing
+  $("tcGo").disabled = true; $("tcSkip").disabled = true;
+  setTimeout(() => { $("tcGo").disabled = false; $("tcSkip").disabled = false; }, ms || 700);
+}
 function showTutCard() {
   const st = TUTORIAL[tut.i];
-  $("tcStep").textContent = "Step " + (tut.i + 1) + " of " + TUTORIAL.length;
+  if (st.demo === "coreEnd") {                 // the basics are done: race, or go deeper
+    $("tcStep").textContent = "Basics complete";
+    $("tcTitle").textContent = "That is enough to race";
+    $("tcBody").textContent = "Pedal to hold the pace, steer to find a wheel, and sit in it. "
+      + "Everything else is optional, but there is more to the game: wind, feeding, the jump, "
+      + "throwing the bike at the line, and leaning through a corner.";
+    $("tutCard").classList.remove("hide");
+    $("tutPrompt").classList.add("hide");
+    $("tutQuit").classList.add("hide");
+    $("tcGo").textContent = "Race now";
+    $("tcMore").classList.remove("hide");
+    $("tcSkip").classList.add("hide");
+    armCard(750);
+    return;
+  }
+  $("tcMore").classList.add("hide");
+  const coreN = TUTORIAL.findIndex(x => x.demo === "coreEnd");
+  $("tcStep").textContent = tut.i < coreN
+    ? "Step " + (tut.i + 1) + " of " + coreN
+    : "More · " + (tut.i - coreN) + " of " + (TUTORIAL.length - coreN - 1);
   $("tcTitle").textContent = st.t;
-  $("tcBody").textContent = st.b;
+  $("tcBody").textContent = typeof st.b === "function" ? st.b() : st.b;
   $("tcGo").textContent = st.info ? "Continue" : "Let me try";
   $("tcSkip").classList.remove("hide");
+  armCard(750);
   if (st.setup && race) st.setup(race);      // so the highlight has something to point at
   $("tutCard").classList.remove("hide");
   $("tutPrompt").classList.add("hide");
@@ -2943,11 +4100,13 @@ function showTutDone() {
   $("tutPrompt").classList.add("hide");
   $("tcGo").textContent = "Race";
   $("tcSkip").classList.add("hide");
+  $("tcMore").classList.add("hide");
+  armCard(750);
 }
-function tutAdvance() {                      // used by the read-only cards
-  $("tutCard").classList.add("hide");
+function tutAdvance() {                      // read-only cards hand straight over
   tut.i++;
-  setTimeout(() => { if (tut) (tut.i >= TUTORIAL.length ? showTutDone() : showTutCard()); }, 350);
+  if (tut.i >= TUTORIAL.length) { $("tutCard").classList.add("hide"); showTutDone(); return; }
+  showTutCard();                             // no hide first, so the road never flashes
 }
 function endTutorial() {
   const goRace = tutFrom === "start";
@@ -2956,6 +4115,7 @@ function endTutorial() {
   ladder.tutorialDone = true; Store.save(ladder);
   $("tutCard").classList.add("hide");
   $("tutPrompt").classList.add("hide");
+  $("tutQuit").classList.add("hide");
   $("pauseBtn").classList.add("hide");
   $("tcGo").textContent = "Let me try";
   // they asked to race, so take them racing rather than back to the menu
@@ -2978,13 +4138,14 @@ function startTutorial(from) {
 function startTutStep() {
   $("tutCard").classList.add("hide");
   tutStrokes = 0; tutSteered = 0; tutDraft = 0; tutRest = 0; tutCoast = 0; tutJumps = 0; tutWind = 0;
-  tutLeft = 0; tutRight = 0; tutCadence = 0; tutFed = 0;
+  tutLeft = 0; tutRight = 0; tutCadence = 0; tutFed = 0; tutThrew = 0; tutLean = 0;
   tutWaiting = true;
   const st = TUTORIAL[tut.i];
   if (st.setup && race) st.setup(race);      // stage the situation this lesson needs
   $("tpText").textContent = st.p;
   $("tpCount").style.display = "";
   $("tutPrompt").classList.remove("hide");
+  $("tutQuit").classList.remove("hide");
 }
 // Highlight the actual control the lesson is about, over the live game, so nobody
 // has to map a diagram onto the real thing.
@@ -3074,6 +4235,9 @@ function drawTutHint() {
 
 function tutTick(dt) {
   if (!tut || !race) return;
+  // The tutorial skips the countdown, which is where tilt is normally zeroed, so
+  // without this the phone's rest position is never learned and tilt does nothing.
+  if (Tilt.on && Tilt.ok) Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * 0.94 + Tilt.gamma * 0.06;
   const you = race.you, c = race.course;
   if (you.dist > c.len * 0.55) {            // the lesson never runs out of road
     const back = c.len * 0.35;
@@ -3086,6 +4250,8 @@ function tutTick(dt) {
   if (st.demo === "pedal") {                 // hold a genuinely quick rhythm
     tutCadence = strokeRate(performance.now() / 1000) >= 3 ? tutCadence + dt * 60 : 0;
   }
+  if (st.demo === "lean" && you.hardTurn) tutLean += dt * 60;
+  if (st.demo === "throwIt" && you.threw) tutThrew = 1;
   if (st.demo === "feed") {
     tutFed = race.course.items.filter(it => it.taken.has(you)).length;
   }
@@ -3113,6 +4279,7 @@ function tutTick(dt) {
     // the step on and open the next lesson
     setTimeout(() => {
       $("tutPrompt").classList.add("hide");
+      $("tutQuit").classList.add("hide");
       $("tpText").style.background = "";
     }, 1800);
     setTimeout(() => {
@@ -3128,9 +4295,25 @@ function setPaused(v) {
   paused = v;
   $("pauseCard").classList.toggle("hide", !v);
   const t = tour && tour.schedule ? tour.schedule.length : 1;
-  $("pBody").textContent = tut ? "The lesson is on hold."
-    : t > 1 ? "Leaving now loses this stage, but your division and prize money are untouched."
-    : "Leaving now loses this race. Your division and prize money are untouched.";
+  // Riders stop for all sorts of reasons and the bunch waits. A pause is one of them.
+  const REASONS = [
+    ["Nature break", "The whole bunch has agreed to it. Nobody attacks during a nature break. It is the one unwritten rule everybody keeps."],
+    ["Bike change", "The mechanic is out of the car with a spare. Stand still and look calm."],
+    ["Radio check", "The team car has lost you for a moment. Somebody is shouting into a microphone."],
+    ["Adjusting a shoe", "It has been rubbing since the feed zone and you have finally had enough of it."],
+    ["Passing the bottles back", "Nine bidons stuffed down your jersey and a long ride back to the bunch."],
+    ["A word with the commissaire", "Nothing has been decided. It is a conversation, that is all."],
+    ["Waiting for a teammate", "They punctured. You are going nowhere until they are back on."],
+    ["Sunglasses on the helmet", "The sun came out. Priorities are priorities."]
+  ];
+  if (v) {
+    const pick = REASONS[Math.floor(Math.random() * REASONS.length)];
+    $("pTitle").textContent = tut ? "Stage paused" : pick[0];
+    $("pBody").textContent = tut ? "The lesson is on hold." : pick[1];
+    $("pFoot").textContent = t > 1
+      ? "Leaving now loses this stage. Your division and prize money are untouched."
+      : "Leaving now loses this race. Your division and prize money are untouched.";
+  }
 }
 function leaveRace() {
   if (tut) { tutFrom = "menu"; endTutorial(); return; }
@@ -3158,16 +4341,20 @@ function frame(now) {
     else if (!paused && (!tut || $("tutCard").classList.contains("hide"))) {
       Sim.step(race, dt, readInput(dt));
       tutTick(dt);
+      drillTick(dt);
     }
-    // Through a roundabout the road is wider than the screen, so the camera follows
-    // the line YOU took. That is what lets you commit to a side and lose sight of the
-    // riders who went round the other way.
-    const rbNow = (race.course.rounds || []).find(x => x.big
-      && race.you.dist > x.s - 50 && race.you.dist < x.e + 50);
-    let want = 0;
-    if (rbNow) want = clamp(Math.min(race.you.dist - (rbNow.s - 50), (rbNow.e + 50) - race.you.dist) / 50, 0, 1);
-    camFollow += (want - camFollow) * clamp(dt * 3.2, 0, 1);
-    camC = Sim.centreAt(race.course, race.you.dist) + race.you.x * camFollow;
+    // The camera holds the road centre while you are anywhere near the middle, and
+    // only pans once you would otherwise leave the screen. A junction road is 22.5m
+    // across but only about 18m fits, so the far edges were off-view entirely. The
+    // deadzone is what stops it drifting: panning all the time was the old mistake,
+    // and it made the road look like it was sliding away from you.
+    const halfM = (W / 2) / pxM;                   // metres from centre that fit
+    const dead = halfM * 0.45;
+    const over = Math.max(0, Math.abs(race.you.x) - dead);
+    const want2 = over * Math.sign(race.you.x);
+    camPan += (want2 - camPan) * clamp(dt * 4.5, 0, 1);
+    if (Math.abs(camPan) < 0.02) camPan = 0;
+    camC = Sim.centreAt(race.course, race.you.dist) + camPan;
     ctx.fillStyle = PAL.paper; ctx.fillRect(0, 0, W, H);
     drawRoad(); drawItems(); drawRiders(); drawHud(dt);
     if (phase === "count") drawCountdown();
@@ -3179,7 +4366,11 @@ function frame(now) {
 
 // ---------------------------------------------------------------- screens
 const $ = id => document.getElementById(id);
-const show = id => { for (const s of ["menu", "brief", "result", "shop", "daily", "practice"]) $(s).classList.toggle("hide", s !== id); };
+const show = id => {
+  for (const s of ["menu", "brief", "result", "shop", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data"])
+    $(s).classList.toggle("hide", s !== id);
+  $("drillDone").classList.add("hide");       // never leaves it stranded over a screen
+};
 const hideAll = () => { for (const s of ["menu", "brief", "result"]) $(s).classList.add("hide"); };
 
 function board(el, list, render, mark) {
@@ -3293,11 +4484,15 @@ function showBriefing() {
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
         fatigue: tour.fatigue, playerStats: myStats(ladder.owned, ladder.fitted) });
   const c = preview.course;
+  // How much climbing is in it: the number every rider looks at first.
+  let up = 0, prevE = Sim.elevAt(c, 0);
+  for (let m = 6; m < c.len; m += 6) { const e = Sim.elevAt(c, m); if (e > prevE) up += e - prevE; prevE = e; }
+  const dims = M.long(c.len) + " · " + M.climb(up);
   $("bEyebrow").textContent = tour.practice
-    ? "Practice · Division " + tour.practice.div + " · " + spec.sub + " · " + M.long(c.len)
+    ? "Practice · Division " + tour.practice.div + " · " + spec.sub + " · " + dims
     : tour.daily
-    ? "Daily challenge #" + tour.daily.n + " · " + spec.sub + " · " + M.long(c.len)
-    : "Division " + ladder.div + " · " + stageLabel() + " · " + spec.sub + " · " + M.long(c.len);
+    ? "Daily challenge #" + tour.daily.n + " · " + spec.sub + " · " + dims
+    : "Division " + ladder.div + " · " + stageLabel() + " · " + spec.sub + " · " + dims;
   $("bTitle").textContent = spec.type === "flat" ? "One for the sprinters"
     : spec.type === "hills" ? "A day for the brave" : "The mountains decide it";
   const notes = [];
@@ -3352,6 +4547,8 @@ function finishStage() {
   phase = "done";
   const order = Sim.settle(race);
   const you = race.you;
+  // Drills and practice do not count: the data page is about racing.
+  if (!drill && !(tour && tour.practice)) recordStage(race, STAGES[tour.schedule[tour.stage]], ladder.div);
   for (const r of race.riders) {
     tour.gc[r.name] = { time: r.gcTime, sprintPts: r.sprintPts, komPts: r.komPts };
     tour.fatigue[r.name] = Math.min(100, (r.fatigue || 0) * 0.50 + r.load * 0.9);   // sleep on it
@@ -3375,6 +4572,9 @@ function finishStage() {
     if (pts[0] === you && you.sprintPts > 0) earned += Math.round(Sim.CFG.purse.jersey * race.payScale);
     if (kom[0] === you && you.komPts > 0) earned += Math.round(Sim.CFG.purse.jersey * race.payScale);
   }
+  const pen = you.penalties || [];
+  const fines = pen.reduce((a, x) => a + x.fine, 0);
+  const timePen = pen.reduce((a, x) => a + (x.time || 0), 0);
   const parts = [];
   const e = you.earn || {};
   if (e.sprint) parts.push(["Sprint primes", e.sprint]);
@@ -3388,13 +4588,14 @@ function finishStage() {
     if (kom[0] === you && you.komPts > 0) parts.push(["King of the Mountains", jp]);
   }
   const eb = $("rEarn"); eb.innerHTML = "";
-  for (const [nm, v] of parts.concat([["Prize money total", ladder.money + earned]])) {
+  for (const x of pen) parts.push([x.name, "-" + x.fine]);
+  for (const [nm, v] of parts.concat([["Prize money total", Math.max(0, ladder.money + earned - fines)]])) {
     const row = document.createElement("div");
     const a = document.createElement("span"); a.textContent = nm;
     const b2 = document.createElement("span"); b2.textContent = v;
     row.appendChild(a); row.appendChild(b2); eb.appendChild(row);
   }
-  ladder.money += earned;
+  ladder.money = Math.max(0, ladder.money + earned - fines);
   if (lastStage) ladder.savedTour = null; else saveTour(false);
   Store.save(ladder);
   let moved = null;
@@ -3467,7 +4668,7 @@ $("steerBtn").addEventListener("click", async () => {
   else { ladder.steer = "tilt"; await Tilt.enable(); }     // must be inside the gesture
   Store.save(ladder); refreshMenu();
 });
-$("resumeBtn").addEventListener("click", () => {
+function resumeTour() {
   const sv = ladder.savedTour; if (!sv || !sv.schedule) return;
   playerType = sv.type || playerType;
   tour = { seed: sv.seed, stage: sv.stage, gc: sv.gc, leaders: sv.leaders,
@@ -3482,11 +4683,39 @@ $("resumeBtn").addEventListener("click", () => {
     return;
   }
   showBriefing();
-});
+}
 $("pauseBtn").addEventListener("click", () => { setPaused(true); saveTour(true); });
 $("pResume").addEventListener("click", () => setPaused(false));
 $("pQuit").addEventListener("click", leaveRace);
 let shopFrom = "menu";
+$("rulesBtn").addEventListener("click", () => {
+  const box = $("rulesList"); box.innerHTML = "";
+  const rows = [
+    ["Off your line", "Moving across a rider while contesting a sprint, summit or the finish. You may change your line; you may not change it into someone."],
+    ["Cutting the median", "Hopping onto a median and riding over it instead of going round it."],
+    ["Littering", "Getting rid of an empty bottle outside a litter zone."],
+    ["Sticky bottle", "Taking a tow from the team car when you have been dropped. Needs Team tactics at full support."]
+  ];
+  for (const [nm, why] of rows) {
+    const row = document.createElement("div");
+    const a = document.createElement("span"); a.textContent = nm;
+    const b2 = document.createElement("span"); b2.textContent = why;
+    b2.style.opacity = ".6"; b2.style.textAlign = "right"; b2.style.maxWidth = "62%";
+    row.appendChild(a); row.appendChild(b2); box.appendChild(row);
+  }
+  show("rules");
+});
+$("rulesBack").addEventListener("click", () => show("settings"));
+$("drillBtn").addEventListener("click", () => { renderDrills(); show("drills"); });
+$("dataBack").addEventListener("click", () => show(dataFrom));
+for (const [btn, from] of [["dataBtnMenu", "menu"], ["dataBtnShop", "shop"], ["dataBtnRes", "result"]])
+  $(btn).addEventListener("click", () => { dataFrom = from; renderData(); show("data"); });
+$("drillBack").addEventListener("click", () => { renderPractice(); show("practice"); });
+$("dbBack").addEventListener("click", () => { renderDrills(); show("drills"); });
+$("dbGo").addEventListener("click", () => startDrill(drillPick));
+$("drillDone").addEventListener("click", endDrill);
+$("setBtn").addEventListener("click", () => show("settings"));
+$("setBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });
 $("pracBtn").addEventListener("click", () => { renderPractice(); show("practice"); });
 $("pBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });
 $("pRide").addEventListener("click", startPractice);
@@ -3506,19 +4735,21 @@ $("shopBack2").addEventListener("click", () => {
   if (shopFrom === "brief") { showBriefing(); return; }
   showProfile(null); refreshMenu(); show("menu");
 });
-$("shopBack").addEventListener("click", () => {
-  if (shopFrom === "brief") { showBriefing(); return; }
-  showProfile(null); refreshMenu(); show("menu");
-});
 $("tcSkip").addEventListener("click", endTutorial);
+$("tutQuit").addEventListener("click", endTutorial);
+$("tcMore").addEventListener("click", () => { tut.i++; showTutCard(); });
 $("tcGo").addEventListener("click", () => {
   if (tutFinished) { endTutorial(); return; }
-  if (TUTORIAL[tut.i] && TUTORIAL[tut.i].info) { tutAdvance(); return; }
+  const st = TUTORIAL[tut.i];
+  if (st && st.demo === "coreEnd") { endTutorial(); return; }   // "Race now"
+  if (st && st.info) { tutAdvance(); return; }
   startTutStep();
 });
 $("howBtn").addEventListener("click", () => startTutorial("menu"));
 $("startBtn").addEventListener("click", () => {
   if (!ladder.tutorialDone) { startTutorial("start"); return; }
+  const sv = ladder.savedTour;
+  if (sv && sv.schedule && sv.schedule.length && sv.stage < sv.schedule.length) { resumeTour(); return; }
   newTour(); showBriefing();
 });
 // ---- upgrades ----
@@ -3528,6 +4759,8 @@ function myStats(owned, fitted) { return Sim.upgradeStats(owned, fitted, myBase(
 // Tapping an item previews what buying its next level would do: the radar redraws
 // with it fitted and the current shape stays behind as a dashed ghost.
 let preview = null;
+let shopSection = null;
+let renderedSection = null;
 const STAT_LABEL = {
   attack: "Attack", kick: "Finish kick", recover: "Recovery", draft: "Draft benefit",
   gut: "Digestion", handling: "Handling", descend: "Descending", resilience: "Durability",
@@ -3552,6 +4785,50 @@ function previewLoadout(key, id) {
   }
   return { owned, fitted, lvl };
 }
+// The before/after for one item's next level: the tier you'd move to, the price,
+// and the stat deltas as plain "+n%" bits. Used both for the inline readout under
+// the tapped item and for the radar's previewed shape.
+function previewEffect(key, id) {
+  const item = Sim.UPGRADES[key].find(u => u.id === id);
+  const p = previewLoadout(key, id);
+  const base = myBase();
+  const now = Object.assign({}, base, myStats(ladder.owned, ladder.fitted));
+  const next = Object.assign({}, base, myStats(p.owned, p.fitted));
+  const bits = [];
+  for (const k of Object.keys(item.max)) {
+    const d = (next[k] || 0) - (now[k] || 0);
+    if (Math.abs(d) < 0.001) continue;
+    if (FLAG_STATS.indexOf(k) >= 0) { bits.push(STAT_LABEL[k] + " <b>level " + p.lvl + "</b>"); continue; }
+    const pct = Math.round(d * 100);
+    const good = LOWER_BETTER.indexOf(k) >= 0 ? pct < 0 : pct > 0;
+    bits.push(STAT_LABEL[k] + " <b>" + (pct > 0 ? "+" : "") + pct + "%</b>" + (good ? "" : " (cost)"));
+  }
+  const owns = ladder.owned[id] || 0;
+  if (!bits.length) bits.push("no further change");
+  return { item, next, now, bits, tierLabel: item.tiers[p.lvl - 1],
+    costText: owns >= 3 ? "already maxed" : Sim.UPGRADE_COST[owns] + " to buy" };
+}
+// What this one item's NEXT level adds on its own, isolated from fit swaps — so a
+// card honestly advertises the part, not the cost of bumping another item out to fit
+// it. Diffing two single-item loadouts cancels the base and leaves the pure delta.
+function itemNextEffect(key, id) {
+  const item = Sim.UPGRADES[key].find(u => u.id === id);
+  const lvl = ladder.owned[id] || 0;
+  if (lvl >= 3) return { tierLabel: item.tiers[2], costText: "already maxed", bits: ["no further change"] };
+  const base = myBase(), fit = { [key]: [id] };
+  const a = Object.assign({}, base, Sim.upgradeStats({ [id]: lvl }, fit, base));
+  const c = Object.assign({}, base, Sim.upgradeStats({ [id]: lvl + 1 }, fit, base));
+  const bits = [];
+  for (const k of Object.keys(item.max)) {
+    if (FLAG_STATS.indexOf(k) >= 0) { bits.push(STAT_LABEL[k] + " <b>level " + (lvl + 1) + "</b>"); continue; }
+    const pct = Math.round(((c[k] || 0) - (a[k] || 0)) * 100);
+    if (pct === 0) continue;
+    const good = LOWER_BETTER.indexOf(k) >= 0 ? pct < 0 : pct > 0;
+    bits.push(STAT_LABEL[k] + " <b>" + (pct > 0 ? "+" : "") + pct + "%</b>" + (good ? "" : " (cost)"));
+  }
+  if (!bits.length) bits.push("no further change");
+  return { tierLabel: item.tiers[lvl], costText: Sim.UPGRADE_COST[lvl] + " to buy", bits };
+}
 function fittedCount(key) { return (ladder.fitted[key] || []).length; }
 function isFitted(key, id) { return (ladder.fitted[key] || []).indexOf(id) >= 0; }
 function toggleFit(key, id) {
@@ -3573,70 +4850,453 @@ function buyLevel(id) {
 }
 function renderShop() {
   $("sMoney").textContent = ladder.money + " prize money";
-  const list = $("sList"); list.innerHTML = "";
-  for (const [key, label] of Sim.SECTIONS) {
-    const h = document.createElement("div");
-    h.className = "secthead";
-    h.textContent = label + " · " + fittedCount(key) + " of " + Sim.FIT_PER_SECTION + " fitted";
-    list.appendChild(h);
+  if (!shopSection || !Sim.SECTIONS.some(s => s[0] === shopSection)) shopSection = Sim.SECTIONS[0][0];
+  const segs = $("sSegs"); segs.innerHTML = "";
+  for (const [segKey, segLabel] of Sim.SECTIONS) {
+    const seg = document.createElement("button");
+    seg.textContent = segLabel + " · " + fittedCount(segKey) + "/" + Sim.FIT_PER_SECTION;
+    seg.setAttribute("aria-pressed", segKey === shopSection ? "true" : "false");
+    seg.addEventListener("click", () => { shopSection = segKey; preview = null; renderShop(); });
+    segs.appendChild(seg);
+  }
+  const key = shopSection;
+  const list = $("sList");
+  const oldStrip = list.querySelector(".strip");
+  // keep the horizontal scroll position across a re-render of the same section, so
+  // tapping a card that's scrolled off the left doesn't snap it back to the start.
+  const keepScroll = (oldStrip && renderedSection === shopSection) ? oldStrip.scrollLeft : 0;
+  list.innerHTML = "";
+  {
+    const strip = document.createElement("div"); strip.className = "strip";
     for (const u of Sim.UPGRADES[key]) {
       const lvl = ladder.owned[u.id] || 0;
-      const row = document.createElement("div"); row.className = "up";
-      const pips = document.createElement("div"); pips.className = "pips";
+      const card = document.createElement("div");
+      card.className = "card" + (preview && preview.id === u.id ? " sel" : "");
+
+      const top = document.createElement("div"); top.className = "top";
+      const nb = document.createElement("b"); nb.textContent = u.name;
+      const pips = document.createElement("span"); pips.className = "pips";
       pips.textContent = "●●●".slice(0, lvl) + "○○○".slice(0, 3 - lvl);
-      const nm = document.createElement("div"); nm.className = "nm";
-      const b = document.createElement("b"); b.textContent = u.name;
-      const sp = document.createElement("span");
-      sp.textContent = lvl ? u.tiers[lvl - 1] + " · " + u.note : u.note;
-      nm.appendChild(b); nm.appendChild(sp);
-      if (preview && preview.id === u.id) row.classList.add("sel");
-      nm.addEventListener("click", () => {
-        preview = (preview && preview.id === u.id) ? null : { key, id: u.id };
-        renderShop();
-      });
+      top.appendChild(nb); top.appendChild(pips); card.appendChild(top);
+
+      const tier = document.createElement("div"); tier.className = "tier";
+      tier.textContent = lvl ? u.tiers[lvl - 1] : "Not owned";
+      card.appendChild(tier);
+
+      const note = document.createElement("div"); note.className = "note";
+      note.textContent = u.note; card.appendChild(note);
+
+      // Each card carries its own next-level effect, so it stays attached to the item.
+      const fx = document.createElement("div"); fx.className = "fx";
+      const e = itemNextEffect(key, u.id);
+      fx.innerHTML = '<span class="lead">'
+        + (lvl >= 3 ? "Maxed out" : "Next · " + e.tierLabel + " · " + e.costText)
+        + '</span>' + e.bits.join(" · ");
+      card.appendChild(fx);
+
+      const btns = document.createElement("div"); btns.className = "btns";
       const buy = document.createElement("button");
       if (lvl >= 3) { buy.textContent = "Maxed"; buy.disabled = true; }
       else {
         const cost = Sim.UPGRADE_COST[lvl];
         buy.textContent = cost;
         buy.disabled = ladder.money < cost;
-        buy.addEventListener("click", () => buyLevel(u.id));
+        buy.addEventListener("click", ev => { ev.stopPropagation(); buyLevel(u.id); });
       }
       const fit = document.createElement("button");
       fit.textContent = isFitted(key, u.id) ? "Fitted" : "Fit";
       fit.className = isFitted(key, u.id) ? "on" : "";
       fit.disabled = lvl < 1;
-      fit.addEventListener("click", () => toggleFit(key, u.id));
-      row.appendChild(pips); row.appendChild(nm); row.appendChild(buy); row.appendChild(fit);
-      list.appendChild(row);
+      fit.addEventListener("click", ev => { ev.stopPropagation(); toggleFit(key, u.id); });
+      btns.appendChild(buy); btns.appendChild(fit); card.appendChild(btns);
+
+      // Tapping the card body (not the buttons) previews it on the pinned radar.
+      card.addEventListener("click", () => {
+        preview = (preview && preview.id === u.id) ? null : { key, id: u.id };
+        renderShop();
+      });
+      strip.appendChild(card);
     }
+    list.appendChild(strip);
+    strip.scrollLeft = keepScroll;
+    renderedSection = shopSection;
   }
   const base = myBase();
   const now = Object.assign({}, base, myStats(ladder.owned, ladder.fitted));
   const pv = $("sPrev");
   if (preview) {
-    const item = Sim.UPGRADES[preview.key].find(u => u.id === preview.id);
-    const p = previewLoadout(preview.key, preview.id);
-    const next = Object.assign({}, base, myStats(p.owned, p.fitted));
-    drawRadar($("sRadar"), next, riderProfile(now));      // ghost is where you are now
-    const bits = [];
-    for (const k of Object.keys(item.max)) {
-      const d = (next[k] || 0) - (now[k] || 0);
-      if (Math.abs(d) < 0.001) continue;
-      if (FLAG_STATS.indexOf(k) >= 0) {
-        bits.push(STAT_LABEL[k] + " <b>level " + p.lvl + "</b>"); continue;
-      }
-      const pct = Math.round(d * 100);
-      const good = LOWER_BETTER.indexOf(k) >= 0 ? pct < 0 : pct > 0;
-      bits.push(STAT_LABEL[k] + " <b>" + (pct > 0 ? "+" : "") + pct + "%</b>" + (good ? "" : " (cost)"));
-    }
-    const owns = ladder.owned[preview.id] || 0;
-    pv.innerHTML = "<b>" + item.name + " " + item.tiers[p.lvl - 1] + "</b> · "
-      + (owns >= 3 ? "already maxed" : Sim.UPGRADE_COST[owns] + " to buy") + "<br>" + bits.join(" · ");
+    const e = previewEffect(preview.key, preview.id);
+    drawRadar($("sRadar"), e.next, riderProfile(now));    // solid = try-on, dashed = now
+    renderMeters(e.next, now, true);
+    pv.innerHTML = "Filled line and bars are with this fitted; dashed marks where you are now.";
   } else {
     drawRadar($("sRadar"), now, riderProfile(base));
-    pv.innerHTML = "Tap an item to see what its next level would do.";
+    renderMeters(now, base, false);
+    pv.innerHTML = "The chart and bars are you with your fitted upgrades; a stock rider sits at the centre. Tap a card to preview a change.";
   }
+}
+// The off-chart capabilities the six radar axes can't hold: cross-day freshness,
+// how hard the bunch chases, and the flag upgrades (radio, power meter, feeds). Bars
+// fill with what you have fitted; previewing a card that moves one lights it up so an
+// off-radar upgrade never looks like it does nothing. `main` fills the bar, `ghost`
+// is the comparison (a dashed tick when it differs under preview).
+const OFF_METERS = [
+  { label: "Fresh",  val: s => (1.00 - (s.fatigueResist || 1)) / (1.00 - 0.76) },
+  { label: "Escape", val: s => (1.00 - (s.danger || 1)) / (1.00 - 0.82) },
+  { label: "Radio",  val: s => (s.radio || 0) / 3 },
+  { label: "Pacing", val: s => (s.powerMeter || 0) / 3 },
+  { label: "Feeds",  val: s => ((s.carbMix || 0) + (s.feedSmooth || 0)) / 6 }
+];
+function renderMeters(main, ghost, previewing) {
+  const cl = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  const host = $("sMeters"); host.innerHTML = "";
+  for (const m of OFF_METERS) {
+    const mv = cl(m.val(main)), gv = cl(m.val(ghost));
+    const changed = previewing && Math.abs(mv - gv) > 0.005;
+    const cell = document.createElement("div"); cell.className = "meter" + (changed ? " on" : "");
+    const bar = document.createElement("div"); bar.className = "bar";
+    const fill = document.createElement("div"); fill.className = "fill";
+    fill.style.height = (mv * 100) + "%"; bar.appendChild(fill);
+    if (changed) {
+      const tick = document.createElement("div"); tick.className = "tick";
+      tick.style.bottom = (gv * 100) + "%"; bar.appendChild(tick);
+    }
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = m.label;
+    cell.appendChild(bar); cell.appendChild(lbl); host.appendChild(cell);
+  }
+}
+
+// ---- drills: one technique at a time, looping, no race attached ----
+// Doubles as the way to look at a feature without riding a stage to find one.
+const DRILLS = [
+  { id: "cadence", name: "Pedalling", tip: "Cadence, and what soft pedalling costs you.", tips: ["Alternate the pads. Tapping the same side twice is a missed pedal.", "The faster and cleaner the rhythm, the more power you make.", "Both pads at once is soft pedalling: no power, but your legs come back."],
+    stage: 3, setup: r => { tutClear(r); } },
+  { id: "draft", name: "Finding a wheel", tip: "Where the shelter is, and what it saves you.", tips: ["Steer into the cone behind the rider. It starts off to one side, so you have to go and find it.", "The brighter the cone, the less you are spending.", "Shelter stacks: two riders ahead is better than one, three is better again."],
+    stage: 3, setup: r => { const o = tutWheel(r, 7); o.x = r.you.x + 2.2; } },
+  { id: "jump", name: "The jump", tip: "Closing a gap, and coming past.",
+    tips: ["Three quick alternating strokes inside a second fires a burst. It builds back while you sit quietly.",
+      "The rider ahead keeps opening a gap. Jump to close it, then settle into their shelter and let the burst rebuild.",
+      "When you have it back, jump again to come past. Passing costs more than closing, so pick your moment."],
+    stage: 3,
+    setup: r => { const o = tutWheel(r, 8); o.x = r.you.x; },
+    hold: r => {
+      const y = r.you, o = r.riders[1];
+      // they surge and ease, so a gap is always opening in front of you
+      o.eff = "tempo";
+      const t = y.dist * 0.011;
+      o.speed = y.speed * (1.05 + 0.10 * Math.sin(t));
+      o.x = y.x;
+      if (o.dist < y.dist) { o.dist = y.dist + 9; o.speed = y.speed; }   // passed: reset ahead
+      if (o.dist - y.dist > 26) o.dist = y.dist + 26;                    // never out of reach
+    } },
+  { id: "throw", name: "The bike throw", tip: "Timing the lunge for the line.", tips: ["A THROW button appears above the pads as you approach a line.", "Hit it about two metres out. The button turns green when the timing is right.", "Too early and you are freewheeling before the line. There is a rider level with you: see who takes it."],
+    stage: 3, setup: r => {
+      tutWheel(r, 0);
+      const o = r.riders[1]; o.dist = r.you.dist; o.x = r.you.x + 1.35;
+      r.course.primes = [];
+      for (let i = 1; i <= 8; i++)
+        r.course.primes.push({ d: r.you.dist + i * 130, kind: "sprint", pts: [5, 3, 2, 1], crossed: [] });
+      r.course.primes.push({ d: r.you.dist + 9000, kind: "finish", pts: [12], crossed: [] });
+    },
+    hold: r => { const o = r.riders[1]; o.speed = r.you.speed; o.eff = "tempo"; o.x = r.you.x + 1.35; } },
+  { id: "descend", name: "Descending", tip: "Holding a line at speed.", tips: ["You start on the steepest descent on the course.", "The LEAN zones at either edge change your line almost twice as fast, at a cost in speed.", "The road drifts you outward. Run wide and you meet the verge, and at speed that puts you down."],
+    stage: 4, setup: r => {
+      tutClear(r);
+      // Put them ON the descent. Standing the drill up on a queen stage was not
+      // enough: they were as likely to be climbing, which teaches nothing.
+      const c = r.course;
+      let best = null, drop = 0;
+      for (let m = 120; m < c.len - 400; m += 20) {
+        const d = Sim.elevAt(c, m) - Sim.elevAt(c, m + 300);
+        if (d > drop) { drop = d; best = m; }
+      }
+      if (best !== null) for (const o of r.riders) { o.dist += best; o.prev += best; }
+      for (const it of c.items) it.d += best || 0;
+    } },
+  { id: "holes", name: "Holes and surfaces", tip: "Reading the road surface.", tips: ["Holes are marked with an orange ring. Steer around them.", "Hitting one costs speed and can puncture you. Better tires mean fewer punctures.", "Cobbles and gravel slow you, throw you about, and cobbles break up the shelter holding the bunch together."],
+    stage: 3, setup: r => {
+      tutClear(r);
+      r.course.hazards = []; r.course.surfaces = [];
+      for (let i = 0; i < 14; i++)
+        r.course.hazards.push(Sim.MAKE.hazard(r.you.dist + 60 + i * 38, (i % 3 - 1) * 1.9));
+      r.course.surfaces.push(Sim.MAKE.surface("cobbles", r.you.dist + 220, 200, 1));
+      r.course.surfaces.push(Sim.MAKE.surface("gravel", r.you.dist + 480, 170, 1));
+    } },
+  { id: "bottles", name: "Bottles and litter zones", tip: "Getting rid of your empties.", tips: ["Empties sit under the FLUID gauge. Carrying them slows you, worst on a climb.", "Litter zones run down one side of the road. Get over to that side and tap the bottles.", "Binning them anywhere else is a fine. Zones are shorter the higher you race."],
+    stage: 3, setup: r => {
+      tutClear(r);
+      r.you.empties = 3;
+      r.course.litters = [];
+      for (let i = 0; i < 6; i++)
+        r.course.litters.push(Sim.MAKE.litter(r.you.dist + 120 + i * 190, i % 2 ? 1 : -1, 0.5));
+    },
+    hold: r => { if (r.you.empties === 0) r.you.empties = 3; } },
+  { id: "junction", name: "Roundabouts and medians", tip: "Junctions, and the line through them.", tips: ["At a roundabout the road arcs round the island. Hug it for the short line, or stay wide and safe.", "At a median you pick a side: one is tighter and shorter.", "HOP UP puts you on the median itself, then HOP DOWN off the far side. It is a shortcut, a penalty, and two chances to fall."],
+    stage: 3, setup: r => {
+      tutClear(r);
+      r.course.rounds = [];
+      // one after another, alternating kind and side, so you get repetitions rather
+      // than a long wait between them
+      // Built by the same factory the course generator uses, with a fixed sequence
+      // of sides so you get both ways round, and both kinds, in order.
+      let at = r.you.dist + 90, k = 0;
+      const rnd = () => [0.2, 0.8][k++ % 2];             // alternating sides, not random
+      for (let i = 0; i < 9; i++) {
+        const big = i % 2 === 0;
+        const rb = Sim.MAKE.round(rnd, at, big);
+        r.course.rounds.push(rb);
+        at = rb.e + 55;
+      }
+    } },
+  { id: "car", name: "Punctures and the team car", tip: "What happens after a puncture.", tips: ["You puncture on a loop, so you can watch it as many times as you like.", "The car comes on its own once the wheel is changed. It never leaves you.", "Hold its shelter and you rejoin with legs and a bottle. Sit in the wind behind it and you arrive empty."],
+    stage: 3,
+    setup: r => {
+      // A real bunch riding away up the road. With one rider six metres ahead and
+      // the rest half a kilometre back there was no peloton to be paced back TO, so
+      // the gap never met the threshold and the car was never called.
+      tutCalm(r);
+      const others = r.riders.filter(o => !o.you);
+      others.forEach((o, i) => {
+        o.dist = r.you.dist + 9 + (i % 3) * 2.4;
+        o.x = ((i % 4) - 1.5) * 1.5;
+        o.speed = r.you.speed;
+      });
+      r.you.drillT = 0;
+    },
+    hold: r => {
+      const y = r.you;
+      // Drives the whole cycle itself rather than waiting on the puncture timer.
+      // The old version re-armed on a counter that was shorter than the puncture, so
+      // the wheel was never changed and the car was never called.
+      // The bunch rides ON, and away. Without something up the road pulling clear
+      // there is nothing for the car to pace you back to, so it was never called.
+      for (const o of r.riders) {
+        if (o.you) continue;
+        o.eff = "tempo";
+        o.speed = Sim.CFG.base * 1.02;
+        o.energy = o.legCap; o.fuel = 100; o.fluid = 100;
+        if (o.dist < y.dist - 60) o.dist = y.dist + 40;  // never lets them fall behind you
+      }
+      if (y.tow > 0) { y.drillT = 0; return; }         // on the car: leave it be
+      if (y.flat > 0) return;                          // waiting on the wheel
+      y.drillT = (y.drillT || 0) + 1;
+      if (y.drillT > 150) { y.flat = 5.0; y.needTow = true; y.drillT = 0; }
+    } },
+  { id: "wind", name: "Crosswinds", tip: "Finding shelter in a crosswind.", tips: ["The arrow at the top shows which way the wind is blowing, and how hard.", "Shelter swings to the sheltered side of the wheel ahead, not directly behind it.", "In a full crosswind, sitting straight behind someone is simply wrong."],
+    stage: 3, setup: r => {
+      const o = tutWheel(r, 6); o.x = 0;
+      r.course.winds = [];
+      for (let i = 0; i < 24; i++)
+        r.course.winds.push({ d: i * 140 - 200, dir: Math.sin(i * 0.9), str: 0.55 + 0.45 * Math.sin(i * 0.5) });
+    } },
+  { id: "sprint", name: "Holding your line", tip: "Sprinting without getting relegated.", tips: ["Approaching a line, the corridor you are held to is drawn on the road.", "You may change your line. You may not change it into a rider close enough to be affected.", "Do that while contesting the places and you lose the points, the money, and take a fine."],
+    stage: 3, setup: r => {
+      tutWheel(r, 0);
+      // A whole line of riders across the road, not one. Moving off your line only
+      // means something if there is somebody there for it to affect.
+      const others = r.riders.filter(o => !o.you);
+      const slots = [1.2, -1.2, 2.3, -2.3];              // four abreast is a sprint
+      others.forEach((o, i) => {
+        if (i >= slots.length) { o.dist = r.you.dist - 500; return; }
+        o.dist = r.you.dist + (i % 2 ? 0.35 : -0.35);
+        o.x = clamp(r.you.x + slots[i], -3.6, 3.6);
+        o.speed = r.you.speed;
+      });
+      r.course.primes = [];
+      for (let i = 1; i <= 8; i++)
+        r.course.primes.push({ d: r.you.dist + i * 130, kind: "sprint", pts: [5, 3, 2, 1], crossed: [] });
+      r.course.primes.push({ d: r.you.dist + 9000, kind: "finish", pts: [12], crossed: [] });
+    },
+    hold: r => {
+      for (const o of r.riders) {
+        if (o.you || o.dist < r.you.dist - 100) continue;
+        o.speed = r.you.speed; o.eff = "tempo";
+        if (Math.abs(o.dist - r.you.dist) > 16) o.dist = r.you.dist + (o.i % 2 ? 0.35 : -0.35);
+      }
+    } }
+];
+let drill = null, drillPick = 0;
+function showDrillBrief(i) {
+  drillPick = i;
+  const d = DRILLS[i];
+  $("dbTitle").textContent = d.name;
+  $("dbSub").textContent = d.tip;
+  const box = $("dbTips"); box.innerHTML = ""; box.className = "picks";
+  for (const t of (d.tips || [])) {
+    const row = document.createElement("div");
+    row.style.cssText = "padding:11px 13px;border-radius:12px;background:rgba(46,49,47,.05);"
+      + "font-size:13px;line-height:1.45";
+    row.textContent = t;
+    box.appendChild(row);
+  }
+  show("drillBrief");
+}
+function startDrill(i) {
+  const d = DRILLS[i];
+  drill = { i, tip: d.tip, name: d.name };
+  tut = null; tutFinished = false;
+  race = Sim.createRace({ seed: 90210 + i, stageIndex: d.stage, playerType, kit: ladder.kit,
+    gc: {}, leaders: {}, div: 4 });
+  tour = { seed: 90210, stage: 0, gc: {}, leaders: {}, fatigue: {}, schedule: [d.stage], drill: true };
+  d.setup(race);
+  flashes = []; phase = "race"; paused = false; Tilt.recentre();
+  strokes = []; alt = []; lastSide = null; spinHint = 0;
+  show("menu"); $("menu").classList.add("hide");
+  $("drillDone").classList.remove("hide");
+}
+function endDrill() {
+  drill = null; race = null; tour = null; phase = "menu";
+  $("drillDone").classList.add("hide");
+  refreshMenu(); showProfile(null); renderDrills(); show("drills");
+}
+function drillTick(dt) {
+  if (!drill || !race) return;
+  const d = DRILLS[drill.i], you = race.you, c = race.course;
+  if (d.hold) d.hold(race);
+  if (you.dist > c.len * 0.55) {              // never runs out of road
+    const back = c.len * 0.35;
+    for (const o of race.riders) { o.dist -= back; o.prev -= back; }
+    for (const it of c.items) it.d -= back;
+    for (const a of [c.primes, c.litters, c.rounds, c.surfaces, c.hazards]) {
+      if (!a) continue;
+      for (const x of a) { if (x.d !== undefined) x.d -= back; if (x.s !== undefined) { x.s -= back; x.e -= back; } }
+    }
+    for (const hz of (c.hazards || [])) hz.hit = new Set();
+    for (const pr of c.primes) pr.crossed = [];
+    you.threw = null; you.forfeit = null;
+  }
+}
+// Runs once at startup. Every drill is set up against a throwaway race and its
+// features are checked for the numbers the renderer and the physics actually read.
+// A silently broken drill is how a roundabout ended up neither drawing nor colliding.
+function checkDrills() {
+  const bad = [];
+  const num = v => typeof v === "number" && isFinite(v);
+  for (const d of DRILLS) {
+    let r;
+    try {
+      r = Sim.createRace({ seed: 1, stageIndex: d.stage, playerType: "rouleur",
+        gc: {}, leaders: {}, div: 4 });
+      d.setup(r);
+      if (d.hold) d.hold(r);
+    } catch (e) { bad.push(d.id + ": setup threw " + e.message); continue; }
+    const c = r.course;
+    for (const rb of (c.rounds || [])) {
+      if (rb.big && !(num(rb.rad) && num(rb.road) && num(rb.off))) bad.push(d.id + ": roundabout missing rad/road/off");
+      if (!rb.big && !(num(rb.iw) && num(rb.tight))) bad.push(d.id + ": divider missing iw/tight");
+      const il = Sim.islandAt(c, (rb.s + rb.e) / 2);
+      if (!il || !num(il.lo) || !num(il.hi)) bad.push(d.id + ": island is not a real shape");
+    }
+    for (const sf of (c.surfaces || [])) if (!Sim.SURFACES[sf.kind] || !num(sf.sev)) bad.push(d.id + ": bad surface");
+    for (const hz of (c.hazards || [])) if (!num(hz.d) || !num(hz.x) || !num(hz.r)) bad.push(d.id + ": bad hazard");
+    for (const l of (c.litters || [])) if (!num(l.s) || !num(l.e) || !num(l.side)) bad.push(d.id + ": bad litter zone");
+  }
+  // Silent. Nothing is printed and nothing reaches the screen: a player should never
+  // meet a developer diagnostic. The result is parked where the test harness reads
+  // it, which is where a stale drill actually gets noticed.
+  window.__drillCheck = bad;
+  return bad;
+}
+
+let dataFrom = "menu";
+
+// Every figure, no verdict. Yours beside the winners' across the same races, so the
+// conclusion is one you reach rather than one the game hands you.
+function renderData() {
+  const box = $("dataBody"); box.innerHTML = "";
+  const races = history.length;
+  $("dataSub").textContent = races
+    ? races + (races === 1 ? " race" : " races") + " on record"
+    : "";
+  if (!races) {
+    const e = document.createElement("div"); e.className = "empty";
+    e.innerHTML =
+      '<div class="ic"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="13"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="9"/><line x1="21" y1="20" x2="3" y2="20"/></svg></div>'
+      + '<h3>No races on record yet</h3>'
+      + '<p>Ride a stage and every race is logged here: where you sat in the wind, the speed you gave away in corners, when you ran low, and the winner\u2019s numbers next to yours.</p>'
+      + '<div class="cats"><span>Where you ride</span><span>Speed given away</span><span>Running low</span><span>Misfortune</span></div>';
+    box.appendChild(e);
+    return;
+  }
+
+  const mean = (f, who) => history.reduce((a, h) => a + f(h[who]), 0) / races;
+  const card = (title) => {
+    const d = document.createElement("div");
+    d.style.cssText = "margin:14px 0 4px;font-size:11px;font-weight:700;letter-spacing:.12em;"
+      + "text-transform:uppercase;opacity:.45";
+    d.textContent = title; box.appendChild(d);
+  };
+  const row = (label, f, fmt, lowerBetter) => {
+    const a = mean(f, "you"), b = mean(f, "win");
+    const r = document.createElement("div");
+    r.style.cssText = "display:flex;align-items:baseline;gap:10px;padding:8px 0;"
+      + "border-top:1px solid rgba(46,49,47,.09)";
+    const l = document.createElement("span");
+    l.style.cssText = "flex:1;font-size:13px"; l.textContent = label;
+    const v1 = document.createElement("b");
+    v1.style.cssText = "font-size:14px;min-width:64px;text-align:right"; v1.textContent = fmt(a);
+    const v2 = document.createElement("span");
+    v2.style.cssText = "font-size:13px;min-width:64px;text-align:right;opacity:.45";
+    v2.textContent = fmt(b);
+    r.appendChild(l); r.appendChild(v1); r.appendChild(v2);
+    box.appendChild(r);
+  };
+  const head = document.createElement("div");
+  head.style.cssText = "display:flex;gap:10px;font-size:10px;font-weight:700;letter-spacing:.1em;"
+    + "text-transform:uppercase;opacity:.4;padding-bottom:2px";
+  head.innerHTML = "<span style='flex:1'></span><span style='min-width:64px;text-align:right'>You</span>"
+    + "<span style='min-width:64px;text-align:right'>Winners</span>";
+  box.appendChild(head);
+
+  card("Where you ride");
+  row("In the wind", v => v.windPct, x => x.toFixed(0) + "%");
+  row("Sheltered", v => v.shelterPct, x => x.toFixed(0) + "%");
+  row("Attacking", v => v.attackPct, x => x.toFixed(1) + "%");
+  row("In contact with others", v => v.bumps, x => x.toFixed(0) + "s");
+
+  card("Speed given away");
+  row("In corners", v => v.corner, x => x.toFixed(1) + " m");
+  row("On the verge", v => v.edge, x => x.toFixed(1) + " m");
+  row("At junctions", v => v.junction, x => x.toFixed(1) + " m");
+
+  card("Running low");
+  row("Legs under 20", v => v.lowLegs, x => x.toFixed(0) + "s");
+  row("Food under 25", v => v.lowFood, x => x.toFixed(0) + "s");
+  row("Fluid under 25", v => v.lowFluid, x => x.toFixed(0) + "s");
+
+  card("Misfortune and rules");
+  row("Punctures", v => v.flats, x => x.toFixed(2));
+  row("Penalties", v => v.pens, x => x.toFixed(2));
+  row("Fines", v => v.fines, x => M.money ? M.money(x) : Math.round(x));
+
+  card("Recent stages");
+  for (const h of history.slice(-8).reverse()) {
+    const r = document.createElement("div");
+    r.style.cssText = "display:flex;gap:10px;align-items:baseline;padding:8px 0;"
+      + "border-top:1px solid rgba(46,49,47,.09);font-size:13px";
+    r.innerHTML = "<span style='flex:1'>Div " + h.div + " &middot; " + h.parcours + "</span>"
+      + "<b style='min-width:44px;text-align:right'>" + h.place + nth(h.place) + "</b>"
+      + "<span style='min-width:64px;text-align:right;opacity:.45'>"
+      + h.you.windPct.toFixed(0) + "% wind</span>";
+    box.appendChild(r);
+  }
+}
+
+checkDrills();                               // runs here, once DRILLS actually exists
+
+function renderDrills() {
+  const box = $("drillList"); box.innerHTML = ""; box.className = "picks";
+  DRILLS.forEach((d, i) => {
+    const b = document.createElement("button");
+    b.className = "pick";
+    const t = document.createElement("b"); t.textContent = d.name;
+    const p = document.createElement("span"); p.textContent = d.tip;
+    p.style.opacity = ".5"; p.style.display = "block"; p.style.fontSize = "11.5px";
+    p.style.textTransform = "none"; p.style.letterSpacing = "0";
+    b.appendChild(t); b.appendChild(p);
+    b.addEventListener("click", () => showDrillBrief(i));
+    box.appendChild(b);
+  });
 }
 
 // ---- practice ----
@@ -3745,6 +5405,7 @@ function showProfile(ghostKey) {
 requestAnimationFrame(() => { showProfile(null); renderKits(); });
 refreshMenu();
 Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); ladder.steer = "drag"; refreshMenu(); renderKits(); } });
+Store.loadData().then(v => { history = v || []; });   // PORT: a @Query, not a blob read
 $("rollBtn").addEventListener("click", () => { hideAll(); startStage(); });
 $("nextBtn").addEventListener("click", () => {
   if (tour && tour.practice) { tour = null; renderPractice(); show("practice"); return; }
