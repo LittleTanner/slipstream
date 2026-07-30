@@ -250,6 +250,7 @@
   <h2>Settings</h2>
   <div class="secthead">Steering</div>
   <button class="go ghost" id="steerBtn">Drag</button>
+  <button class="go ghost" id="leanBtn">Tilt lean: normal</button>
   <div class="secthead">Units</div>
   <button class="go ghost" id="unitBtn">Km</button>
   <div class="secthead">Help</div>
@@ -999,6 +1000,22 @@ function buildStage(seed, spec0, D) {
       litters.push(MAKE.litter(at, R() < 0.5 ? -1 : 1, D.t));
     }
   }
+  // A bin BEFORE the feed is no use to anyone: you take a bottle at the feed and then
+  // have nowhere legal to put the empty for the rest of the stage, so you either carry
+  // the drag to the line or eat a fine. The per-feed zones above get rejected whenever a
+  // narrow or a roundabout sits near them, which on some courses left every bin ahead of
+  // every feed. Guarantee one after the last feed. The side is derived, never rolled, so
+  // this cannot shift the course PRNG and change everything downstream of it.
+  const lastFeed = feeds.reduce((a, f) => Math.max(a, f.e), 0);
+  if (!litters.some(l => l.s > lastFeed)) {
+    const len = 105 - 55 * D.t;
+    for (let at = lastFeed + 55; at < spec.len - 200; at += 25) {
+      if (narrows.some(n => at < n.e + 20 && at + len > n.s - 20)) continue;
+      if (rounds.some(rb => at < rb.e + 20 && at + len > rb.s - 20)) continue;
+      litters.push(MAKE.litter(at, litters.length ? -litters[litters.length - 1].side : 1, D.t));
+      break;
+    }
+  }
 
   const put = (d, x, kind) => {
     if (d < 60 || d > spec.len - 40) return;
@@ -1675,6 +1692,19 @@ function aiThink(race, r, dt) {
     const reach = (urgent ? 3.6 : 1.9) + 0.9 * ai;
     r.grab = findItem(race, r, need, reach) || (need === "water" ? findItem(race, r, "salt", reach) : null);
   }
+  // Bin the empties. Nothing ever told a rival to throw a bottle away, so they carried
+  // every empty to the finish, took the carry drag all day, and no bottle ever hit the
+  // verge. They now move to the litter zone's side on approach and let go inside it.
+  r.binTo = null;
+  if (r.empties > 0) {
+    const zone = (C.litters || []).find(l => r.dist > l.s - 70 && r.dist < l.e);
+    if (zone) {
+      const here = edgeAt(C, r.dist);
+      r.binTo = clamp(zone.side * (here - 0.45), -here + 0.2, here - 0.2);
+      if (r.dist >= zone.s && r.dist <= zone.e
+        && Math.sign(r.x) === zone.side && Math.abs(r.x) > 0.7) r.wantDiscard = true;
+    }
+  }
   // A roundabout is the one thing on the road you cannot ride through, so it
   // overrides everything: pick a lane on approach and hold it. Without this the AI
   // kept chasing wheels straight into the island.
@@ -1711,6 +1741,7 @@ function aiThink(race, r, dt) {
     }
   } else r.rbSide = 0;
   if (r.grab) { r.tx = clamp(r.grab.x, -3.7, 3.7); return; }
+  if (r.binTo !== null) { r.tx = r.binTo; return; }   // move over and bin them
   if (r.windUp > 0) {
     if (!r.windSide) r.windSide = race.rnd() < 0.5 ? -1 : 1;
     r.tx = clamp(r.x + r.windSide * 2.2, -3.7, 3.7);
@@ -1764,6 +1795,28 @@ function stepRider(race, r, dt) {
     const moving = Math.abs(r.vx) > 0.4 && Math.sign(r.vx) === Math.sign(away);
     r.lineDrift = clamp((r.lineDrift || 0) + (moving ? dt : -dt * 2.2), 0, 1);
   } else { r.sprintLine = null; r.lineDrift = 0; }
+  // Binning empties is NOT player-only. This lived inside the player block, so a rival
+  // could want to throw a bottle away and physically never could: they carried every
+  // empty to the finish. Everyone bins; only YOUR bottles get an event callout.
+  if (r.wantDiscard) {
+    r.wantDiscard = false;
+    if (r.empties > 0) {
+      const zone = (C.litters || []).find(l => r.dist >= l.s && r.dist <= l.e
+        && Math.sign(r.x) === l.side && Math.abs(r.x) > 0.7);
+      if (zone) {
+        r.empties = 0;
+        if (r.you) race.events.push({ t: "BOTTLES AWAY", c: "water" });
+      } else if (r.you) {
+        // Littering is a CHOICE, and the fine is its consequence. A rival drifting a
+        // few centimetres off line between deciding and letting go was being fined for
+        // a decision it never made, so the AI simply holds on and tries the next zone.
+        const n = r.empties;
+        r.empties = 0;
+        penalise(race, r, "litter", n);
+        race.events.push({ t: "LITTERING", c: "spot" });
+      }
+    }
+  }
   if (r.you) {
     r.stumble = Math.max(0, r.stumble - dt);
     r.throwCool = Math.max(0, r.throwCool - dt);
@@ -1826,20 +1879,6 @@ function stepRider(race, r, dt) {
       r.onIsl = false;
       penalise(race, r, "cut");
       if (r.you) race.events.push({ t: "STRAIGHT OVER THE TOP", c: "spot" });
-    }
-    if (r.wantDiscard) {
-      r.wantDiscard = false;
-      if (r.empties > 0) {
-        const zone = (C.litters || []).find(l => r.dist >= l.s && r.dist <= l.e
-          && Math.sign(r.x) === l.side && Math.abs(r.x) > 0.7);
-        const n = r.empties;
-        r.empties = 0;
-        if (zone) race.events.push({ t: "BOTTLES AWAY", c: "water" });
-        else {
-          penalise(race, r, "litter", n);
-          race.events.push({ t: "LITTERING", c: "spot" });
-        }
-      }
     }
     if (r.wantThrow) {
       r.wantThrow = false;
@@ -1950,7 +1989,12 @@ function stepRider(race, r, dt) {
     const gp = r.hold.dist - r.dist;
     if (gp > 0 && gp < 26) tgt *= 1 + clamp((gp - 4.8) * 0.16, -0.075, 0.085);
   }
-  r.speed += (tgt - r.speed) * (1 - Math.exp(-dt * 1.35));
+  // Brakes bite faster than legs accelerate. Soft-pedalling is a real BRAKE on any
+  // terrain now, not just a lower cruising speed: back off and you shed speed quickly
+  // enough to avoid the wheel in front or open a gap, instead of easing down over a
+  // second and a half. Asymmetric on purpose, which is also how a bicycle behaves.
+  const braking = effVal <= CFG.ease + 0.02 && tgt < r.speed;
+  r.speed += (tgt - r.speed) * (1 - Math.exp(-dt * (braking ? 3.4 : 1.35)));
 
   // Your single wheel gives the main shelter, but sitting deep in a big group is
   // sheltering in itself: the mass breaks the wind even when you are not perfectly
@@ -2368,6 +2412,18 @@ function raceData(race, order) {
 function settle(race) {
   let guard = 0;
   while (race.riders.some(r => !r.finished) && guard++ < 120 * 400) tick(race, CFG.fixedDt);
+  // A rider who has completely blown up can still be crawling to the line when that
+  // guard expires. Their time is still 0, which sorted them to the FRONT and handed a
+  // bonked rider the stage win. Anyone still out on the road is classified behind every
+  // finisher, at an estimate of when they would actually have got there.
+  const home = race.riders.filter(r => r.finished && isFinite(r.time) && r.time > 0);
+  const lastHome = home.length ? Math.max.apply(null, home.map(r => r.time)) : 0;
+  for (const r of race.riders) {
+    if (r.finished && isFinite(r.time) && r.time > 0) continue;
+    const left = Math.max(0, race.course.len - r.dist);
+    r.time = lastHome + 30 + left / Math.max(r.speed, 0.6);
+    r.finished = true;
+  }
   // Riders finishing together take the same time, as in the sport.
   const order = race.riders.slice().sort((a, b) => a.time - b.time);
   let groupTime = order[0].time;
@@ -2512,7 +2568,12 @@ let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, be
 // iOS 13+ needs an explicit permission grant from inside a user gesture, and the
 // sensor only reports on a secure origin. Both can fail, so this always degrades
 // back to dragging and says why.
-const CFG_PITCH_SIGN = -1;   // flip if pulling up leans the wrong way on your device (tune on hardware)
+// Which way "pull up" leans. DeviceOrientationEvent beta GROWS as you bring the top of
+// the phone toward you, so pulling up is the POSITIVE direction — the first build had
+// this backwards, which is why the lean felt inverted on a real device. Kept as a
+// setting because handedness and how you hold the phone are the one thing that cannot
+// be tested without a real hand: Settings > Tilt lean flips it with no rebuild.
+const leanSign = () => (typeof ladder !== "undefined" && ladder && ladder.leanInvert ? -1 : 1);
 const Tilt = {
   on: false, ok: false, gamma: 0, zero: null, beta: 0, betaZero: null, state: "off", since: 0,
   handle(e) {
@@ -2544,7 +2605,7 @@ const Tilt = {
   // are provisional and meant to be tuned on a device: PITCH_SIGN flips if it feels inverted.
   pitch() {
     if (!Tilt.on || !Tilt.ok || Tilt.betaZero === null) return 0;
-    let d = (Tilt.beta - Tilt.betaZero) * CFG_PITCH_SIGN;
+    let d = (Tilt.beta - Tilt.betaZero) * leanSign();
     const dead = 3, range = 20;
     if (d < dead) return 0;
     return clamp((d - dead) / range, 0, 1);
@@ -2711,6 +2772,7 @@ function divDots(cur) {
 function refreshMenu() {
   $("unitBtn").textContent = ladder.units === "imperial" ? "Miles" : "Km";
   $("steerBtn").textContent = ladder.steer === "tilt" ? "Tilt" : "Drag";
+  $("leanBtn").textContent = "Tilt lean: " + (ladder.leanInvert ? "inverted" : "normal");
   $("mSteer").textContent = ladder.steer === "tilt" ? Tilt.label()
     : "Hold the left or right half to turn. Let go and you hold your line.";
   $("mDiv").textContent = "Division " + ladder.div + " of 8";
@@ -4779,7 +4841,12 @@ function finishStage() {
   const order = Sim.settle(race);
   const you = race.you;
   // Drills and practice do not count: the data page is about racing.
-  if (!drill && !(tour && tour.practice)) recordStage(race, STAGES[tour.schedule[tour.stage]], ladder.div);
+  // Drills do not count: they are rigged setups (riders teleported onto a descent, a
+  // forced hairpin) and would poison the averages. Practice DOES count now — it is a
+  // real stage with a real result, and excluding it left the data page permanently
+  // empty for anyone testing in practice, which reads as a broken button.
+  if (!drill) recordStage(race, STAGES[tour.schedule[tour.stage]],
+    (tour && tour.practice) ? (tour.practice.div || pracDiv) : ladder.div);
   for (const r of race.riders) {
     tour.gc[r.name] = { time: r.gcTime, sprintPts: r.sprintPts, komPts: r.komPts };
     tour.fatigue[r.name] = Math.min(100, (r.fatigue || 0) * 0.50 + r.load * 0.9);   // sleep on it
@@ -4890,6 +4957,23 @@ $("unitBtn").addEventListener("click", () => {
   ladder.units = ladder.units === "imperial" ? "metric" : "imperial";
   Store.save(ladder); refreshMenu();
 });
+// The sensor can only be armed inside a user gesture (iOS requires the permission grant
+// to come from a tap), so a saved "tilt" preference cannot be restored on load. It used
+// to be overwritten with "drag" outright, which silently threw the preference away and
+// meant re-enabling tilt in Settings after EVERY reload. Now the preference survives and
+// the sensor arms itself on your first tap, which is a gesture.
+function armTiltOnFirstTap() {
+  const go = async () => {
+    removeEventListener("pointerdown", go, true);
+    ladder.steer = "tilt";
+    if (!(await Tilt.enable())) ladder.steer = "drag";   // unsupported or refused
+    Store.save(ladder); refreshMenu();
+  };
+  addEventListener("pointerdown", go, true);
+}
+$("leanBtn").addEventListener("click", () => {
+  ladder.leanInvert = !ladder.leanInvert; Store.save(ladder); refreshMenu();
+});
 $("steerBtn").addEventListener("click", async () => {
   if (ladder.steer === "tilt") { ladder.steer = "drag"; Tilt.disable(); }
   else { ladder.steer = "tilt"; await Tilt.enable(); }     // must be inside the gesture
@@ -4934,8 +5018,8 @@ $("rulesBtn").addEventListener("click", () => {
 $("rulesBack").addEventListener("click", () => show("settings"));
 $("drillBtn").addEventListener("click", () => { renderDrills(); show("drills"); });
 $("dataBack").addEventListener("click", () => show(dataFrom));
-for (const [btn, from] of [["dataBtnMenu", "menu"], ["dataBtnRes", "result"]])
-  $(btn).addEventListener("click", () => { dataFrom = from; renderData(); show("data"); });
+for (const [btn, from] of [["dataBtnMenu", "settings"], ["dataBtnRes", "result"]])
+  $(btn).addEventListener("click", () => { dataFrom = from; show("data"); renderData(); });
 $("drillBack").addEventListener("click", () => { renderPractice(); show("practice"); });
 $("dbBack").addEventListener("click", () => { renderDrills(); show("drills"); });
 $("dbGo").addEventListener("click", () => startDrill(drillPick));
@@ -5028,6 +5112,17 @@ function renderBuild() {
   if (tourMode) { renderTourProfile(prof); prof.classList.remove("hide"); }
   else prof.classList.add("hide");
   const pr = $("bPresets"); pr.innerHTML = "";
+  // Your saved rider IS a preset. You built them once; picking six parts again just to
+  // ride the rider you already have is busywork, so the build you last locked sits
+  // first in the row and comes back in one tap.
+  const saved = buildFrom === "daily" ? (dailyBuild || committedBuild) : committedBuild;
+  if (saved) {
+    const yb = document.createElement("button");
+    yb.textContent = "Your rider";
+    yb.setAttribute("aria-pressed", Sim.SLOTS.every(([s]) => buildDraft[s] === saved[s]) ? "true" : "false");
+    yb.addEventListener("click", () => { buildDraft = Object.assign({}, saved); renderBuild(); });
+    pr.appendChild(yb);
+  }
   for (const name of Object.keys(Sim.PRESETS)) {
     const b = document.createElement("button");
     b.textContent = name;
@@ -5478,6 +5573,16 @@ let dataFrom = "menu";
 
 // Every figure, no verdict. Yours beside the winners' across the same races, so the
 // conclusion is one you reach rather than one the game hands you.
+// Ordinal suffix: 1st, 2nd, 3rd, 4th. This helper was deleted along with the old
+// upgrade shop, but renderData still called it, so the riding-data page threw a
+// ReferenceError the moment you had a single race on record. Because renderData ran
+// BEFORE show("data"), the throw meant the screen never opened and the button looked
+// dead. It only ever worked on an empty history, which returns early.
+const nth = n => {
+  const t = n % 100;
+  if (t >= 11 && t <= 13) return "th";
+  return ["th", "st", "nd", "rd"][n % 10] || "th";
+};
 function renderData() {
   const box = $("dataBody"); box.innerHTML = "";
   const races = history.length;
@@ -5689,7 +5794,7 @@ function showProfile(ghostKey) {
 }
 requestAnimationFrame(() => { showProfile(null); renderKits(); });
 refreshMenu();
-Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); ladder.steer = "drag"; ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build || null; refreshMenu(); renderKits(); showProfile(null); } });
+Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); if (ladder.steer === "tilt") { ladder.steer = "drag"; armTiltOnFirstTap(); } ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build || null; refreshMenu(); renderKits(); showProfile(null); } });
 Store.loadData().then(v => { history = v || []; });   // PORT: a @Query, not a blob read
 $("rollBtn").addEventListener("click", () => { hideAll(); startStage(); });
 $("nextBtn").addEventListener("click", () => {
