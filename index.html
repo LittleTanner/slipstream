@@ -41,6 +41,14 @@
   /* the old margin-left shifted every secondary button right of the primary one */
   button.ghost{background:none;color:var(--ink);border:1.5px solid rgba(46,49,47,.3)}
   .picks{margin-top:18px;display:flex;flex-direction:column;gap:8px}
+  .profstrip{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
+  .profchip{flex:0 0 auto;min-width:50px;text-align:center;padding:6px 8px;border-radius:9px;background:rgba(46,49,47,.07);font-size:10px;letter-spacing:.02em}
+  .profchip b{display:block;font-size:13px;margin-bottom:2px}
+  .profchip.t-mountain{background:rgba(204,0,102,.13)}
+  .profchip.t-summit{background:rgba(204,0,102,.24)}
+  .profchip.t-hills{background:rgba(120,150,60,.16)}
+  .card.locked{opacity:.6}
+  .card.locked .note{font-style:italic}
   .pick{display:block;text-align:left;padding:13px 15px;border-radius:14px;
     border:1.5px solid rgba(46,49,47,.2);background:none;font-family:var(--font);color:var(--ink);cursor:pointer}
   .pick[aria-pressed="true"]{border-color:var(--you);background:rgba(204,0,102,.07)}
@@ -202,11 +210,12 @@
   <div class="secthead">Your kit colour</div>
   <div class="kits" id="mKits"></div>
   <canvas class="radar" id="mRadar"></canvas>
+  <div class="foot" id="mRiderLabel"></div>
   <div class="picks" id="picks"></div>
   <button class="go" id="dailyBtn">Daily challenge</button>
   <button class="go ghost" id="startBtn">Start tour</button>
+  <button class="go ghost" id="buildBtn">Build your rider</button>
   <button class="go ghost" id="pracBtn">Practice</button>
-  <button class="go ghost" id="shopBtn">Upgrades</button>
   <div class="foot" id="mSteer"></div>
   <div class="foot">Hold a side to steer · alternate L and R to pedal · hold both to soft pedal</div>
 </div></div>
@@ -218,7 +227,7 @@
     <h3 id="tcTitle"></h3>
     <p id="tcBody"></p>
     <button class="go" id="tcGo">Let me try</button>
-    <button class="go ghost" id="tcMore">Learn more</button>
+    <button class="go ghost hide" id="tcMore">Learn more</button>
     <button class="go ghost" id="tcSkip">Skip the tutorial</button>
   </div>
 </div>
@@ -304,19 +313,25 @@
   <button class="go ghost" id="dShare">Copy result</button>
 </div></div>
 
-<div class="screen hide" id="shop"><div class="inner">
-  <button class="navback" id="shopBack2" aria-label="Back">&#8592;</button>
-  <button class="navicon" id="dataBtnShop" aria-label="Riding data"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="13"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="9"/><line x1="21" y1="20" x2="3" y2="20"/></svg></button>
-  <div class="eyebrow" id="sMoney"></div>
-  <h2>Upgrades</h2>
-  <p class="sub">Buy levels in order. Fit two per section, swap them free between races.</p>
+<div class="screen hide" id="build"><div class="inner">
+  <button class="navback" id="buildBack" aria-label="Back">&#8592;</button>
+  <div class="eyebrow" id="bArche"></div>
+  <h2>Build your rider</h2>
+  <p class="sub">One part per slot. Every part is a trade &mdash; the radar is the only verdict.</p>
+  <div class="hide" id="bProfile"></div>
   <div class="stickytop">
-    <canvas class="radar" id="sRadar"></canvas>
-    <div class="meters" id="sMeters"></div>
-    <div class="prev" id="sPrev"></div>
+    <canvas class="radar" id="bRadar"></canvas>
+    <div class="meters" id="bMeters"></div>
+    <div class="prev" id="bPrev"></div>
   </div>
-  <div class="segmented" id="sSegs"></div>
-  <div id="sList"></div>
+  <div class="secthead">Start from a preset</div>
+  <div class="segmented" id="bPresets"></div>
+  <div class="secthead">Tune each part</div>
+  <div class="segmented" id="bSlots"></div>
+  <div id="bList"></div>
+  <div class="secthead">Rider career</div>
+  <div id="bTactics"></div>
+  <button class="go" id="bLock">Lock in this build</button>
 </div></div>
 
 <div class="screen hide" id="brief"><div class="inner">
@@ -328,7 +343,6 @@
   <div class="secthead" id="bGCHead">General Classification</div>
   <div class="board" id="bGC"></div>
   <button class="go" id="rollBtn">Roll out</button>
-  <button class="go ghost" id="bShopBtn">Upgrades</button>
 </div></div>
 
 <div class="screen hide" id="result"><div class="inner">
@@ -361,6 +375,7 @@ const Sim = (function () {
 const CFG = {
   roadW: 9, base: 12.8, fixedDt: 1 / 120,
   ease: 0.58, tempo: 0.86, attack: 1.24,
+  gravG: 0.85, brakeMin: 0.28,        // downhill: gravity coast strength; how much soft-pedalling can scrub it
   sprintFrom: 200, sameTimeGap: 0.4,
   // The bike throw: shove the bike forward at the line. Timed right it is worth
   // most of a bike length. It also stretches you out, so you stop pedalling for a
@@ -568,6 +583,80 @@ const ARCHETYPES = {
     blurb: "Flies uphill, suffers in the wind, recovers fast. Win on the summits.",
     stats: { attack: 1.19, climbCost: 0.68, fuelUse: 0.92, recover: 1.16, windTax: 1.06, kick: 0.95, descend: 1.00 } }
 };
+// Rivals toughen with the division: their durability (which archetypes leave at baseline)
+// climbs toward a fully-developed rider's by Division 1, so a player's grown durability is
+// an edge that shrinks as the field hardens rather than a permanent grand-tour advantage.
+// Mirrors the player's full durability dimension (view DIM_BODY.durab).
+const RIVAL_DURAB = { resilience: 0.10, fatigueResist: -0.24, gut: 0.30, sweatRate: -0.14 };
+
+// ===== Rider build model (build-from-scratch redesign). Six slots, three trade parts
+// each; a build's stats are BASE_STATS plus every chosen part's deltas, so the archetype
+// is derived from the shape, not chosen. Balanced headless to 0 dominant / 0 dead. =====
+const SLOTS = [["frame", "Frame"], ["wheels", "Wheels"], ["gearing", "Gearing"], ["position", "Position"], ["tires", "Tires"], ["engine", "Engine"]];
+const PARTS = {
+  frame: [
+    { id: "steel",  name: "Steel",  note: "Heavy, but soaks up the road and never lets go", d: { resilience: +0.035, recover: +0.014, climbCost: +0.017 } },
+    { id: "alloy",  name: "Alloy",  neutral: true, note: "The honest all-rounder: good everywhere, best nowhere", d: {} },
+    { id: "carbon", name: "Carbon", note: "Feathery and stiff uphill, punishing when it turns rough",extreme: true, unlockDiv: 7,  d: { climbCost: -0.066, resilience: -0.025 } }
+  ],
+  wheels: [
+    { id: "box",  name: "Box section", note: "Light and sure-footed, but no shelter from the wind", d: { handling: +0.08, descend: +0.06, windTax: +0.05 } },
+    { id: "mid",  name: "Mid depth",   neutral: true, note: "A bit of everything, nothing to fear", d: { windTax: -0.03 } },
+    { id: "disc", name: "Deep / disc", note: "Slippery in a straight line, a handful when it blows across",extreme: true, unlockDiv: 6,  d: { windTax: -0.13, draft: +0.07, handling: -0.13, descend: -0.05 } }
+  ],
+  gearing: [
+    { id: "compact",  name: "Compact",   note: "Spins up the steep stuff, gives away the top end", d: { climbCost: -0.09, kick: -0.01 } },
+    { id: "standard", name: "Standard",  neutral: true, note: "Ratios for any road", d: {} },
+    { id: "big",      name: "Big block", note: "A monster sprint, a millstone on the climbs",extreme: true, unlockDiv: 5,  d: { kick: +0.042, attack: +0.017, climbCost: +0.056 } }
+  ],
+  position: [
+    { id: "upright", name: "Upright",       note: "Comfortable and in control, but it catches the wind", d: { handling: +0.09, recover: +0.014, windTax: +0.05 } },
+    { id: "endur",   name: "Endurance fit", neutral: true, note: "A sane compromise between fast and rideable", d: { windTax: -0.02 } },
+    { id: "slammed", name: "Slammed",       note: "Knifes the wind, murder on the back and the handling",extreme: true, unlockDiv: 4,  d: { windTax: -0.12, handling: -0.07, recover: -0.017 } }
+  ],
+  tires: [
+    { id: "slick",    name: "Race slick",      note: "Fast and light, but nothing in reserve when it gets loose", d: { windTax: -0.07, climbCost: -0.007, descend: -0.05, handling: -0.04 } },
+    { id: "allround", name: "All-round",       neutral: true, note: "Grip and speed in fair measure", d: {} },
+    { id: "grip",     name: "Grippy tubeless", note: "Sticks to anything, drags a little on smooth tar",extreme: true, unlockDiv: 3,  d: { descend: +0.09, handling: +0.07, windTax: +0.05 } }
+  ],
+  engine: [
+    { id: "diesel",   name: "Diesel legs",    note: "Rolls all day and recovers, with no explosive kick", d: { recover: +0.028, resilience: +0.021, kick: -0.017, fuelUse: -0.01 } },
+    { id: "allround", name: "All-round legs", neutral: true, note: "A balanced engine", d: {} },
+    { id: "punch",    name: "Fast twitch",    note: "A vicious kick and attack, but it burns fuel and fades", d: { kick: +0.035, attack: +0.025, fuelUse: +0.021, recover: -0.014 } }
+  ]
+};
+const PRESETS = {
+  Climber:  { frame: "carbon", wheels: "box",  gearing: "compact",  position: "upright", tires: "slick", engine: "diesel" },
+  Sprinter: { frame: "steel",  wheels: "disc", gearing: "big",      position: "slammed", tires: "slick", engine: "punch"  },
+  Rouleur:  { frame: "alloy",  wheels: "disc", gearing: "standard", position: "slammed", tires: "slick", engine: "diesel" },
+  Puncheur: { frame: "carbon", wheels: "box",  gearing: "standard", position: "endur",   tires: "grip",  engine: "punch"  }
+};
+const UNLOCK_COST = 1000;   // prize money to unlock one extreme specialist part
+function buildStats(build) {
+  const s = Object.assign({}, BASE_STATS);
+  for (const [slot] of SLOTS) {
+    const list = PARTS[slot];
+    const part = (build && list.find(p => p.id === build[slot])) || list.find(p => p.neutral) || list[0];
+    for (const [k, v] of Object.entries(part.d || {})) s[k] = (s[k] === undefined ? 0 : s[k]) + v;
+  }
+  return s;
+}
+function neutralBuild() {
+  const b = {};
+  for (const [slot] of SLOTS) { const list = PARTS[slot]; b[slot] = (list.find(p => p.neutral) || list[0]).id; }
+  return b;
+}
+// Reads the derived archetype label from a build's radar shape (climb-heavy = Climber,
+// sprint-heavy = Sprinter, both = Puncheur, otherwise Rouleur).
+function buildArchetype(build) {
+  const s = buildStats(build);
+  const n = (v, lo, hi) => clamp((v - lo) / (hi - lo), 0, 1), inv = (v, lo, hi) => clamp((hi - v) / (hi - lo), 0, 1);
+  const climb = inv(s.climbCost, 0.65, 1.35), sprint = (n(s.attack, 1.15, 1.40) + n(s.kick, 0.92, 1.16)) / 2;
+  if (climb > 0.58 && sprint > 0.55) return "Puncheur";
+  if (climb > 0.58 && climb - sprint > 0.12) return "Climber";
+  if (sprint > 0.58 && sprint - climb > 0.12) return "Sprinter";
+  return "Rouleur";
+}
 
 const STAGES = [
   { name: "Stage 1", sub: "Flat", type: "flat", len: 1400, hilly: 0.16, wind: 0.85, sprints: 2 },
@@ -709,6 +798,21 @@ function buildStage(seed, spec0, D) {
       d = end;
     }
     if (climbs.length >= (spec.flatDay ? 0 : spec.type === "flat" ? 1 : 2)) break;
+  }
+  // A real grand tour mixes its mountain stages: some finish on the summit, where the
+  // final climb runs all the way to the line so climbing decides and a pure climber can
+  // win; others finish in the valley after a descent, where a climber must already have
+  // gone clear or they lose the group sprint. Chosen deterministically per stage (its own
+  // PRNG, so it doesn't shift the rest of the course), roughly half of mountain days.
+  const RS = mulberry32(seed ^ 0x5011117);
+  const summitFinish = spec.type === "mountain" && RS() < 0.5;
+  if (summitFinish) {
+    const climbLen = 260 + RS() * 200;                 // length of the closing ascent
+    const g = 0.62 + RS() * 0.30;                       // a real mountaintop gradient
+    const start = Math.max(220, spec.len - climbLen);
+    for (let i = Math.floor(start / STEP); i < Math.ceil(spec.len / STEP); i++) raw[i] = g;
+    climbs = climbs.filter(c => c.e <= start + 20);     // absorb any climb the ramp overlaps
+    climbs.push({ s: start, e: spec.len });
   }
   const grades = new Array(n).fill(0), K = 5;
   for (let i = 0; i < n; i++) {
@@ -963,6 +1067,7 @@ function buildStage(seed, spec0, D) {
     bend: { a: (0.31 + spec.hilly * 0.28 + 0.34 * D.t * (1 - spec.hilly)) * (1 + 0.30 * D.t),
             f: 1.8 + spec.hilly * 0.7 + 0.45 * D.t,
             p: R() * 6.283 },
+    swAmp: 0.7 + 0.5 * D.t,          // switchback bite: gentle descents at Div 8, tight hairpins at Div 1
     // Daily challenge segments. The sprint board is the 200 m into EVERY sprint
     // line including the finish, summed, so it rewards repeatable power rather
     // than one saved kick. The climb board is the longest climb on the course.
@@ -978,6 +1083,20 @@ function gradeAt(c, m) {
 function elevAt(c, m) {
   const i = m / STEP, i0 = clamp(Math.floor(i), 0, c.elev.length - 1), i1 = clamp(i0 + 1, 0, c.elev.length - 1);
   return lerp(c.elev[i0], c.elev[i1], clamp(i - i0, 0, 1));
+}
+// Reshape a stretch of course into a guaranteed steep descent with sharp switchbacks.
+// The descending drill can't rely on a random mountain stage having a sustained descent
+// (a summit finish climbs), so it forces one from the rider's position forward.
+function dropIn(c, startDist, lenM) {
+  const i0 = clamp(Math.round(startDist / STEP), 0, c.grades.length - 1);
+  const steps = Math.round(lenM / STEP);
+  for (let k = 0; k < steps && i0 + k < c.grades.length; k++) {
+    const t = k / steps;
+    c.grades[i0 + k] = -0.15 - 0.035 * Math.sin(t * Math.PI);   // steady ~15-18% descent
+  }
+  for (let k = steps; k < steps + 22 && i0 + k < c.grades.length; k++) c.grades[i0 + k] = -0.02;  // run-out to wash off speed
+  for (let i = 1; i < c.elev.length; i++) c.elev[i] = c.elev[i - 1] + c.grades[i] * STEP;
+  c.swAmp = 1.3;   // sharp switchbacks for the lesson, regardless of division
 }
 // Wind is now a continuous field rather than blocks of "left" and "right". It
 // wanders through headwind, diagonal and full crosswind, and its strength rises and
@@ -1131,6 +1250,14 @@ function centreAt(c, m) {
   let v = Math.sin(m * 0.0071 * b.f + b.p) * 2.5 * b.a
     + Math.sin(m * 0.0163 * b.f + 1.7 + b.p) * 1.2 * b.a
     + Math.sin(m * 0.031 * b.f + 0.6) * 0.4 * b.a;
+  // SWITCHBACKS: on a steep descent the road zig-zags hard. A tight, high-amplitude wave
+  // gated by the local downhill gradient, so hairpins appear only where the road drops
+  // away — exactly where you must brake and lean. swAmp scales the bite with the division.
+  if (c && c.elev) {
+    const drop = (elevAt(c, m) - elevAt(c, m + 30)) / 30;   // >0 = downhill grade
+    const sw = clamp((drop - 0.05) / 0.16, 0, 1);           // ramps in on real descents
+    if (sw > 0) v += Math.sin(m * 0.047 + 0.9) * 3.4 * sw * (c.swAmp || 1);
+  }
   return v;
 }
 // sideways metres per metre forward: how hard the road is turning here
@@ -1183,10 +1310,22 @@ function createRace(opts) {
   const kit = (KITS.find(k => k.id === kitId) || KITS[0]).c;
   const you = makeRider(Object.assign({}, YOU, { c: kit }), 0, true, opts.playerType, R, opts.playerStats);
   riders.push(you);
+  // Parcours-shaped rivals: most ride their usual archetype, but a few become sharp
+  // specialists matched to the terrain (a mountain fields real climbers), and the number
+  // of specialists grows with the division. The specialists become the terrain ARCHETYPE
+  // (a fully-developed body) rather than a bike preset, now that bike parts are only a tune.
+  // Deterministic: the specialists are the riders whose archetype already suits the parcours.
+  const parcoursArch = spec.type === "flat" ? "sprinter" : "climber";
+  const nSharp = Math.round(D.t * 3);
+  const byFit = FIELD.map((f, k) => k).sort((a, b) => (FIELD[b].type === parcoursArch ? 1 : 0) - (FIELD[a].type === parcoursArch ? 1 : 0));
+  const sharp = new Set(byFit.slice(0, nSharp));
   FIELD.forEach((f, k) => {
     // whoever owned the chosen colour inherits the one the player gave up
     const cf = f.c === kit ? Object.assign({}, f, { c: YOU.c }) : f;
-    const r = makeRider(cf, k + 1, false, f.type, R);
+    const type = sharp.has(k) ? parcoursArch : f.type;   // specialists become the terrain archetype
+    const durb = {};                                     // durability grows toward a developed rider by division
+    for (const st in RIVAL_DURAB) durb[st] = BASE_STATS[st] + RIVAL_DURAB[st] * D.t;
+    const r = makeRider(cf, k + 1, false, type, R, durb);
     r.plan = pickPlan(k + 1, R);
     r.strength += D.strength;
     riders.push(r);
@@ -1259,7 +1398,7 @@ function startTow(race, r, reason) {
 function impact(race, r, bite, why) {
   if (!r.you || r.out) return;
   const fast = clamp(r.speed / CFG.base, 0.5, 1.5);
-  const lean = r.hardTurn ? 1.25 : 1;
+  const lean = 1 + 0.25 * (r.hardTurn || 0);
   const sev = clamp((bite * 0.28 + fast - 1.25) * lean, 0, 1.4);
   if (sev < CFG.crashDown) return;                       // a scrape, nothing more
   if (sev >= CFG.crashOut && race.div <= CFG.outDiv) {
@@ -1474,7 +1613,7 @@ function aiThink(race, r, dt) {
   let want = "tempo";
 
   if (p.k === "sprint" && togo < p.kick) want = "attack";
-  else if (p.k === "climb" && g > 0.45 && prog > 0.18) want = "attack";
+  else if (p.k === "climb" && g > 0.30 && prog > 0.16) want = "attack";
   else if (p.k === "raid" && prog > p.at && prog < p.at + 0.2) want = "attack";
   else if (p.k === "diesel" && togo < 130) want = "attack";
   if (p.k === "sprint" && nearestPrime(race, r, "sprint", 110) && r.energy > 42) want = "attack";
@@ -1485,7 +1624,7 @@ function aiThink(race, r, dt) {
   // sharper divisions notice sooner.
   const ai = race.D.ai;
   if (r.inPeloton && race.chase > 0.35 - 0.16 * ai && r.energy > 45 && race.breakGap > 20) want = "attack";
-  if (r.inPeloton && race.chase < 0.12 && want === "attack" && togo > 320 && p.k !== "raid") want = "tempo";
+  if (r.inPeloton && race.chase < 0.12 && want === "attack" && togo > 320 && p.k !== "raid" && g < 0.25) want = "tempo";
 
   if (r.energy < 25) r.spent = true;
   if (r.energy > 55) r.spent = false;
@@ -1509,6 +1648,18 @@ function aiThink(race, r, dt) {
       want = "tempo";
     } else if (want === "attack") {
       want = "tempo";                                            // still recovering from the last one
+    }
+  }
+  // Brake for the corner: look ahead (further the faster you go) for a sharp bend, and if
+  // you are carrying too much speed for it, ease — which on a descent scrubs gravity. A
+  // good descender's safe speed is higher, so they brake less and gain. Player does this by hand.
+  if (!r.you && g < 0.03) {
+    const lookM = 16 + r.speed * 1.15;
+    let mb = 0;
+    for (let m = r.dist + 5; m < r.dist + lookM; m += 5) mb = Math.max(mb, Math.abs(bendAt(C, m)));
+    if (mb > 0.08) {
+      const safe = 2.05 * r.stats.descend / mb;                        // safe cornering speed for that bend
+      if (r.speed > safe * 1.06) want = "ease";
     }
   }
   r.eff = want;
@@ -1770,9 +1921,22 @@ function stepRider(race, r, dt) {
   if (r.bonk) p = Math.min(p, 0.87 * r.strength);
   if (r.cracked) p = Math.min(p, Math.min(0.80, 0.66 * st.resilience) * r.strength);
 
-  let tgt = CFG.base * p * (1 - 0.34 * g * climbMul) * (1 + 0.045 * r.q * shelter);
-  // You cannot coast through the wheel in front. A real effort overrides it.
-  if (r.eff !== "attack" && r.ahead && tgt > r.ahead.speed) tgt = r.ahead.speed;
+  let tgt = CFG.base * p * (1 - 0.34 * g * climbMul) * (1 + 0.045 * r.q * shelter * (1 - 0.9 * Math.max(0, g)));
+  // GRAVITY on a descent: a coast speed that grows with steepness and your descending,
+  // added on top of pedalling so you accelerate downhill at ANY effort. Soft-pedalling
+  // is the brake — the less you pedal, the more of that gravity you scrub off, down to
+  // brakeMin. This is what you use to shed speed for a corner; hold pace to stay fast.
+  const down0 = Math.max(0, -g);
+  if (down0 > 0.012) {
+    const grav = CFG.base * CFG.gravG * down0 * (0.72 + 0.28 * st.descend);
+    const brakeF = clamp((effVal - CFG.ease) / (CFG.tempo - CFG.ease), 0, 1);   // 0 = full brake, 1 = coast fast
+    tgt += grav * (CFG.brakeMin + (1 - CFG.brakeMin) * brakeF);
+  }
+  // You cannot coast through the wheel in front on flat or rolling roads. On a real
+  // climb the bunch strings out single file and a stronger climber simply rides past,
+  // so the cap lifts uphill: climbing ability sorts the field continuously instead of
+  // selection depending on the luck of who attacks when.
+  if (r.eff !== "attack" && r.ahead && tgt > r.ahead.speed && g < 0.14) tgt = r.ahead.speed;
   if (!r.you && r.inPeloton) {
     if (race.chase > 0.15) tgt *= 1 + 0.075 * race.chase;   // they have a reason to ride
     else if (togo > 300) tgt *= 0.962 + 0.030 * race.D.ai;  // sharper fields never really soft-pedal
@@ -1799,7 +1963,11 @@ function stepRider(race, r, dt) {
   let de;
   if (effVal > CFG.tempo && !r.cracked) {
     // Pedaling hard is the only fast drain. This is your matches burning.
-    de = -(effVal - CFG.tempo) * 29 * (1 + 0.45 * Math.max(0, g) * climbMul) * (0.45 + 0.5 * exposure);
+    // On a climb the cost of a hard effort scales hard with your climbing economy:
+    // a real climber (low climbMul) can hold a fast pace uphill cheaply, while a
+    // poor climber trying to match it drains far faster and cracks. This is what
+    // lets a strong climber ride away and open a real gap.
+    de = -(effVal - CFG.tempo) * 29 * (1 + 1.6 * Math.max(0, g) * climbMul * climbMul) * (0.45 + 0.5 * exposure);
     // A jump makes the effort cheaper while it lasts. This used to be written as a
     // 55% SURCHARGE for attacking without a burst, which taxed ordinary sprinting
     // rather than bad jumps: you could have legs, pedal hard, and watch them vanish.
@@ -1865,8 +2033,8 @@ function stepRider(race, r, dt) {
   // A junction is decided in a couple of seconds, so you get the authority to place
   // yourself in it rather than watching the island arrive.
   const atJunction = (C.rounds || []).some(x => r.dist > x.s - 60 && r.dist < x.e + 12) ? 1.75 : 1;
-  const lean = ((r.you && r.hardTurn) ? 1.9 : 1) * atJunction;
-  if (r.you && r.hardTurn) r.speed *= 1 - 0.30 * dt;
+  const lean = (r.you ? 1 + 0.9 * (r.hardTurn || 0) : 1) * atJunction;
+  if (r.you) r.speed *= 1 - 0.30 * (r.hardTurn || 0) * dt;
   const maxLat = (r.you ? 2.6 : 2.1) * st.handling * pin * pace * grip * lean;
   const wantV = clamp((r.txS - r.x) * 2.4, -maxLat, maxLat);
   r.vx += (wantV - r.vx) * (1 - Math.exp(-dt * (r.you ? 9 : 5.5)));
@@ -2162,7 +2330,7 @@ function step(race, frameDt, input) {
       if (input.throwIt) you.wantThrow = true;
       if (input.discard) you.wantDiscard = true;
       if (input.hopIt) you.wantHop = true;
-      you.hardTurn = !!input.hardTurn;
+      you.hardTurn = clamp(input.hardTurn || 0, 0, 1);
       if (input.stumble) you.stumble = 0.25;
       // Clamp to the road AS IT IS HERE. A fixed 3.8 was the old nine-metre road's
       // edge, so anywhere wider than that you simply could not steer to the verge.
@@ -2288,10 +2456,11 @@ function liveOrder(race) {
 const byKey = (riders, key, tie) => riders.slice().sort((a, b) => (b[key] - a[key]) || (a[tie] - b[tie]));
 
 return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION, UPGRADE_COST, upgradeStats,
+  SLOTS, PARTS, PRESETS, UNLOCK_COST, buildStats, neutralBuild, buildArchetype,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
-  createRace, snapshot, restore, step, tick, settle, liveOrder, byKey, gradeAt, elevAt, windAt, centreAt,
+  createRace, snapshot, restore, step, tick, settle, liveOrder, byKey, gradeAt, elevAt, windAt, centreAt, dropIn,
   danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
   surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
@@ -2331,21 +2500,26 @@ addEventListener("resize", resize); resize();
 
 let race = null, tour = null, camC = 0, camPan = 0, flashes = [], phase = "menu", countdown = 0;
 let playerType = "rouleur";
+// The committed build-from-scratch rider (null = fall back to the archetype+upgrade
+// stats). When set, its stats fully override the archetype at race start.
+let committedBuild = null;
 let playerKit = "magenta";
 let dailyRun = false;
-let ladder = { div: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, units: "metric", steer: "drag", money: 0, kit: "magenta", daily: null,
-  owned: {}, fitted: { bike: [], body: [], craft: [] } };
+let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", daily: null,
+  owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0 };
 
 // ---------------------------------------------------------------- tilt steering
 // iOS 13+ needs an explicit permission grant from inside a user gesture, and the
 // sensor only reports on a secure origin. Both can fail, so this always degrades
 // back to dragging and says why.
+const CFG_PITCH_SIGN = -1;   // flip if pulling up leans the wrong way on your device (tune on hardware)
 const Tilt = {
-  on: false, ok: false, gamma: 0, zero: null, state: "off", since: 0,
+  on: false, ok: false, gamma: 0, zero: null, beta: 0, betaZero: null, state: "off", since: 0,
   handle(e) {
     if (e.gamma === null || e.gamma === undefined) return;
     Tilt.ok = true; Tilt.state = "on";
     Tilt.gamma = Tilt.gamma * 0.72 + e.gamma * 0.28;      // the sensor is noisy
+    if (e.beta !== null && e.beta !== undefined) Tilt.beta = Tilt.beta * 0.72 + e.beta * 0.28;
   },
   async enable() {
     if (typeof DeviceOrientationEvent === "undefined") { Tilt.state = "unsupported"; return false; }
@@ -2362,9 +2536,19 @@ const Tilt = {
   },
   disable() {
     window.removeEventListener("deviceorientation", Tilt.handle);
-    Tilt.on = false; Tilt.ok = false; Tilt.state = "off"; Tilt.zero = null;
+    Tilt.on = false; Tilt.ok = false; Tilt.state = "off"; Tilt.zero = null; Tilt.betaZero = null;
   },
-  recentre() { Tilt.zero = null; },
+  recentre() { Tilt.zero = null; Tilt.betaZero = null; },
+  // Pull-up amount 0..1 for LEANING: tilt the top of the phone toward you past neutral.
+  // betaZero is auto-calibrated to your hold angle (same as the steer zero). Sign/range
+  // are provisional and meant to be tuned on a device: PITCH_SIGN flips if it feels inverted.
+  pitch() {
+    if (!Tilt.on || !Tilt.ok || Tilt.betaZero === null) return 0;
+    let d = (Tilt.beta - Tilt.betaZero) * CFG_PITCH_SIGN;
+    const dead = 3, range = 20;
+    if (d < dead) return 0;
+    return clamp((d - dead) / range, 0, 1);
+  },
   // returns a road position, or null if tilt is not usable right now
   read() {
     if (!Tilt.on || !Tilt.ok || Tilt.zero === null) return null;
@@ -2505,7 +2689,7 @@ function applyLadder(place) {
   if (place === 1) {
     ladder.wins++;
     if (ladder.div === 1) ladder.topWins++;
-    if (ladder.div > 1) { ladder.div--; moved = "up"; }
+    if (ladder.div > 1) { ladder.div--; moved = "up"; ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); }
     ladder.strikes = 0;
   } else if (place >= 5) {
     ladder.strikes++;
@@ -2543,6 +2727,13 @@ function refreshMenu() {
   $("mStat").textContent = ladder.tours === 0 ? "Win a tour to move up. Two bad tours and you drop."
     : ladder.tours + " tours · " + ladder.wins + " won · " + ladder.money + " prize money"
       + (ladder.strikes ? " · one more bad tour and you drop" : "");
+  // The build is locked for the length of a tour, so you can only re-build between tours.
+  const bb = $("buildBtn");
+  if (bb) {
+    bb.disabled = canResume;
+    bb.textContent = canResume ? "Rider locked for this tour"
+      : committedBuild ? "Re-build your rider" : "Build your rider";
+  }
 }
 
 function saveTour(withRace) {
@@ -2562,16 +2753,18 @@ function newTour() {
   for (const n of names) tour.gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
 }
 function startStage() {
+  const bStats = raceStats(committedBuild, ladder.career, false);
   race = tour.practice
     ? Sim.createRace({ seed: tour.seed, stageIndex: tour.schedule[0], playerType, kit: ladder.kit,
         gc: {}, leaders: {}, div: tour.practice.div,
-        playerStats: myStats(ladder.owned, ladder.fitted) })
+        playerStats: bStats })
     : tour.daily
     ? Sim.createRace({ seed: tour.daily.seed, stageIndex: tour.daily.stageIndex,
-        playerType, kit: ladder.kit, gc: {}, leaders: {}, div: tour.daily.div })
+        playerType, kit: ladder.kit, gc: {}, leaders: {}, div: tour.daily.div,
+        playerStats: raceStats(dailyBuild, null, true) })
     : Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
-        fatigue: tour.fatigue, playerStats: myStats(ladder.owned, ladder.fitted) });
+        fatigue: tour.fatigue, playerStats: bStats });
   flashes = []; countdown = 3.2; phase = "count"; Tilt.recentre();
   paused = false; $("pauseCard").classList.add("hide");
   $("pauseBtn").classList.toggle("hide", dailyRun);
@@ -2700,11 +2893,12 @@ function readInput(dt) {
   const sticky = btn.stickyHit; btn.stickyHit = false;
   const ease = bothDown;
   const bh2 = btnR();
-  let hardTurn = keys.has("Shift");
+  let hardTurn = keys.has("Shift") ? 1 : 0;
   for (const t of touches.values()) {
     if (t.y > bh2.thY) continue;                       // only the road area steers
-    if (t.x < bh2.hardW || t.x > W - bh2.hardW) hardTurn = true;
+    if (t.x < bh2.hardW || t.x > W - bh2.hardW) hardTurn = 1;   // edge-touch = full lean (drag fallback)
   }
+  hardTurn = Math.max(hardTurn, Tilt.pitch());         // tilt: pull the phone toward you to lean, analog
   const lean = Tilt.read();
   const rate = ease ? 0 : strokeRate(now);
   const stumble = stumbleFlag; stumbleFlag = false;
@@ -3158,7 +3352,7 @@ function drawRoad() {
     const tol = Sim.CFG.lineTol, off = Math.abs(you.x - you.sprintLine);
     ctx.save();
     ctx.fillStyle = off > tol ? "rgba(213,94,0,.10)" : "rgba(46,49,47,.055)";
-    const top = Math.max(dBot, you.dist - 6), bot = Math.min(dTop, you.dist + 34);
+    const top = Math.max(dBot, you.dist - 38), bot = Math.min(dTop, you.dist + 2);
     ctx.beginPath();
     for (let i = 0; i <= 8; i++) { const d = lerp(top, bot, i / 8);
       const px = sx(d, you.sprintLine - tol), py = sy(d);
@@ -3176,7 +3370,7 @@ function drawRoad() {
       ctx.stroke();
     }
     ctx.restore();
-    if (off > tol) label("HOLD YOUR LINE", sx(you.dist + 20, you.sprintLine), sy(you.dist + 20),
+    if (off > tol) label("HOLD YOUR LINE", sx(you.dist + 4, you.sprintLine), sy(you.dist + 4),
       10, 700, PAL.spot, "center", 1.4);
   }
   for (const l of (c.litters || [])) {
@@ -3660,6 +3854,7 @@ function drawWind() {
     cx, cy + 16, 9.5, 700, "rgba(46,49,47," + (0.35 + 0.4 * w.str) + ")", "center", 1.6);
 }
 
+let pmVal = 0, pmPrevE = null;      // power-meter effort, smoothed across frames
 function drawHud(dt) {
   drawProfile(); drawWind();
   const c = C(), you = race.you, pad = Math.max(14, W * 0.045);
@@ -3676,6 +3871,27 @@ function drawHud(dt) {
     leader === you ? PAL.ink : (gap > 30 ? PAL.spot : PAL.ink), "right", -0.3);
   label("POINTS " + you.sprintPts, W - pad, yTop + 62, 11, 700, "rgba(46,49,47,.55)", "right", 1);
   label("KOM " + you.komPts, W - pad, yTop + 78, 11, 700, "rgba(46,49,47,.55)", "right", 1);
+  // Race radio (a tactic, only if fitted): calls out the race as it happens. Higher
+  // levels add the time gap and name the attacker.
+  if ((you.stats.radio || 0) > 0) {
+    const lvl = you.stats.radio;
+    let msg = "", mcol = "rgba(46,49,47,.55)";
+    const atk = race.riders.find(r => !r.you && r.eff === "attack" && r.dist > you.dist - 12 && r.dist - you.dist < 45);
+    if (atk) { msg = "ATTACK"; mcol = PAL.spot; if (lvl >= 3) msg = "ATTACK \u2014 " + atk.name + " +" + M.near(Math.max(0, atk.dist - you.dist)); }
+    else if (race.chase > 0.5) { msg = "PELOTON CHASING"; mcol = PAL.spot; }
+    else if (!you.inPeloton && you.dist > race.pelotonHead + 8) { msg = "YOU'RE CLEAR"; mcol = PAL.green; }
+    else if (race.chase > 0.2) { msg = "PELOTON STIRRING"; }
+    else if (lvl >= 2 && leader !== you && gap > 4) { msg = "LEADER +" + M.near(gap); }
+    if (msg) {
+      const rw = textW(msg, 10, 700, 1.0) + 46, rx = W / 2 - rw / 2, ry = yTop - 2;
+      ctx.save();
+      ctx.fillStyle = "rgba(244,242,236,.94)"; roundRect(rx, ry, rw, 22, 8); ctx.fill();
+      ctx.strokeStyle = mcol; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = mcol; ctx.beginPath(); ctx.arc(rx + 15, ry + 11, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      label(msg, W / 2 + 7, ry + 15, 10, 700, mcol, "center", 1.0);
+    }
+  }
 
   const gw = Math.max(9, Math.min(13, W * 0.028)), gstep = gw + 16;
   const gy = yTop + 84, gh = Math.max(110, H * 0.24);
@@ -3688,6 +3904,21 @@ function drawHud(dt) {
   gx += gstep;
   gauge(gx, gy, gw, gh, you.fuel, you.bonk ? PAL.spot : PAL.fuel, "FOOD"); gx += gstep;
   gauge(gx, gy, gw, gh, you.fluid, you.dry ? PAL.spot : PAL.water, "FLUID");
+  // Power meter (a tactic, only if fitted): reads your effort so you can pace it.
+  if ((you.stats.powerMeter || 0) > 0) {
+    const lvl = you.stats.powerMeter;
+    const target = you.eff === "ease" ? 16 : you.eff === "attack" ? 92 : 52;
+    pmVal += (target - pmVal) * Math.min(1, dt * 6);
+    const draining = pmPrevE != null && you.energy < pmPrevE - 0.0005;
+    pmPrevE = you.energy;
+    const redline = pmVal > 80 || (draining && you.energy < 42 && you.eff !== "ease");
+    const col = redline ? PAL.spot : pmVal > 60 ? PAL.fuel : PAL.water;
+    gx += gstep;
+    gauge(gx, gy, gw, gh, pmVal, col, "POWER");
+    if (lvl >= 2) label(redline ? "REDLINE" : pmVal < 30 ? "EASY" : pmVal > 60 ? "HARD" : "STEADY",
+      gx + gw / 2, gy + gh + 14, 8, 700, col, "center", 0.5);
+    if (lvl >= 3 && redline && you.energy < 38) label("EASE UP", gx + gw / 2, gy - 20, 8.5, 700, PAL.spot, "center", 0.7);
+  }
   // Empties you are carrying, and the tap target for getting rid of them. Semantic,
   // top-left, and clear of both thumbs.
   binRect = { x: pad - 6, y: gy + gh + 10, w: gw * 3 + 34, h: 34 };
@@ -4237,7 +4468,7 @@ function tutTick(dt) {
   if (!tut || !race) return;
   // The tutorial skips the countdown, which is where tilt is normally zeroed, so
   // without this the phone's rest position is never learned and tilt does nothing.
-  if (Tilt.on && Tilt.ok) Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * 0.94 + Tilt.gamma * 0.06;
+  if (Tilt.on && Tilt.ok) { Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * 0.94 + Tilt.gamma * 0.06; Tilt.betaZero = Tilt.betaZero === null ? Tilt.beta : Tilt.betaZero * 0.94 + Tilt.beta * 0.06; }
   const you = race.you, c = race.course;
   if (you.dist > c.len * 0.55) {            // the lesson never runs out of road
     const back = c.len * 0.35;
@@ -4335,7 +4566,7 @@ function frame(now) {
   if (race && (phase === "race" || phase === "count")) {
     if (phase === "count") {
       countdown -= dt;
-      if (Tilt.on && Tilt.ok) Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * 0.88 + Tilt.gamma * 0.12;
+      if (Tilt.on && Tilt.ok) { Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * 0.88 + Tilt.gamma * 0.12; Tilt.betaZero = Tilt.betaZero === null ? Tilt.beta : Tilt.betaZero * 0.88 + Tilt.beta * 0.12; }
       if (countdown <= 0) phase = "race";
     }
     else if (!paused && (!tut || $("tutCard").classList.contains("hide"))) {
@@ -4367,7 +4598,7 @@ function frame(now) {
 // ---------------------------------------------------------------- screens
 const $ = id => document.getElementById(id);
 const show = id => {
-  for (const s of ["menu", "brief", "result", "shop", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data"])
+  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data"])
     $(s).classList.toggle("hide", s !== id);
   $("drillDone").classList.add("hide");       // never leaves it stranded over a screen
 };
@@ -4476,13 +4707,13 @@ function showBriefing() {
   const preview = tour.practice
     ? Sim.createRace({ seed: tour.seed, stageIndex: tour.schedule[0], playerType, kit: ladder.kit,
         gc: {}, leaders: {}, div: tour.practice.div,
-        playerStats: myStats(ladder.owned, ladder.fitted) })
+        playerStats: Sim.buildStats(committedBuild || Sim.neutralBuild()) })
     : tour.daily
     ? Sim.createRace({ seed: tour.daily.seed, stageIndex: tour.daily.stageIndex,
         playerType, kit: ladder.kit, gc: {}, leaders: {}, div: tour.daily.div })
     : Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
-        fatigue: tour.fatigue, playerStats: myStats(ladder.owned, ladder.fitted) });
+        fatigue: tour.fatigue, playerStats: Sim.buildStats(committedBuild || Sim.neutralBuild()) });
   const c = preview.course;
   // How much climbing is in it: the number every rider looks at first.
   let up = 0, prevE = Sim.elevAt(c, 0);
@@ -4566,6 +4797,8 @@ function finishStage() {
   const oneDay = tour.schedule.length === 1;
   const words = ["Stage win", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Last"];
   const gcPlace = gc.indexOf(you) + 1;
+  growCareer(you, specAt(tour.stage).type, lastStage);   // the rider's body grows from how this stage went
+  Store.save(ladder);
   let earned = you.money;                    // per-race total; each stage banks its own
   if (lastStage) {
     earned += Math.round((Sim.CFG.purse.tour[gcPlace - 1] || 0) * race.payScale);
@@ -4625,6 +4858,13 @@ function finishStage() {
     else if (moved === "down") add("Relegated to Division " + ladder.div, PAL.spot);
     else if (ladder.strikes) add("One more bad tour and you drop", PAL.spot);
     else add("Holding Division " + ladder.div, PAL.ink);
+    add("You ride as a " + riderIdentity(ladder.career), PAL.green);
+  }
+  // which identity this stage fed, shown only for a real contesting finish (top 5)
+  const stype = specAt(tour.stage).type, splace = you.place || 8;
+  if (splace <= 5) {
+    if (stype === "mountain" || stype === "hills") add("Climbing, from the mountains", PAL.green);
+    else if (stype === "flat") add("Sprinting, from the front", PAL.green);
   }
   if (gc[0] === you) add("GC Leader", JERSEY.gc);
   if (pts[0] === you && you.sprintPts > 0) add("Points Leader · " + you.sprintPts, JERSEY.points);
@@ -4645,20 +4885,7 @@ function finishStage() {
 }
 
 const picks = $("picks");
-for (const k of ["rouleur", "sprinter", "climber"]) {
-  const t = ARCHETYPES[k];
-  const b = document.createElement("button");
-  b.className = "pick"; b.type = "button"; b.dataset.k = k;
-  b.setAttribute("aria-pressed", String(k === playerType));
-  b.innerHTML = '<span class="nm">' + t.name + '</span><span class="ds">' + t.blurb + "</span>";
-  b.addEventListener("click", () => {
-    const was = playerType;
-    playerType = k;
-    for (const el of picks.children) el.setAttribute("aria-pressed", String(el.dataset.k === k));
-    showProfile(was === k ? null : was);
-  });
-  picks.appendChild(b);
-}
+picks.classList.add("hide");   // archetype picker retired: you build your rider now, and the label is derived
 $("unitBtn").addEventListener("click", () => {
   ladder.units = ladder.units === "imperial" ? "metric" : "imperial";
   Store.save(ladder); refreshMenu();
@@ -4675,7 +4902,7 @@ function resumeTour() {
     fatigue: sv.fatigue, schedule: sv.schedule };
   if (sv.race) {
     race = Sim.restore(sv.race, { kit: ladder.kit, gc: tour.gc, fatigue: tour.fatigue,
-      playerStats: myStats(ladder.owned, ladder.fitted) });
+      playerStats: raceStats(committedBuild, ladder.career, false) });
     flashes = []; paused = false; phase = "race"; Tilt.recentre();
     strokes = []; alt = []; lastSide = null; spinHint = 0;
     $("pauseCard").classList.add("hide"); $("pauseBtn").classList.remove("hide");
@@ -4687,7 +4914,6 @@ function resumeTour() {
 $("pauseBtn").addEventListener("click", () => { setPaused(true); saveTour(true); });
 $("pResume").addEventListener("click", () => setPaused(false));
 $("pQuit").addEventListener("click", leaveRace);
-let shopFrom = "menu";
 $("rulesBtn").addEventListener("click", () => {
   const box = $("rulesList"); box.innerHTML = "";
   const rows = [
@@ -4708,7 +4934,7 @@ $("rulesBtn").addEventListener("click", () => {
 $("rulesBack").addEventListener("click", () => show("settings"));
 $("drillBtn").addEventListener("click", () => { renderDrills(); show("drills"); });
 $("dataBack").addEventListener("click", () => show(dataFrom));
-for (const [btn, from] of [["dataBtnMenu", "menu"], ["dataBtnShop", "shop"], ["dataBtnRes", "result"]])
+for (const [btn, from] of [["dataBtnMenu", "menu"], ["dataBtnRes", "result"]])
   $(btn).addEventListener("click", () => { dataFrom = from; renderData(); show("data"); });
 $("drillBack").addEventListener("click", () => { renderPractice(); show("practice"); });
 $("dbBack").addEventListener("click", () => { renderDrills(); show("drills"); });
@@ -4721,19 +4947,13 @@ $("pBack").addEventListener("click", () => { refreshMenu(); showProfile(null); s
 $("pRide").addEventListener("click", startPractice);
 $("dailyBtn").addEventListener("click", () => { renderDaily(); show("daily"); });
 $("dBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });
-$("dRide").addEventListener("click", startDaily);
+$("dRide").addEventListener("click", () => openBuild("daily"));
 $("dShare").addEventListener("click", dailyShare);
-$("shopBtn").addEventListener("click", () => { shopFrom = "menu"; preview = null; renderShop(); show("shop"); });
-$("bShopBtn").addEventListener("click", () => { shopFrom = "brief"; preview = null; renderShop(); show("shop"); });
 $("bBackBtn").addEventListener("click", () => {
   if (tour && tour.practice) { tour = null; renderPractice(); show("practice"); return; }
   if (tour && tour.daily) { dailyRun = false; tour = null; renderDaily(); show("daily"); return; }
   tour = null; saveTour();
   refreshMenu(); showProfile(null); show("menu");
-});
-$("shopBack2").addEventListener("click", () => {
-  if (shopFrom === "brief") { showBriefing(); return; }
-  showProfile(null); refreshMenu(); show("menu");
 });
 $("tcSkip").addEventListener("click", endTutorial);
 $("tutQuit").addEventListener("click", endTutorial);
@@ -4750,196 +4970,8 @@ $("startBtn").addEventListener("click", () => {
   if (!ladder.tutorialDone) { startTutorial("start"); return; }
   const sv = ladder.savedTour;
   if (sv && sv.schedule && sv.schedule.length && sv.stage < sv.schedule.length) { resumeTour(); return; }
-  newTour(); showBriefing();
+  newTour(); openBuild("tour");                 // commit a build for this tour, then it starts
 });
-// ---- upgrades ----
-// the stats you actually ride with: your archetype, plus whatever is fitted
-function myBase() { return Object.assign({}, Sim.BASE_STATS, ARCHETYPES[playerType].stats); }
-function myStats(owned, fitted) { return Sim.upgradeStats(owned, fitted, myBase()); }
-// Tapping an item previews what buying its next level would do: the radar redraws
-// with it fitted and the current shape stays behind as a dashed ghost.
-let preview = null;
-let shopSection = null;
-let renderedSection = null;
-const STAT_LABEL = {
-  attack: "Attack", kick: "Finish kick", recover: "Recovery", draft: "Draft benefit",
-  gut: "Digestion", handling: "Handling", descend: "Descending", resilience: "Durability",
-  reach: "Reach", climbCost: "Climbing cost", fuelUse: "Fuel burn", sweatRate: "Sweat rate",
-  windTax: "Wind cost", fatigueResist: "Fatigue carried", danger: "How hard they chase",
-  radio: "Race information", powerMeter: "Pacing target", carbMix: "Fuel from bottles",
-  feedSmooth: "Clean feeding"
-};
-const LOWER_BETTER = ["climbCost", "fuelUse", "sweatRate", "windTax", "fatigueResist", "danger"];
-const FLAG_STATS = ["radio", "powerMeter", "carbMix", "feedSmooth"];
-// what the stats would be if you bought the next level of `id` and fitted it
-function previewLoadout(key, id) {
-  const owned = Object.assign({}, ladder.owned);
-  const lvl = Math.min(3, (owned[id] || 0) + 1);
-  owned[id] = lvl;
-  const fitted = {};
-  for (const [k] of Sim.SECTIONS) fitted[k] = (ladder.fitted[k] || []).slice();
-  const arr = fitted[key];
-  if (arr.indexOf(id) < 0) {
-    if (arr.length >= Sim.FIT_PER_SECTION) arr.shift();
-    arr.push(id);
-  }
-  return { owned, fitted, lvl };
-}
-// The before/after for one item's next level: the tier you'd move to, the price,
-// and the stat deltas as plain "+n%" bits. Used both for the inline readout under
-// the tapped item and for the radar's previewed shape.
-function previewEffect(key, id) {
-  const item = Sim.UPGRADES[key].find(u => u.id === id);
-  const p = previewLoadout(key, id);
-  const base = myBase();
-  const now = Object.assign({}, base, myStats(ladder.owned, ladder.fitted));
-  const next = Object.assign({}, base, myStats(p.owned, p.fitted));
-  const bits = [];
-  for (const k of Object.keys(item.max)) {
-    const d = (next[k] || 0) - (now[k] || 0);
-    if (Math.abs(d) < 0.001) continue;
-    if (FLAG_STATS.indexOf(k) >= 0) { bits.push(STAT_LABEL[k] + " <b>level " + p.lvl + "</b>"); continue; }
-    const pct = Math.round(d * 100);
-    const good = LOWER_BETTER.indexOf(k) >= 0 ? pct < 0 : pct > 0;
-    bits.push(STAT_LABEL[k] + " <b>" + (pct > 0 ? "+" : "") + pct + "%</b>" + (good ? "" : " (cost)"));
-  }
-  const owns = ladder.owned[id] || 0;
-  if (!bits.length) bits.push("no further change");
-  return { item, next, now, bits, tierLabel: item.tiers[p.lvl - 1],
-    costText: owns >= 3 ? "already maxed" : Sim.UPGRADE_COST[owns] + " to buy" };
-}
-// What this one item's NEXT level adds on its own, isolated from fit swaps — so a
-// card honestly advertises the part, not the cost of bumping another item out to fit
-// it. Diffing two single-item loadouts cancels the base and leaves the pure delta.
-function itemNextEffect(key, id) {
-  const item = Sim.UPGRADES[key].find(u => u.id === id);
-  const lvl = ladder.owned[id] || 0;
-  if (lvl >= 3) return { tierLabel: item.tiers[2], costText: "already maxed", bits: ["no further change"] };
-  const base = myBase(), fit = { [key]: [id] };
-  const a = Object.assign({}, base, Sim.upgradeStats({ [id]: lvl }, fit, base));
-  const c = Object.assign({}, base, Sim.upgradeStats({ [id]: lvl + 1 }, fit, base));
-  const bits = [];
-  for (const k of Object.keys(item.max)) {
-    if (FLAG_STATS.indexOf(k) >= 0) { bits.push(STAT_LABEL[k] + " <b>level " + (lvl + 1) + "</b>"); continue; }
-    const pct = Math.round(((c[k] || 0) - (a[k] || 0)) * 100);
-    if (pct === 0) continue;
-    const good = LOWER_BETTER.indexOf(k) >= 0 ? pct < 0 : pct > 0;
-    bits.push(STAT_LABEL[k] + " <b>" + (pct > 0 ? "+" : "") + pct + "%</b>" + (good ? "" : " (cost)"));
-  }
-  if (!bits.length) bits.push("no further change");
-  return { tierLabel: item.tiers[lvl], costText: Sim.UPGRADE_COST[lvl] + " to buy", bits };
-}
-function fittedCount(key) { return (ladder.fitted[key] || []).length; }
-function isFitted(key, id) { return (ladder.fitted[key] || []).indexOf(id) >= 0; }
-function toggleFit(key, id) {
-  const arr = ladder.fitted[key] || (ladder.fitted[key] = []);
-  const i = arr.indexOf(id);
-  if (i >= 0) arr.splice(i, 1);
-  else if (arr.length < Sim.FIT_PER_SECTION) arr.push(id);
-  else { arr.shift(); arr.push(id); }        // fitting a third swaps the oldest out
-  Store.save(ladder); renderShop();
-}
-function buyLevel(id) {
-  const lvl = ladder.owned[id] || 0;
-  if (lvl >= 3) return;
-  const cost = Sim.UPGRADE_COST[lvl];
-  if (ladder.money < cost) return;
-  ladder.money -= cost;
-  ladder.owned[id] = lvl + 1;
-  Store.save(ladder); renderShop();
-}
-function renderShop() {
-  $("sMoney").textContent = ladder.money + " prize money";
-  if (!shopSection || !Sim.SECTIONS.some(s => s[0] === shopSection)) shopSection = Sim.SECTIONS[0][0];
-  const segs = $("sSegs"); segs.innerHTML = "";
-  for (const [segKey, segLabel] of Sim.SECTIONS) {
-    const seg = document.createElement("button");
-    seg.textContent = segLabel + " · " + fittedCount(segKey) + "/" + Sim.FIT_PER_SECTION;
-    seg.setAttribute("aria-pressed", segKey === shopSection ? "true" : "false");
-    seg.addEventListener("click", () => { shopSection = segKey; preview = null; renderShop(); });
-    segs.appendChild(seg);
-  }
-  const key = shopSection;
-  const list = $("sList");
-  const oldStrip = list.querySelector(".strip");
-  // keep the horizontal scroll position across a re-render of the same section, so
-  // tapping a card that's scrolled off the left doesn't snap it back to the start.
-  const keepScroll = (oldStrip && renderedSection === shopSection) ? oldStrip.scrollLeft : 0;
-  list.innerHTML = "";
-  {
-    const strip = document.createElement("div"); strip.className = "strip";
-    for (const u of Sim.UPGRADES[key]) {
-      const lvl = ladder.owned[u.id] || 0;
-      const card = document.createElement("div");
-      card.className = "card" + (preview && preview.id === u.id ? " sel" : "");
-
-      const top = document.createElement("div"); top.className = "top";
-      const nb = document.createElement("b"); nb.textContent = u.name;
-      const pips = document.createElement("span"); pips.className = "pips";
-      pips.textContent = "●●●".slice(0, lvl) + "○○○".slice(0, 3 - lvl);
-      top.appendChild(nb); top.appendChild(pips); card.appendChild(top);
-
-      const tier = document.createElement("div"); tier.className = "tier";
-      tier.textContent = lvl ? u.tiers[lvl - 1] : "Not owned";
-      card.appendChild(tier);
-
-      const note = document.createElement("div"); note.className = "note";
-      note.textContent = u.note; card.appendChild(note);
-
-      // Each card carries its own next-level effect, so it stays attached to the item.
-      const fx = document.createElement("div"); fx.className = "fx";
-      const e = itemNextEffect(key, u.id);
-      fx.innerHTML = '<span class="lead">'
-        + (lvl >= 3 ? "Maxed out" : "Next · " + e.tierLabel + " · " + e.costText)
-        + '</span>' + e.bits.join(" · ");
-      card.appendChild(fx);
-
-      const btns = document.createElement("div"); btns.className = "btns";
-      const buy = document.createElement("button");
-      if (lvl >= 3) { buy.textContent = "Maxed"; buy.disabled = true; }
-      else {
-        const cost = Sim.UPGRADE_COST[lvl];
-        buy.textContent = cost;
-        buy.disabled = ladder.money < cost;
-        buy.addEventListener("click", ev => { ev.stopPropagation(); buyLevel(u.id); });
-      }
-      const fit = document.createElement("button");
-      fit.textContent = isFitted(key, u.id) ? "Fitted" : "Fit";
-      fit.className = isFitted(key, u.id) ? "on" : "";
-      fit.disabled = lvl < 1;
-      fit.addEventListener("click", ev => { ev.stopPropagation(); toggleFit(key, u.id); });
-      btns.appendChild(buy); btns.appendChild(fit); card.appendChild(btns);
-
-      // Tapping the card body (not the buttons) previews it on the pinned radar.
-      card.addEventListener("click", () => {
-        preview = (preview && preview.id === u.id) ? null : { key, id: u.id };
-        renderShop();
-      });
-      strip.appendChild(card);
-    }
-    list.appendChild(strip);
-    strip.scrollLeft = keepScroll;
-    renderedSection = shopSection;
-  }
-  const base = myBase();
-  const now = Object.assign({}, base, myStats(ladder.owned, ladder.fitted));
-  const pv = $("sPrev");
-  if (preview) {
-    const e = previewEffect(preview.key, preview.id);
-    drawRadar($("sRadar"), e.next, riderProfile(now));    // solid = try-on, dashed = now
-    renderMeters(e.next, now, true);
-    pv.innerHTML = "Filled line and bars are with this fitted; dashed marks where you are now.";
-  } else {
-    drawRadar($("sRadar"), now, riderProfile(base));
-    renderMeters(now, base, false);
-    pv.innerHTML = "The chart and bars are you with your fitted upgrades; a stock rider sits at the centre. Tap a card to preview a change.";
-  }
-}
-// The off-chart capabilities the six radar axes can't hold: cross-day freshness,
-// how hard the bunch chases, and the flag upgrades (radio, power meter, feeds). Bars
-// fill with what you have fitted; previewing a card that moves one lights it up so an
-// off-radar upgrade never looks like it does nothing. `main` fills the bar, `ghost`
-// is the comparison (a dashed tick when it differs under preview).
 const OFF_METERS = [
   { label: "Fresh",  val: s => (1.00 - (s.fatigueResist || 1)) / (1.00 - 0.76) },
   { label: "Escape", val: s => (1.00 - (s.danger || 1)) / (1.00 - 0.82) },
@@ -4947,9 +4979,9 @@ const OFF_METERS = [
   { label: "Pacing", val: s => (s.powerMeter || 0) / 3 },
   { label: "Feeds",  val: s => ((s.carbMix || 0) + (s.feedSmooth || 0)) / 6 }
 ];
-function renderMeters(main, ghost, previewing) {
+function renderMeters(main, ghost, previewing, host) {
   const cl = v => v < 0 ? 0 : v > 1 ? 1 : v;
-  const host = $("sMeters"); host.innerHTML = "";
+  host = host || $("sMeters"); host.innerHTML = "";
   for (const m of OFF_METERS) {
     const mv = cl(m.val(main)), gv = cl(m.val(ghost));
     const changed = previewing && Math.abs(mv - gv) > 0.005;
@@ -4964,6 +4996,257 @@ function renderMeters(main, ghost, previewing) {
     const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = m.label;
     cell.appendChild(bar); cell.appendChild(lbl); host.appendChild(cell);
   }
+}
+
+// ---- build-your-rider: the build-from-scratch rider selector (redesign step 2) ----
+let buildDraft = null, buildSlot = null, buildFrom = "menu", buildAllUnlocked = false, dailyBuild = null;
+function partUnlocked(part) { return buildAllUnlocked || !part.extreme || (ladder.peakDiv || 8) <= part.unlockDiv; }
+// A preset with any locked parts swapped for that slot's neutral, so a fresh rider can
+// always ride a gentle version of the archetype and unlock the sharp parts later.
+function ridablePreset(name) {
+  const p = Sim.PRESETS[name], out = {};
+  for (const [slot] of Sim.SLOTS) {
+    const list = Sim.PARTS[slot], want = list.find(x => x.id === p[slot]);
+    out[slot] = (want && partUnlocked(want)) ? want.id : (list.find(x => x.neutral) || list[0]).id;
+  }
+  return out;
+}
+function openBuild(from) {
+  buildFrom = from || "menu";
+  buildAllUnlocked = (buildFrom === "daily");     // the daily gives everyone every part
+  const src = buildFrom === "daily" ? (dailyBuild || committedBuild) : committedBuild;
+  buildDraft = src ? Object.assign({}, src) : Sim.neutralBuild();
+  buildSlot = Sim.SLOTS[0][0];
+  renderBuild(); show("build");
+}
+function renderBuild() {
+  if (!buildDraft) buildDraft = Sim.neutralBuild();
+  if (!buildSlot) buildSlot = Sim.SLOTS[0][0];
+  const tourMode = buildFrom === "tour";
+  $("bLock").textContent = tourMode ? "Lock in & start tour" : buildFrom === "daily" ? "Lock in & ride" : "Lock in this build";
+  const prof = $("bProfile");
+  if (tourMode) { renderTourProfile(prof); prof.classList.remove("hide"); }
+  else prof.classList.add("hide");
+  const pr = $("bPresets"); pr.innerHTML = "";
+  for (const name of Object.keys(Sim.PRESETS)) {
+    const b = document.createElement("button");
+    b.textContent = name;
+    const target = ridablePreset(name);
+    b.setAttribute("aria-pressed", Sim.SLOTS.every(([s]) => buildDraft[s] === target[s]) ? "true" : "false");
+    b.addEventListener("click", () => { buildDraft = ridablePreset(name); renderBuild(); });
+    pr.appendChild(b);
+  }
+  const seg = $("bSlots"); seg.innerHTML = "";
+  for (const [slotKey, slotLabel] of Sim.SLOTS) {
+    const s = document.createElement("button");
+    s.textContent = slotLabel;
+    s.setAttribute("aria-pressed", slotKey === buildSlot ? "true" : "false");
+    s.addEventListener("click", () => { buildSlot = slotKey; renderBuild(); });
+    seg.appendChild(s);
+  }
+  const list = $("bList"); list.innerHTML = "";
+  const strip = document.createElement("div"); strip.className = "strip";
+  for (const part of Sim.PARTS[buildSlot]) {
+    const chosen = buildDraft[buildSlot] === part.id;
+    const locked = !partUnlocked(part);
+    const card = document.createElement("div"); card.className = "card" + (chosen ? " sel" : "") + (locked ? " locked" : "");
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = part.name; top.appendChild(nb);
+    const tag = document.createElement("span"); tag.className = "pips";
+    tag.textContent = chosen ? "fitted" : locked ? "locked" : ""; top.appendChild(tag);
+    card.appendChild(top);
+    const note = document.createElement("div"); note.className = "note"; note.textContent = part.note; card.appendChild(note);
+    const btns = document.createElement("div"); btns.className = "btns";
+    if (locked) {
+      const note2 = document.createElement("div"); note2.className = "fx";
+      note2.innerHTML = '<span class="lead">Unlocks at Division ' + part.unlockDiv + '</span>';
+      card.appendChild(note2);
+    } else {
+      const fit = document.createElement("button");
+      fit.textContent = chosen ? "Fitted" : "Fit"; fit.className = chosen ? "on" : "";
+      fit.addEventListener("click", ev => { ev.stopPropagation(); buildDraft[buildSlot] = part.id; renderBuild(); });
+      btns.appendChild(fit);
+      card.addEventListener("click", () => { buildDraft[buildSlot] = part.id; renderBuild(); });
+    }
+    card.appendChild(btns);
+    strip.appendChild(card);
+  }
+  list.appendChild(strip);
+  const career = buildAllUnlocked ? FULL_CAREER : (ladder.career || {});
+  const body = bodyStats(career, buildAllUnlocked ? null : ladder.div);
+  const addBody = (s) => { for (const k in body) s[k] = (s[k] === undefined ? 0 : s[k]) + body[k]; return s; };
+  const now = addBody(Sim.buildStats(buildDraft));
+  const bodyOnly = addBody(Sim.buildStats(Sim.neutralBuild()));
+  $("bArche").textContent = "Bike reads as a " + Sim.buildArchetype(buildDraft);
+  drawRadar($("bRadar"), now, riderProfile(bodyOnly));
+  renderMeters(now, bodyOnly, false, $("bMeters"));
+  $("bPrev").textContent = "Solid line is you on this bike; the ghost is your body on a neutral bike, so the gap is what the bike tunes. Parts unlock as you climb divisions.";
+  renderTactics();
+}
+// Tactics are a layer on top of the build (a separate progression, kept on the ladder,
+// not per-build). They don't change raw speed — they give you information in the race.
+const TACTICS = [
+  { key: "radio", name: "Race radio", note: "Calls out attacks, the chase and time gaps as they happen." },
+  { key: "powerMeter", name: "Power meter", note: "Reads out how hard you are going, so you can pace and not blow up." }
+];
+const WIN_STEPS = { radio: [1, 4, 8], powerMeter: [2, 6, 11] };   // career wins to reach lvl 1/2/3 (tunable)
+function tacticLevel(kind, wins) { return (WIN_STEPS[kind] || []).reduce((n, x) => n + (wins >= x ? 1 : 0), 0); }
+// The rider's body has FOUR identity dimensions that grow from how you race — climbing
+// from contesting mountains, sprinting from contesting flats, endurance from front
+// finishes, durability from surviving tours. Each is ~65% of a specialist's edge; the bike
+// tunes the other ~35%. Milestone-based (levels 0-5), so each step is a career goal, and
+// you are never locked in: race a new terrain and that dimension starts to grow.
+const DIMS = [
+  { key: "climb",  name: "Climbing",   ident: "Climber",    grow: "Top finishes on mountain stages" },
+  { key: "sprint", name: "Sprinting",  ident: "Sprinter",   grow: "Top finishes on flat stages" },
+  { key: "endur",  name: "Endurance",  ident: "Rouleur",    grow: "Finishing near the front, any terrain" },
+  { key: "durab",  name: "Durability", ident: "Hard rider", grow: "Finishing tours without cracking" }
+];
+const DIM_MILES = {   // cumulative progress for levels I-V; front-loaded so early progress is quick, mastery is a grind (tunable)
+  climb:  [12, 30, 55, 85, 120],
+  sprint: [12, 30, 55, 85, 120],
+  endur:  [8, 20, 36, 56, 80],
+  durab:  [6, 16, 30, 48, 70]
+};
+const DIM_BODY = {
+  climb:  { climbCost: -0.22 },
+  sprint: { kick: +0.14, attack: +0.07 },
+  endur:  { recover: +0.12, fuelUse: -0.04 },
+  durab:  { resilience: +0.10, fatigueResist: -0.24, gut: +0.30, sweatRate: -0.14 }
+};
+const ROMAN = ["", "I", "II", "III", "IV", "V"];
+const FULL_CAREER = { climb: 999, sprint: 999, endur: 999, durab: 999 };
+const RUST_FULL = 12;   // uncontested stages for form to fade one full level (tunable)
+function dimLevel(dim, prog) { let l = 0; for (const t of DIM_MILES[dim]) if ((prog || 0) >= t) l++; return l; }
+// Rust is form, not loss: your career level is permanent, but in the hardest divisions the top
+// level of FORM fades if you stop contesting a discipline — and one contest brings it straight
+// back. rustCap ramps from 0 at Div4+ up to a full level at Div1; the penalty is at most one level.
+function rustCap(div) { return div >= 4 ? 0 : (4 - div) / 3; }
+function rustPenalty(dim, div) { const r = (ladder.rust || {})[dim] || 0; return rustCap(div) * Math.min(1, r / RUST_FULL); }
+function effLevel(dim, career, div) { return Math.max(0, dimLevel(dim, (career || {})[dim]) - rustPenalty(dim, div)); }
+function bodyStats(career, div) {
+  const s = {};
+  const d = div == null ? 99 : div;
+  for (const dm of DIMS) { const f = effLevel(dm.key, career, d) / 5; for (const k in DIM_BODY[dm.key]) s[k] = (s[k] || 0) + DIM_BODY[dm.key][k] * f; }
+  return s;
+}
+function riderIdentity(career) {
+  let best = null, bl = 0;
+  for (const d of DIMS) { const l = dimLevel(d.key, (career || {})[d.key]); if (l > bl) { bl = l; best = d; } }
+  return bl === 0 ? "Neo-pro" : best.ident + " " + ROMAN[bl];
+}
+// Grow the dimensions from a finished stage — terrain-tied so you can't farm one to raise
+// another, and rewarding contesting (top 8) not just winning, so a developing rider climbs out.
+// Also track rust: every stage dulls each discipline's form a little; contesting one wipes its rust.
+function growCareer(you, type, tourDone) {
+  const c = ladder.career = ladder.career || { climb: 0, sprint: 0, endur: 0, durab: 0 };
+  const rz = ladder.rust = ladder.rust || { climb: 0, sprint: 0, endur: 0, durab: 0 };
+  for (const k in rz) rz[k]++;                          // a stage passes; form dulls a touch everywhere
+  const top = Math.max(0, 8 - (you.place || 8));       // 7 for a win, 0 for 8th+
+  const cl = type === "mountain" ? top : type === "hills" ? top * 0.5 : 0;
+  if (cl > 0) { c.climb += cl; rz.climb = 0; }          // contesting a discipline wipes its rust
+  if (type === "flat" && top > 0) { c.sprint += top; rz.sprint = 0; }
+  const en = Math.max(0, 6 - (you.place || 8));
+  if (en > 0) { c.endur += en; rz.endur = 0; }
+  const du = (!you.bonk && !you.dry ? 1.5 : 0) + (tourDone ? 3 : 0);
+  if (du > 0) { c.durab += du; rz.durab = 0; }
+}
+function renderTactics() {
+  const host = $("bTactics"); if (!host) return; host.innerHTML = "";
+  const daily = buildAllUnlocked;
+  const career = daily ? FULL_CAREER : (ladder.career || {});
+  for (const d of DIMS) {
+    const lvl = dimLevel(d.key, career[d.key]), prog = daily ? 0 : (career[d.key] || 0);
+    const row = document.createElement("div"); row.className = "card";
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = d.name; top.appendChild(nb);
+    const pips = document.createElement("span"); pips.className = "pips"; pips.textContent = lvl > 0 ? ROMAN[lvl] : "\u2013";
+    top.appendChild(pips); row.appendChild(top);
+    const note = document.createElement("div"); note.className = "note"; note.textContent = d.grow; row.appendChild(note);
+    const eff = daily ? lvl : Math.round(effLevel(d.key, career, ladder.div));
+    if (!daily && lvl > 0 && eff < lvl) {
+      const r = document.createElement("div"); r.className = "fx";
+      r.innerHTML = '<span class="lead">Rusty \u2014 riding as ' + (eff > 0 ? ROMAN[eff] : "\u2013") + '. Race it to sharpen.</span>';
+      row.appendChild(r);
+    } else if (!daily && lvl < 5) {
+      const need = Math.ceil(DIM_MILES[d.key][lvl] - prog);
+      const hint = document.createElement("div"); hint.className = "fx";
+      hint.innerHTML = '<span class="lead">' + need + ' more to ' + d.name + ' ' + ROMAN[lvl + 1] + '</span>';
+      row.appendChild(hint);
+    }
+    host.appendChild(row);
+  }
+  for (const t of TACTICS) {
+    const lvl = daily ? 3 : tacticLevel(t.key, ladder.wins || 0);
+    const row = document.createElement("div"); row.className = "card";
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = t.name; top.appendChild(nb);
+    const pips = document.createElement("span"); pips.className = "pips";
+    pips.textContent = "\u25cf\u25cf\u25cf".slice(0, lvl) + "\u25cb\u25cb\u25cb".slice(0, 3 - lvl);
+    top.appendChild(pips); row.appendChild(top);
+    const note = document.createElement("div"); note.className = "note"; note.textContent = t.note; row.appendChild(note);
+    if (!daily && lvl < 3) {
+      const hint = document.createElement("div"); hint.className = "fx";
+      hint.innerHTML = '<span class="lead">Next level at ' + WIN_STEPS[t.key][lvl] + ' career ' + (WIN_STEPS[t.key][lvl] === 1 ? 'win' : 'wins') + '</span>';
+      row.appendChild(hint);
+    }
+    host.appendChild(row);
+  }
+}
+// A build's stats with the rider's grown body (the four dimensions) and race-craft tactics
+// layered on. The daily gives a fully-developed body and full tactics.
+function raceStats(build, career, daily) {
+  const s = Sim.buildStats(build || Sim.neutralBuild());
+  const body = daily ? bodyStats(FULL_CAREER, null) : bodyStats(career || {}, ladder.div);
+  for (const k in body) s[k] = (s[k] === undefined ? 0 : s[k]) + body[k];
+  const w = daily ? 99 : (ladder.wins || 0);
+  s.radio = daily ? 3 : tacticLevel("radio", w);
+  s.powerMeter = daily ? 3 : tacticLevel("powerMeter", w);
+  return s;
+}
+$("buildBtn").addEventListener("click", () => openBuild("menu"));
+$("buildBack").addEventListener("click", () => show(buildFrom === "tour" ? "menu" : buildFrom === "daily" ? "daily" : buildFrom));
+$("bLock").addEventListener("click", () => {
+  if (buildFrom === "daily") {                    // the daily uses its own all-unlocked build
+    dailyBuild = Object.assign({}, buildDraft);
+    buildAllUnlocked = false;
+    startDaily();
+    return;
+  }
+  committedBuild = Object.assign({}, buildDraft);
+  playerType = "rouleur";                      // build fully overrides stats; keep a valid base
+  ladder.build = committedBuild; Store.save(ladder);
+  showProfile(null);                            // refresh the menu radar to the new build
+  if (buildFrom === "tour") showBriefing();     // committing the build starts the tour
+  else show(buildFrom);
+});
+// The tour profile shown at lock time, so committing a build is a strategic bet: stage
+// types across the tour, with mountain days marked summit-finish (climbing decides) or
+// not (a climber must go clear). Built by generating each stage's course.
+function renderTourProfile(host) {
+  host.innerHTML = "";
+  if (!tour || !tour.schedule || !tour.schedule.length) return;
+  const head = document.createElement("div"); head.className = "secthead";
+  head.textContent = "This tour \u00b7 " + tour.schedule.length + (tour.schedule.length === 1 ? " stage" : " stages");
+  host.appendChild(head);
+  const strip = document.createElement("div"); strip.className = "profstrip";
+  tour.schedule.forEach((si, i) => {
+    const spec = Sim.STAGES[si];
+    let summit = false;
+    if (spec.type === "mountain") {
+      const seed = tour.seed + i * 1013;
+      const gc = {}; for (const n of [Sim.YOU.name, ...Sim.FIELD.map(f => f.name)]) gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
+      const r = Sim.createRace({ seed, stageIndex: si, playerType, kit: ladder.kit, gc, leaders: {}, div: ladder.div });
+      summit = Sim.gradeAt(r.course, r.course.len - 30) > 0.2;
+    }
+    const label = spec.type === "mountain" ? (summit ? "Summit" : "Mountain")
+      : spec.type === "flat" ? (spec.flatDay ? "Pan flat" : "Flat") : "Hills";
+    const chip = document.createElement("div");
+    chip.className = "profchip t-" + (summit ? "summit" : spec.type);
+    chip.innerHTML = "<b>" + (i + 1) + "</b><span>" + label + "</span>";
+    strip.appendChild(chip);
+  });
+  host.appendChild(strip);
 }
 
 // ---- drills: one technique at a time, looping, no race attached ----
@@ -4999,19 +5282,12 @@ const DRILLS = [
       r.course.primes.push({ d: r.you.dist + 9000, kind: "finish", pts: [12], crossed: [] });
     },
     hold: r => { const o = r.riders[1]; o.speed = r.you.speed; o.eff = "tempo"; o.x = r.you.x + 1.35; } },
-  { id: "descend", name: "Descending", tip: "Holding a line at speed.", tips: ["You start on the steepest descent on the course.", "The LEAN zones at either edge change your line almost twice as fast, at a cost in speed.", "The road drifts you outward. Run wide and you meet the verge, and at speed that puts you down."],
+  { id: "descend", name: "Descending", tip: "Braking and leaning down a fast descent.", tips: ["The road drops away and gravity runs you downhill fast. Soft-pedal to BRAKE and shed speed.", "Switchbacks come one after another. Wash off speed BEFORE each hairpin, then LEAN it in to make the turn.", "Carry too much speed into a bend and you drift wide to the verge, which at this pace puts you down."],
     stage: 4, setup: r => {
       tutClear(r);
-      // Put them ON the descent. Standing the drill up on a queen stage was not
-      // enough: they were as likely to be climbing, which teaches nothing.
-      const c = r.course;
-      let best = null, drop = 0;
-      for (let m = 120; m < c.len - 400; m += 20) {
-        const d = Sim.elevAt(c, m) - Sim.elevAt(c, m + 300);
-        if (d > drop) { drop = d; best = m; }
-      }
-      if (best !== null) for (const o of r.riders) { o.dist += best; o.prev += best; }
-      for (const it of c.items) it.d += best || 0;
+      // A guaranteed steep switchback descent from the rider's position, so the drill is
+      // unmistakably downhill. Scanning a queen stage was unreliable: summit finishes climb.
+      Sim.dropIn(r.course, r.you.dist + 50, 1300);
     } },
   { id: "holes", name: "Holes and surfaces", tip: "Reading the road surface.", tips: ["Holes are marked with an orange ring. Steer around them.", "Hitting one costs speed and can puncture you. Better tires mean fewer punctures.", "Cobbles and gravel slow you, throw you about, and cobbles break up the shelter holding the bunch together."],
     stage: 3, setup: r => {
@@ -5396,15 +5672,24 @@ function renderKits() {
   }
 }
 function showProfile(ghostKey) {
-  const base = myBase();
-  const withUp = Object.assign({}, base, myStats(ladder.owned, ladder.fitted));
-  const ghost = ghostKey
-    ? riderProfile(Object.assign({}, Sim.BASE_STATS, ARCHETYPES[ghostKey].stats)) : null;
-  drawRadar($("mRadar"), withUp, ghost);
+  // The menu radar now shows your committed build (solid) against a neutral rider
+  // (dashed). Before you've built one, it shows neutral with a prompt.
+  const neutral = Sim.buildStats(Sim.neutralBuild());
+  const body = bodyStats(ladder.career || {}, ladder.div);
+  const stats = Sim.buildStats(committedBuild || Sim.neutralBuild());
+  for (const k in body) stats[k] = (stats[k] === undefined ? 0 : stats[k]) + body[k];
+  drawRadar($("mRadar"), stats, committedBuild ? riderProfile(neutral) : null);
+  const lbl = $("mRiderLabel");
+  if (lbl) {
+    if (committedBuild) {
+      const id = riderIdentity(ladder.career);
+      lbl.textContent = "Bike reads as a " + Sim.buildArchetype(committedBuild) + (id !== "Neo-pro" ? "  \u00b7  you ride as a " + id : "");
+    } else lbl.textContent = "No rider built yet \u2014 tap Build your rider";
+  }
 }
 requestAnimationFrame(() => { showProfile(null); renderKits(); });
 refreshMenu();
-Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); ladder.steer = "drag"; refreshMenu(); renderKits(); } });
+Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); ladder.steer = "drag"; ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build || null; refreshMenu(); renderKits(); showProfile(null); } });
 Store.loadData().then(v => { history = v || []; });   // PORT: a @Query, not a blob read
 $("rollBtn").addEventListener("click", () => { hideAll(); startStage(); });
 $("nextBtn").addEventListener("click", () => {
