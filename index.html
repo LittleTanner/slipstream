@@ -239,6 +239,7 @@
   <p id="pBody"></p>
   <button class="go" id="pResume">Back on</button>
   <button class="go ghost" id="pQuit">Leave the race</button>
+  <button class="go ghost" id="pAbandon">Abandon the tour</button>
   <p id="pFoot" class="sub"></p>
 </div></div>
 
@@ -392,7 +393,7 @@ const Sim = (function () {
 const CFG = {
   roadW: 9, base: 12.8, fixedDt: 1 / 120,
   ease: 0.58, tempo: 0.86, attack: 1.24,
-  gravG: 0.85, brakeMin: 0.28,        // downhill: gravity coast strength; how much soft-pedalling can scrub it
+  gravG: 0.85, brakeMin: 0.16,        // downhill: gravity coast strength; how much soft-pedalling can scrub it
   elevM: 7,                           // sim elevation unit -> metres of TOTAL CLIMBING on a stage
   altM: 2.7,                          // sim elevation unit -> metres of HEIGHT above the course low point.
                                       // Deliberately a smaller scale: the sum of every ascent on a stage is
@@ -447,7 +448,8 @@ const CFG = {
   // Effort comes out of the pedals continuously. Stop pedalling and you soft pedal
   // and slowly lose ground; about two strokes a second holds tempo; more attacks.
   idle: 0.815, freeDraft: 0.72, strokeTempo: 2.0, strokeAttack: 4.0, strokeFull: 2.2,
-  ttCadence: 3.4, ttBand: 1.15, ttPeak: 0.45,   // time-trial rhythm: target cadence, tolerance, and how hard the rhythm pays
+  ttCadence: 3.4, ttBand: 1.15, ttPeak: 0.45,
+  ttGap: 5, ttDraftMax: 3.0, ttDraftQ: 0.22,   // start interval, seconds of shelter allowed, what counts as sheltering   // time-trial rhythm: target cadence, tolerance, and how hard the rhythm pays
   // Every prime pays, so a climber still contests a sprint line and a sprinter
   // still goes over the top hard. Higher divisions pay far more, which keeps the
   // best earning at the top of the ladder rather than farming the bottom.
@@ -622,7 +624,7 @@ const PARTS = {
     { id: "carbon", name: "Carbon", note: "Feathery and stiff uphill, punishing when it turns rough",extreme: true, unlockDiv: 7,  d: { climbCost: -0.066, resilience: -0.025 } }
   ],
   wheels: [
-    { id: "box",  name: "Box section", note: "Light and sure-footed, but no shelter from the wind", d: { handling: +0.08, descend: +0.06, windTax: +0.05 } },
+    { id: "box",  name: "Box section", note: "Light and sure-footed, but no shelter from the wind", d: { handling: +0.15, descend: +0.14, windTax: +0.015 } },
     { id: "mid",  name: "Mid depth",   neutral: true, note: "A bit of everything, nothing to fear", d: { windTax: -0.03 } },
     { id: "disc", name: "Deep / disc", note: "Slippery in a straight line, a handful when it blows across",extreme: true, unlockDiv: 6,  d: { windTax: -0.13, draft: +0.07, handling: -0.13, descend: -0.05 } }
   ],
@@ -1076,6 +1078,19 @@ function buildStage(seed, spec0, D) {
     }
     items.push({ d, x: clamp(x, -lim, lim), kind, taken: new Set() });
   };
+  // FOOD ALONG THE ROAD, not only in the feed zones. Attacking should be a decision about
+  // your legs, not a scavenger hunt: with food penned inside two zones a Division 1 mountain
+  // stage carried FIVE gels, so you could be forced to sit up simply because the next zone
+  // was miles away — and an empty FOOD bar chokes leg recovery to almost nothing (0.15/s
+  // against 0.97), which is why one attack ended your day. Zones stay as dense clusters;
+  // this is the drip in between.
+  {
+    const stepM = 150 + 60 * (1 - D.items);
+    for (let m = 130; m < spec.len - 140; m += stepM * (0.78 + R() * 0.44)) {
+      if (feeds.some(f => m > f.s - 55 && m < f.e + 55)) continue;
+      put(m, (R() * 2 - 1) * 2.5, R() < 0.7 ? "food" : "water");
+    }
+  }
   let side = R() < 0.5 ? -1 : 1;
   for (const f of feeds) {
     let k = 0;
@@ -1096,13 +1111,17 @@ function buildStage(seed, spec0, D) {
 
   const winds = [];
   { let m = -300;
-    let dir = R() * 2 - 1, str = R() * 0.5 * spec.wind;
+    let dir = R() * 2 - 1, str = R() * 0.5 * spec.wind, lon = R() * 2 - 1;
     while (m < spec.len + 500) {
-      winds.push({ d: m, dir: clamp(dir, -1, 1), str: clamp(str, 0, 1) });
+      // `lon` is the along-the-road component: -1 is a pure TAILWIND, +1 a pure headwind.
+      // Wind used to be a tax and nothing else, which is only half of what wind does to a
+      // bike race. Now it swings both ways and a tailwind section is a gift you can use.
+      winds.push({ d: m, dir: clamp(dir, -1, 1), str: clamp(str, 0, 1), lon: clamp(lon, -1, 1) });
       m += 150 + R() * 240;
       // Both pull back toward the middle as they wander, otherwise a random walk
       // parks against a clamp and the wind either dies or pins at full crosswind.
       dir = clamp(dir * 0.72 + (R() * 2 - 1) * 0.95, -1, 1);
+      lon = clamp(lon * 0.78 + (R() * 2 - 1) * 0.85, -1, 1);
       const mid = spec.wind * 0.55;
       str = clamp(str + (mid - str) * 0.42 + (R() * 2 - 1) * 0.45 * spec.wind, 0, spec.wind);
     }
@@ -1131,6 +1150,7 @@ function buildStage(seed, spec0, D) {
             f: 1.8 + spec.hilly * 0.7 + 0.45 * D.t,
             p: R() * 6.283 },
     swAmp: 0.7 + 0.5 * D.t,          // switchback bite: gentle descents at Div 8, tight hairpins at Div 1
+    descW: 5.7 - 1.2 * D.t,          // and the road they run on: tight at Div 8, tighter at Div 1
     // Daily challenge segments. The sprint board is the 200 m into EVERY sprint
     // line including the finish, summed, so it rewards repeatable power rather
     // than one saved kick. The climb board is the longest climb on the course.
@@ -1157,11 +1177,12 @@ function dropIn(c, startDist, lenM) {
   const steps = Math.round(lenM / STEP);
   for (let k = 0; k < steps && i0 + k < c.grades.length; k++) {
     const t = k / steps;
-    c.grades[i0 + k] = -0.15 - 0.035 * Math.sin(t * Math.PI);   // steady ~15-18% descent
+    c.grades[i0 + k] = -0.23 - 0.045 * Math.sin(t * Math.PI);   // steep enough for FULL switchbacks
   }
   for (let k = steps; k < steps + 22 && i0 + k < c.grades.length; k++) c.grades[i0 + k] = -0.02;  // run-out to wash off speed
   for (let i = 1; i < c.elev.length; i++) c.elev[i] = c.elev[i - 1] + c.grades[i] * STEP;
-  c.swAmp = 1.3;   // sharp switchbacks for the lesson, regardless of division
+  c.swAmp = 1.5;   // sharp switchbacks for the lesson, regardless of division
+  c.descW = 5.0;   // and a narrow road to take them on
 }
 // Wind is now a continuous field rather than blocks of "left" and "right". It
 // wanders through headwind, diagonal and full crosswind, and its strength rises and
@@ -1175,7 +1196,8 @@ function windAt(c, m) {
   const span = b.d - a.d;
   const t = span > 0 ? clamp((m - a.d) / span, 0, 1) : 0;
   const k = t * t * (3 - 2 * t);                        // ease, so it never snaps
-  return { dir: a.dir + (b.dir - a.dir) * k, str: a.str + (b.str - a.str) * k };
+  return { dir: a.dir + (b.dir - a.dir) * k, str: a.str + (b.str - a.str) * k,
+           lon: (a.lon || 0) + ((b.lon || 0) - (a.lon || 0)) * k };
 }
 // The road is no longer a constant. Narrow sections taper in and out so the
 // squeeze is felt before it bites, and the tightest width scales with division:
@@ -1235,6 +1257,15 @@ const FEATURE_KEYS = ["rounds", "surfaces", "hazards", "litters", "narrows", "pr
 
 function widthAt(c, m) {
   let w = CFG.roadW;
+  // A MOUNTAIN DESCENT IS NARROW. The switchbacks were always being generated, but on a
+  // nine-metre road a centreline swinging three metres still leaves a straight line
+  // through it, so the hairpins were invisible to ride. Real descent roads are about a
+  // car and a half wide, and that is what turns a bend into a corner you must take.
+  if (c.elev && c.descW) {
+    const drop = (elevAt(c, m) - elevAt(c, m + 30)) / 30;
+    const sw = clamp((drop - 0.05) / 0.16, 0, 1);
+    if (sw > 0) w = Math.min(w, CFG.roadW + (c.descW - CFG.roadW) * sw);
+  }
   for (const n of c.narrows) {
     if (m < n.s - n.taper || m > n.e + n.taper) continue;
     let k = 1;
@@ -1321,7 +1352,11 @@ function centreAt(c, m) {
   if (c && c.elev) {
     const drop = (elevAt(c, m) - elevAt(c, m + 30)) / 30;   // >0 = downhill grade
     const sw = clamp((drop - 0.05) / 0.16, 0, 1);           // ramps in on real descents
-    if (sw > 0) v += Math.sin(m * 0.047 + 0.9) * 3.4 * sw * (c.swAmp || 1);
+    // Tighter and bigger. At 0.047/3.4 a "hairpin" bent the road about 0.17, and drift is
+    // bend x speed, so your steering still beat it and you could hold a line down the whole
+    // descent without braking or leaning. Shorter wavelength and more swing put the corner
+    // beyond what steering alone can answer, which is what forces the brake.
+    if (sw > 0) v += Math.sin(m * 0.058 + 0.9) * 3.8 * sw * (c.swAmp || 1);
   }
   return v;
 }
@@ -1352,7 +1387,7 @@ function makeRider(cfg, i, isYou, typeKey, R, extra) {
     stats: Object.assign({}, BASE_STATS, isYou ? a.stats : devStats(a.stats, cfg.D), extra || {}),
     dist: -(i * 2.2) - (isYou ? 4 : 0), prev: 0,
     x: clamp(((i % 5) - 2) * 1.5 + (Math.floor(i / 5) ? 0.7 : 0), -3.4, 3.4),
-    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0,
+    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0,
     energy: 100, fuel: 100, fluid: 100,
     cracked: false, bonk: false, dry: false, absorb: 0, jump: 1, burst: 0, effV: undefined, launch: false, launched: false, prevEff: "tempo", bump: 0,
     eff: "tempo", q: 0, wheel: null, inPeloton: true, stumble: 0, spin: 0,
@@ -1395,6 +1430,17 @@ function createRace(opts) {
   const kitId = (KITS.find(k => k.id === opts.kit) || KITS[0]).id;
   const kit = (KITS.find(k => k.id === kitId) || KITS[0]).c;
   const you = makeRider(Object.assign({}, YOU, { c: kit }), 0, true, opts.playerType, R, opts.playerStats);
+  // ROLLING START. A road stage does not begin from a standstill: the bunch rolls out behind
+  // the car and the flag drops with everyone already moving. A time trial genuinely does start
+  // from a stop, so it keeps one.
+  const rollIn = spec.tt ? 0 : CFG.base * 0.60;
+  you.speed = rollIn;
+  // TIME TRIAL START INTERVALS. Riders set off one at a time, worst on GC first, so the
+  // road ahead of you holds riders you can CATCH and the road behind holds riders who can
+  // catch you. Your finishing time is your own elapsed time, so where you sit on the road
+  // is not where you sit in the race — which is exactly what a TT is, and why the time
+  // checks matter.
+  const ttGap = spec.tt ? CFG.ttGap : 0;
   riders.push(you);
   // Parcours-shaped rivals: most ride their usual archetype, but a few become sharp
   // specialists matched to the terrain (a mountain fields real climbers), and the number
@@ -1414,6 +1460,7 @@ function createRace(opts) {
     const r = makeRider(Object.assign({}, cf, { D }), k + 1, false, type, R, durb);
     r.plan = pickPlan(k + 1, R);
     r.strength += D.strength;
+    r.speed = rollIn;
     riders.push(r);
   });
   for (const r of riders) { r.tx = r.x; r.txS = r.x; r.prev = r.dist; }
@@ -1433,6 +1480,11 @@ function createRace(opts) {
   }
   const race = {
     course, riders, you, spec: course.spec, D, div: opts.div === undefined ? 8 : opts.div,
+    rollIn, ttGap,
+    // THE NEUTRAL ROLL-OUT. The bunch rolls behind the car, you can move up or down it, but
+    // nobody can attack and nobody gains a metre, so where you sit when the flag drops is
+    // your first decision of the stage rather than dead time. The CLOCK does not run yet.
+    neutral: false, pacer: { x: 0, gone: false },
     payScale: 1 + 2.5 * D.t, kit: kitId,
     stageIndex: opts.stageIndex, seed: opts.seed,
     rnd: null, rndN: 0, clock: 0, acc: 0, chase: 0, pelotonHead: 0, pelotonPace: 0, driver: null, youDriving: false,
@@ -1440,9 +1492,31 @@ function createRace(opts) {
     breakaway: [], breakGap: 0, over: false, events: [],
     leaders: opts.leaders || {}
   };
+  if (ttGap > 0) {
+    // Reverse GC order: the rider lying last sets off first, the leader goes off last, as
+    // in the sport. With no GC yet (practice, a one-day TT) it falls back to rider index,
+    // which is stable and deterministic.
+    // The tie-break matters more than it looks: with an empty GC (practice, a one-day TT)
+    // every rider ties, and sorting by index put YOU off FIRST with an empty road ahead —
+    // no one to catch, which is the entire point of intervals. Index DESCENDING sends you
+    // last, so the road ahead is full of riders. In a tour the real GC decides your slot.
+    const gcT = r => (opts.gc && opts.gc[r.name] ? opts.gc[r.name].time : 0);
+    const order = riders.slice().sort((a, b) => (gcT(b) - gcT(a)) || (b.i - a.i));
+    order.forEach((r, k) => { r.startAt = k * ttGap; r.speed = 0; });
+  }
   // counted draws, so a resumed race continues the identical sequence
   const rawRnd = mulberry32(opts.seed ^ 0xa11ce);
   race.rnd = () => { race.rndN++; return rawRnd(); };
+  // PRE-ROLL to YOUR start slot. You go off last, so without this you would sit in the
+  // start house watching a frozen road for thirty-odd seconds. Instead the race is run
+  // forward to the moment your own start beeps: the riders who set off before you are
+  // already up the road at the distances their own rides earned, and your elapsed clock
+  // begins at zero. Deterministic, and it consumes no player input because a rider whose
+  // slot has not come cannot move.
+  if (ttGap > 0 && you.startAt > 0) {
+    const steps = Math.round(you.startAt / CFG.fixedDt);
+    for (let k = 0; k < steps; k++) tick(race, CFG.fixedDt);
+  }
   return race;
 }
 
@@ -1452,7 +1526,8 @@ const PENALTY = {
   litter:  { name: "Littering",        fine: 60,  time: 0 },
   sprint:  { name: "Off your line",    fine: 120, time: 0, points: true },
   cut:     { name: "Cutting the median", fine: 80, time: 2.2 },
-  sticky:  { name: "Sticky bottle",    fine: 100, time: 3.0 }
+  sticky:  { name: "Sticky bottle",    fine: 100, time: 3.0 },
+  draft:   { name: "Sheltering",       fine: 100, time: 5.0 }
 };
 function penalise(race, r, kind, n) {
   const P = PENALTY[kind]; if (!P) return;
@@ -1600,7 +1675,9 @@ function draftFor(race, r) {
   // A TIME TRIAL has no drafting at all. Rather than special-casing the wind, the
   // shelter quality every rider offers is simply zero, so exposure resolves to full for
   // everyone and the whole draft/peloton machinery below stays untouched.
-  if (race.spec && race.spec.tt) r.q = 0;
+  // Drafting is REAL in a time trial now that riders start at intervals and you can catch
+  // one. It is simply not allowed: sit in the shelter and the commissaire is counting.
+  // (This used to force q to 0, which was right when a TT was ridden alone.)
   r.stack = stack;
   r.wheel = lead;
   r.shelterOff = off;
@@ -1697,6 +1774,35 @@ function findItem(race, r, kind, reach) {
 
 function aiThink(race, r, dt) {
   r.commit -= dt; r.think -= dt;
+  // IN A TIME TRIAL, GET OUT OF THE SHELTER — and do it NOW, above the think gate. A real
+  // rider pulls into clear air rather than sit on the wheel they have caught, because
+  // sheltering is an offence. Left on the 0.3-0.5s think tick they reacted far too slowly
+  // and the whole field collected fines they would never take. Move to the OPPOSITE side
+  // from the wheel: steering to your own nearest edge just shuffled both riders across
+  // together and kept them locked in the draft.
+  // Held on PRESENCE, not on q. Reacting to the draft itself made them oscillate: they
+  // moved aside, the shelter vanished, normal steering pulled them straight back onto the
+  // wheel, and the timer started again — which is why fines stayed high however wide the
+  // start interval was. They now commit to the pass while the rider is anywhere near.
+  if (race.spec && race.spec.tt) {
+    let ahead = null, best = 1e9;
+    for (const o of race.riders) {
+      if (o === r || o.finished || o.startAt > race.clock) continue;
+      const gap = o.dist - r.dist;
+      if (gap > 0.5 && gap < 22 && gap < best && Math.abs(o.x - r.x) < 4.2) { best = gap; ahead = o; }
+    }
+    if (ahead) {
+      const lane = edgeAt(race.course, r.dist) - 0.8;
+      r.tx = ahead.x > 0 ? -lane : lane;
+      r.grab = null;
+      // If the pass is not happening — same speed, still sheltered after a second — DROP
+      // BACK out of range instead of sitting there collecting a fine. That is what a real
+      // rider does when they cannot come by, and it is the only exit the lateral move
+      // cannot provide when there is no clear air to move into.
+      if ((r.draftT || 0) > 1.0 && r.q > CFG.ttDraftQ * 0.5) r.eff = "ease";
+      return;
+    }
+  }
   if (r.think > 0) return;
   r.think = 0.3 + race.rnd() * 0.2;
   const C = race.course, togo = C.len - r.dist, prog = r.dist / C.len, g = gradeAt(C, r.dist);
@@ -1819,6 +1925,10 @@ function aiThink(race, r, dt) {
   } else r.rbSide = 0;
   if (r.grab) { r.tx = clamp(r.grab.x, -3.7, 3.7); return; }
   if (r.binTo !== null) { r.tx = r.binTo; return; }   // move over and bin them
+  // IN A TIME TRIAL, GET OUT OF THE SHELTER. A real rider pulls into clear air rather than
+  // sit behind the rider they have caught, because sheltering is an offence. Without this
+  // the whole field quietly collected penalties they would never take — six of seven riders
+  // were being fined in a single stage. They now move aside as soon as they feel a wheel.
   if (r.windUp > 0) {
     if (!r.windSide) r.windSide = race.rnd() < 0.5 ? -1 : 1;
     r.tx = clamp(r.x + r.windSide * 2.2, -3.7, 3.7);
@@ -1850,6 +1960,8 @@ function aiThink(race, r, dt) {
 
 function stepRider(race, r, dt) {
   if (r.finished) return;
+  if (r.startAt > race.clock) return;      // still in the start house
+
   const C = race.course;
   {                                              // telemetry for the data page
     const g = r.log;
@@ -2044,6 +2156,9 @@ function stepRider(race, r, dt) {
   // added on top of pedalling so you accelerate downhill at ANY effort. Soft-pedalling
   // is the brake — the less you pedal, the more of that gravity you scrub off, down to
   // brakeMin. This is what you use to shed speed for a corner; hold pace to stay fast.
+  // TAILWIND PUSHES, headwind holds you up. Sheltered riders feel less of either, the same
+  // way the draft already blunts a crosswind, so sitting in still matters.
+  tgt *= 1 - 0.085 * w.lon * w.str * (1 - 0.55 * r.q);
   const down0 = Math.max(0, -g);
   if (down0 > 0.012) {
     const grav = CFG.base * CFG.gravG * down0 * (0.72 + 0.28 * st.descend);
@@ -2073,6 +2188,17 @@ function stepRider(race, r, dt) {
   // enough to avoid the wheel in front or open a gap, instead of easing down over a
   // second and a half. Asymmetric on purpose, which is also how a bicycle behaves.
   const braking = effVal <= CFG.ease + 0.02 && tgt < r.speed;
+  // NEUTRALISED: every rider holds the car's pace exactly, so the bunch keeps its shape and
+  // no one can steal a metre. Steering is untouched, which is the whole point — the roll-out
+  // is for moving up, not for going up the road.
+  if (race.neutral) {
+    tgt = race.rollIn;
+    r.eff = "tempo";
+    r.speed = race.rollIn;   // pinned, not merely targeted: smoothing alone let the bunch drift apart
+  }
+  // The brake outranks everything above it, gravity included: at full lever there is no
+  // target speed left to chase, which is what lets you stop on a descent.
+  if (r.you && r.brakeT > 0) tgt *= clamp(1 - r.brakeT * 1.15, 0, 1);
   r.speed += (tgt - r.speed) * (1 - Math.exp(-dt * (braking ? 3.4 : 1.35)));
 
   // Your single wheel gives the main shelter, but sitting deep in a big group is
@@ -2107,6 +2233,7 @@ function stepRider(race, r, dt) {
     // 55% SURCHARGE for attacking without a burst, which taxed ordinary sprinting
     // rather than bad jumps: you could have legs, pedal hard, and watch them vanish.
     de *= 1 - 0.30 * r.burst;
+    r.easing = false;
   } else {
     // Tempo and easing both recover. Fastest sheltered, slower alone, and choked
     // when you run low on fuel or fluid. Easing recovers faster than tempo.
@@ -2116,6 +2243,8 @@ function stepRider(race, r, dt) {
     // Widened rather than raised: a sheltered rider comes back fast enough to attack
     // twice, an exposed one barely recovers at all. Raising the baseline instead made
     // shelter matter less, which is exactly backwards.
+    r.easing = room > 0;
+    r.easeFloor = (0.10 + 0.30 * room) * st.recover * (0.55 + 0.45 * clamp(r.fuel / 40, 0, 1));
     const shelterBonus = (0.28 + 2.15 * (1 - exposure)) * (1 - 0.85 * down) + 0.95 * 0.85 * down;
     // Faster recovery so an attack can be long and a second one is possible. The
     // race is more interesting when going again is on the table.
@@ -2132,10 +2261,17 @@ function stepRider(race, r, dt) {
   // is alone, so it is not a breakaway penalty, it is just a tax on the whole field — and
   // at full strength it emptied the legs before the line no matter how well you paced.
   const ttAlone = (race.spec && race.spec.tt) ? 0.22 : 1;
-  de -= (0.55 + 1.5 * exposure * (1 + 0.7 * w.str)) * st.windTax * (1 - 0.75 * down) * ttAlone;
+  de -= (0.55 + 1.5 * exposure * (1 + 0.7 * w.str * w.lon)) * st.windTax * (1 - 0.75 * down) * ttAlone;
   if (!r.you && r.inPeloton && race.chase > 0.15) de -= 1.5 * race.chase;
   if (de > 0) de *= (r.bonk ? 0.25 : 1) * (r.fluid < 25 ? 0.55 : 1) * (r.fuel < 20 ? 0.6 : 1);
   if (de > 0) de *= 1 - r.fatigue * 0.003;          // tired legs come back slower
+  // LEGS ALWAYS COME BACK when you ease off, on any terrain, in or out of shelter — only
+  // the RATE changes. Applied HERE, after the lone-rider wind bleed, because that bleed was
+  // dragging an exposed rider's recovery back to nothing: alone on a climb with an empty
+  // stomach it was 0.15/s, which is not slow recovery, it is none, so a single attack that
+  // did not stick ended your stage. Running on empty still hurts, it just no longer traps you.
+  if (r.easing && de < r.easeFloor) de = r.easeFloor;
+  if (race.neutral) de = 0;                 // nothing is spent before the flag drops
   r.energy = clamp(r.energy + de * dt, 0, r.legCap);
   const wasCracked = r.cracked;
   if (r.energy <= 0) r.cracked = true;
@@ -2156,21 +2292,26 @@ function stepRider(race, r, dt) {
   // You do not eat in a time trial, and it is over in a minute or two. Charging it at the
   // normal rate emptied the FOOD bar before the finish, which is nonsense for the distance.
   const ttShort = (race.spec && race.spec.tt) ? 0.18 : 1;
-  r.fuel = clamp(r.fuel - burn * ttShort * dt, 0, 100);
+  if (!race.neutral) r.fuel = clamp(r.fuel - burn * ttShort * dt, 0, 100);
   const wasBonk = r.bonk; r.bonk = r.fuel <= 0;
   if (r.bonk && !wasBonk && r.you) race.events.push({ t: "BONKED", c: "fuel" });
 
   const sweat = (1 + 0.34 * thin) * (0.42 + 0.62 * (effVal - CFG.ease) / 0.66)
     * (1 + 0.40 * Math.max(0, g) - 0.22 * Math.max(0, -g))
     * (1 + 0.30 * r.q) * st.sweatRate;
-  r.fluid = clamp(r.fluid - sweat * ttShort * dt, 0, 100);
+  if (!race.neutral) r.fluid = clamp(r.fluid - sweat * ttShort * dt, 0, 100);
   const wasDry = r.dry; r.dry = r.fluid < 12;
 
   // Position over the summit is the position you get on the way down. A good
   // descender holds a line the rest of the peloton cannot.
   const pin = 1 - 0.30 * down / st.descend;
   r.txS += (r.tx - r.txS) * (1 - Math.exp(-dt * (r.you ? 7 : 2.6) * pin));
-  const pace = clamp(r.speed / CFG.base, 0.42, 1.32);      // how much road you cover
+  // STEERING IS INVERSE TO SPEED. It used to scale UP with pace, so the faster you went
+  // the more you could throw the bike about — which left a fast hairpin unmakeable at any
+  // effort and pinned you in the verge. Slowing down now buys authority as well as cutting
+  // drift (drift is bend x speed), so BRAKING is the answer to a corner, twice over. The
+  // fast end is held at the value it always had; everything gained is at low speed.
+  const pace = clamp(CFG.base * 1.5 / Math.max(r.speed, 4), 1.32, 3.0);
   const sfG = surfaceAt(C, r.dist);
   const surfGrip = sfG ? 1 - (1 - SURFACES[sfG.kind].grip) * sfG.sev : 1;
   const grip = clamp(1 - Math.abs(bendAt(C, r.dist)) * r.speed * 0.15 / st.descend, 0.42, 1) * surfGrip;
@@ -2363,8 +2504,29 @@ function stepRider(race, r, dt) {
     r.needTow = true; r.log.flats++;
     if (r.you) race.events.push({ t: "PUNCTURE", c: "spot" });
   }
-  if (r.out && !r.finished) { r.finished = true; r.time = race.clock + 9999; r.rawTime = r.time; }
-  if (r.dist >= C.len) { r.finished = true; r.time = race.clock; r.rawTime = race.clock; }
+  // SHELTERING. Catching your minute man is a reward, not a free tow: you may use the
+  // shelter briefly to come past, and then you must go. The timer DECAYS rather than
+  // resetting when you pull out, so dipping in and out cannot be used to game it. Everyone
+  // is judged the same, exactly as with every other penalty.
+  if (race.spec && race.spec.tt && !r.finished) {
+    // You are not penalised for the time it takes to GET OUT. A commissaire fines a rider
+    // who SITS in the shelter, not one who is passing through it or pulling off the wheel —
+    // and charging the exit made the whole field fineable simply for taking two seconds to
+    // move across. So the clock stops while the shelter you are in is shrinking.
+    const clearing = r.q < (r.qPrev === undefined ? r.q : r.qPrev) - 1e-4;
+    r.qPrev = r.q;
+    const sheltering = r.q > CFG.ttDraftQ && !clearing;
+    r.draftT = Math.max(0, (r.draftT || 0) + (sheltering ? dt : -dt * 0.55));
+    if (r.draftT > CFG.ttDraftMax) {
+      r.draftT = 0;
+      penalise(race, r, "draft", 1);
+      if (r.you) race.events.push({ t: "SHELTERING", c: "spot" });
+    }
+  }
+  // Your time is YOUR time: the clock runs from your own start slot, not the first rider's.
+  const elapsed = race.clock - (r.startAt || 0);
+  if (r.out && !r.finished) { r.finished = true; r.time = elapsed + 9999; r.rawTime = r.time; }
+  if (r.dist >= C.len) { r.finished = true; r.time = elapsed; r.rawTime = elapsed; }
   // TIME CHECKS. A time trial is not raced against riders on the road, it is raced
   // against the clock, so the only meaningful comparison is time at the same point.
   // Everyone starts together here, so elapsed time at a checkpoint IS the split, and
@@ -2373,10 +2535,11 @@ function stepRider(race, r, dt) {
     for (let k = 0; k < race.ttChecks.length; k++) {
       const d = race.ttChecks[k];
       if (r.prev < d && r.dist >= d) {
-        (r.splits || (r.splits = []))[k] = race.clock;
+        const el = race.clock - (r.startAt || 0);
+        (r.splits || (r.splits = []))[k] = el;
         const prevBest = race.bestSplit[k];
-        if (prevBest === undefined || race.clock < prevBest) race.bestSplit[k] = race.clock;
-        if (r.you) race.ttCheck = { k, t: race.clock, best: prevBest };
+        if (prevBest === undefined || el < prevBest) race.bestSplit[k] = el;
+        if (r.you) race.ttCheck = { k, t: el, best: prevBest };
       }
     }
   }
@@ -2392,7 +2555,7 @@ const HIT_LAT = 1.15, HIT_LON = 1.9;
 function separate(race, dt) { resolve(race, dt); resolve(race, 0); }   // second pass settles chains
 function zoneOf(race, r) { const z = sprintZone(race.course, r); return z ? z.d : null; }
 function resolve(race, dt) {
-  if (race.spec && race.spec.tt) return;   // a time trial is ridden alone: nobody to touch
+  
   const rs = race.riders;
   const edgeHere = edgeAt(race.course, race.riders[0].dist);
   for (let a = 0; a < rs.length; a++) for (let b = a + 1; b < rs.length; b++) {
@@ -2462,7 +2625,7 @@ function bump(race, r, text) {
 }
 
 function tick(race, dt) {
-  race.clock += dt;
+  if (!race.neutral) race.clock += dt;      // the stage is timed from the flag, not the roll-out
   updateGroups(race, dt);
   for (const r of race.riders) stepRider(race, r, dt);
   separate(race, dt);
@@ -2488,6 +2651,18 @@ function step(race, frameDt, input) {
         ev = CFG.tempo + (you.stats.attack - CFG.tempo) * over;
       }
       if (input.ease) ev = CFG.ease;
+      // HOLD THE BRAKE AND YOU STOP. Easing only ever dropped you to soft-pedalling pace,
+      // roughly 7 m/s, because the pedalling term still had a floor under it — so there was
+      // no way to actually halt, and no way to scrub enough for a hairpin you misjudged.
+      // Now it RAMPS: a dab bleeds a little speed, about a second of holding brings you to a
+      // standstill. Player only, so the peloton's own easing is untouched.
+      // DESCENTS ONLY. Holding both pads is also the RESTING idiom — you drift back and your
+      // legs come back — and on the flat that must stay true, or recovering in the bunch and
+      // braking become the same gesture with the same result. The full-stop ramp therefore
+      // only accumulates while the road is dropping, and resets the moment it is not, so a
+      // rest on the flat behaves exactly as it always did.
+      const onDesc = -gradeAt(race.course, you.dist) > 0.012;
+      you.brakeT = (input.ease && onDesc) ? Math.min((you.brakeT || 0) + frameDt, 2) : 0;
       // THE RACE OF TRUTH. With no wheel to sit on, pacing IS the stage: hold the rhythm
       // and you roll; drift off it, either grinding too slow or spinning too fast, and you
       // waste effort. The window narrows up the ladder, so Division 1 demands a cadence a
@@ -2984,7 +3159,16 @@ function saveTour(withRace) {
   Store.save(ladder);
 }
 function newTour() {
-  const seed = (Math.random() * 1e9) | 0;
+  // AN ABANDONED TOUR IS NOT RE-ROLLED. You may leave any time, but you cannot shop for a
+  // parcours that suits your rider: the same draw and the same committed build are waiting.
+  // That is what keeps the per-tour build lock meaningful — without it, quitting after
+  // seeing the profile would be a free re-bet.
+  const held = ladder.heldTour;
+  const seed = held ? held.seed : (Math.random() * 1e9) | 0;
+  if (held) {
+    if (held.build) { committedBuild = held.build; ladder.build = held.build; }
+    ladder.heldTour = null; Store.save(ladder);
+  }
   const len = Sim.tourLength(seed, ladder.div);
   tour = { seed, stage: 0, gc: {}, leaders: {}, fatigue: {},
     schedule: Sim.tourSchedule(seed, len) };
@@ -3004,7 +3188,12 @@ function startStage() {
     : Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
         fatigue: tour.fatigue, playerStats: bStats });
-  flashes = []; countdown = 3.2; phase = "count"; Tilt.recentre();
+  // ROLL-OUT. Road stages neutralise behind the car for a few seconds: you can move up or
+  // down the bunch but nobody can go up the road, and the clock does not start until the
+  // flag. A time trial genuinely starts from a stop, and a drill should start instantly.
+  const rollOut = !drill && !(race.spec && race.spec.tt);
+  race.neutral = rollOut;
+  flashes = []; countdown = rollOut ? 7 : 3.2; phase = "count"; Tilt.recentre();
   paused = false; $("pauseCard").classList.add("hide");
   $("pauseBtn").classList.toggle("hide", dailyRun);
   if (tour && tour.daily) {                  // the attempt is spent the moment you roll out
@@ -3862,13 +4051,13 @@ function drawWakes() {
 function drawRiders() {
   const you = race.you;
   drawWakes();
-  // A TIME TRIAL is you alone against the clock. Rivals still ride the same course and
-  // still produce times for the GC, but they set off in their own start slots, so they
-  // are never on the road beside you and are not drawn.
-  const solo = race.spec && race.spec.tt;
+  // Rivals are DRAWN in a time trial again. They set off in their own start slots, so the
+  // ones on the road with you are the riders you are catching or being caught by — which
+  // is the whole point of intervals, and impossible if you cannot see them.
   const ordered = race.riders.slice().sort((a, b) => b.dist - a.dist);
   for (const r of ordered) {
-    if (solo && !r.you) continue;
+    if (r.startAt > race.clock) continue;      // still in the start house
+
     const x = sx(r.dist, r.x), y = sy(r.dist);
     if (y < -60 || y > H + 60) continue;
     // The body IS the collision box, and at these scales that box is a circle.
@@ -4096,7 +4285,7 @@ function drawWind() {
   // and an actual speed, because "windier than a moment ago" was impossible to read
   label(M.speed(2.0 + 12.0 * w.str).toFixed(0) + " " + M.speedTag(),
     cx + 46, cy + 4, 11, 700, "rgba(46,49,47," + (0.4 + 0.45 * w.str) + ")", "left", 0.8);
-  label(Math.abs(w.dir) < 0.3 ? "HEADWIND" : Math.abs(w.dir) < 0.72 ? "SIDEWIND" : "CROSSWIND",
+  label(w.lon < -0.34 ? "TAILWIND" : w.lon > 0.34 ? "HEADWIND" : Math.abs(w.dir) < 0.72 ? "SIDEWIND" : "CROSSWIND",
     cx, cy + 16, 9.5, 700, "rgba(46,49,47," + (0.35 + 0.4 * w.str) + ")", "center", 1.6);
 }
 
@@ -4241,6 +4430,20 @@ function drawHud(dt) {
     label("RHYTHM", bx + bw / 2, by - 7, 9, 700, "rgba(46,49,47,.5)", "center", 0.3);
     label(inPocket ? "ON IT" : ttShown > tgt ? "TOO FAST" : "TOO SLOW",
       bx + bw / 2, by + bh2 + 14, 8.5, 700, col, "center", 0.5);
+  }
+  // SHELTERING WARNING. A fine you did not see coming is just a mugging, so the moment you
+  // are in someone's shelter a bar fills toward the limit and tells you to pull out. It is
+  // only ever on screen when you are actually sitting in a wheel.
+  if (ttOnly && (you.draftT || 0) > 0.05) {
+    const f = clamp(you.draftT / Sim.CFG.ttDraftMax, 0, 1);
+    const col = f > 0.66 ? PAL.spot : PAL.fuel;
+    const bw2 = Math.min(W * 0.52, 230), bx2 = W / 2 - bw2 / 2, by2 = topBar + 96;
+    ctx.save();
+    ctx.fillStyle = "rgba(46,49,47,.10)"; roundRect(bx2, by2, bw2, 7, 3.5); ctx.fill();
+    ctx.fillStyle = col; roundRect(bx2, by2, bw2 * f, 7, 3.5); ctx.fill();
+    ctx.restore();
+    label(f > 0.66 ? "PULL OUT \u00b7 SHELTERING" : "IN THE SHELTER \u00b7 COME PAST",
+      W / 2, by2 - 6, 9.5, 700, col, "center", 1.1);
   }
   // Empties you are carrying, and the tap target for getting rid of them. Semantic,
   // top-left, and clear of both thumbs.
@@ -4419,12 +4622,22 @@ function drawHud(dt) {
   const tl = Sim.throwLine(race.course, you);
   const canThrow = tl && you.threw !== tl.d;
   if (canThrow) {                              // its own target, so you can keep pedalling
+    // THE SAME FILLING GAUGE AS THE HOP. A button that only changed colour meant reading the
+    // shade and guessing when it would turn green; a level that RISES toward the moment shows
+    // the timing arriving, so you can meet it instead of reacting to it.
     const away = tl.d - you.dist;
     const ready = clamp(1 - Math.abs(away - Sim.CFG.throwPeak) / 4.2, 0, 1);
+    const col = ready > 0.72 ? PAL.green : ready > 0.42 ? PAL.fuel : PAL.spot;
     ctx.save();
-    ctx.fillStyle = draftColour(ready, 0.16 + 0.5 * ready);
+    ctx.fillStyle = "rgba(46,49,47,.06)";
     roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.fill();
-    ctx.strokeStyle = draftColour(ready, 0.95); ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.save();
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.clip();
+    ctx.fillStyle = col + "3a";
+    ctx.fillRect(b.thX, b.thY + b.thH * (1 - ready), b.thW, b.thH * ready);
+    ctx.restore();
+    ctx.strokeStyle = col; ctx.lineWidth = ready > 0.72 ? 3.5 : 2;
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.stroke();
     ctx.restore();
     label("THROW", W / 2, b.thY + b.thH / 2 + 6, 15, 700, PAL.ink, "center", 2.2);
   }
@@ -4460,6 +4673,45 @@ function drawHud(dt) {
   }
 }
 
+// THE PACE CAR. Deliberately unlike the team car: that one is a lifeline that appears when
+// you puncture, drawn with a shelter cone you must sit in. This one leads the race, has no
+// draft to offer, and wears the commissaire's yellow so the two are never confused.
+// Speed is sold by the CAMERA and nothing else. Verge streaks and an edge vignette were
+// tried and cut: the streaks read as a rendering fault and the vignette was decoration on
+// top of a game whose whole look is flat and clean.
+let camFast = 0;
+function drawPacer(dt) {
+  if (!race || !race.pacer || race.pacer.gone) return;
+  const p = race.pacer;
+  const head = Math.max.apply(null, race.riders.map(r => r.dist));
+  const t = performance.now() / 1000;
+  p.x = Math.sin(t * 0.7) * 1.1;
+  if (race.neutral) {
+    p.dist = head + 16;                       // sits just off the front of the bunch
+    p.v = race.rollIn;
+  } else {
+    // IT DRIVES AWAY. Blinking out at the flag looked like a bug; a car that accelerates up
+    // the road and over the horizon is the moment the race actually starts.
+    p.v = (p.v || race.rollIn) + 2.6 * dt;   // eases away over a few seconds, not in one
+    p.dist = (p.dist === undefined ? head + 16 : p.dist) + p.v * dt;
+    if (p.dist - head > 320) { p.gone = true; return; }
+  }
+  const cx = sx(p.dist, p.x), cy = sy(p.dist);
+  if (cy < -90 || cy > H + 90) return;
+  const cw = riderR * 2.0, ch = riderR * 3.4;
+  ctx.save();
+  ctx.fillStyle = "rgba(46,49,47,.16)";
+  roundRect(cx - cw / 2 + 2, cy - ch / 2 + 3, cw, ch, 5); ctx.fill();
+  // A DARK CAR WITH WHITE MARKINGS. Yellow collided with the food amber, so a car sitting in
+  // the road read as something to ride over and pick up; white was near-invisible against the
+  // paper. Charcoal belongs to no resource, and reads instantly as a vehicle on a pale road.
+  ctx.fillStyle = "#3A3D3A";
+  roundRect(cx - cw / 2, cy - ch / 2, cw, ch, 5); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.88)";                    // roof board
+  roundRect(cx - cw * 0.34, cy - ch * 0.16, cw * 0.68, ch * 0.3, 2); ctx.fill();
+  ctx.restore();
+  if (race.neutral) label("NEUTRAL", cx, cy - ch * 0.72, 9, 700, "#3A3D3A", "center", 1.3);
+}
 function drawCountdown() {
   const n = Math.ceil(countdown); if (n <= 0) return;
   ctx.save(); ctx.globalAlpha = clamp((countdown - Math.floor(countdown)) * 1.6, 0, 1);
@@ -4605,7 +4857,7 @@ const TUTORIAL = [
       o.speed = r.you.speed; o.eff = "tempo";
       o.x = r.you.x + 1.35;                              // stays alongside
     },
-    b: "At a sprint line, a summit, or the finish, a THROW button appears above the pads. Hit it about two metres out and you shove the bike most of a length forward, which wins close finishes. Too early and you are freewheeling before the line. The button turns green when your timing is right. There is a rider alongside you and two lines coming up: throw well and you take them.",
+    b: "At a sprint line, a summit, or the finish, a THROW button appears above the pads. Hit it about two metres out and you shove the bike most of a length forward, which wins close finishes. Too early and you are freewheeling before the line. The button fills as the moment arrives and turns green when the timing is right. There is a rider alongside you and two lines coming up: throw well and you take them.",
     p: "Throw at both lines", need: 2, get: () => tutThrew },
   { t: "Leaning", demo: "lean",
     setup: r => {
@@ -4877,7 +5129,13 @@ function tutTick(dt) {
 }
 
 let paused = false;
+let abandonArmed = false;
 function setPaused(v) {
+  if (!v) { abandonArmed = false; $("pAbandon").textContent = "Abandon the tour"; }
+  // Only a real tour can be abandoned: a drill, a practice ride and the daily have nothing
+  // to give up, and "Leave the race" already covers walking away from those.
+  if (v) $("pAbandon").classList.toggle("hide",
+    !tour || !!tour.drill || !!tour.practice || !!dailyRun);
   paused = v;
   $("pauseCard").classList.toggle("hide", !v);
   const t = tour && tour.schedule ? tour.schedule.length : 1;
@@ -4922,7 +5180,16 @@ function frame(now) {
     if (phase === "count") {
       countdown -= dt;
       tiltZero(0.12);
-      if (countdown <= 0) phase = "race";
+      if (race.neutral) Sim.step(race, dt, readInput(dt));   // roll behind the car, and position
+      if (countdown <= 0) {
+        phase = "race";
+        if (race.neutral) {                                  // THE FLAG
+          race.neutral = false;   // the car is NOT hidden here: drawPacer drives it up the road
+                                  // and retires it once it is well clear, so it leaves rather
+                                  // than vanishing under you.
+          flashes.push({ text: "FLAG DROP", colour: PAL.green, t: 0 });
+        }
+      }
     }
     else if (!paused && (!tut || $("tutCard").classList.contains("hide"))) {
       // DRILLS jump straight to "race" and never see the countdown, which is where the
@@ -4946,8 +5213,18 @@ function frame(now) {
     camPan += (want2 - camPan) * clamp(dt * 4.5, 0, 1);
     if (Math.abs(camPan) < 0.02) camPan = 0;
     camC = Sim.centreAt(race.course, race.you.dist) + camPan;
+    // TERRAIN SPEED. The sim already runs a 2.7x spread between crawling up a climb and
+    // flying down the far side, and the screen barely showed it. The scale cannot change —
+    // the forward scale is locked to the sideways one so riders draw as exact circles — so
+    // speed is sold by where the camera sits and by motion, not by zoom. Fast drops you
+    // down the screen so more road opens ahead; slow pulls you up so the world closes in.
+    const spd = race.you.speed;
+    const fastN = clamp((spd - CFG.base * 0.55) / (CFG.base * 1.35), 0, 1);
+    camFast += (fastN - camFast) * clamp(dt * 1.6, 0, 1);
+    playerY = H * (0.635 + 0.155 * camFast);
     ctx.fillStyle = PAL.paper; ctx.fillRect(0, 0, W, H);
     drawRoad(); drawItems(); drawRiders(); drawHud(dt);
+    drawPacer(dt);
     if (phase === "count") drawCountdown();
     drawTutHint();
     if (race.over && !tut) finishStage();
@@ -5316,12 +5593,36 @@ function resumeTour() {
 $("pauseBtn").addEventListener("click", () => { setPaused(true); saveTour(true); });
 $("pResume").addEventListener("click", () => setPaused(false));
 $("pQuit").addEventListener("click", leaveRace);
+// ABANDONING. No invented penalty and no streak rule: it simply counts as a tour ridden and
+// not won, which is honest accounting and also stops abandoning being a way to dodge
+// relegation on a tour that is going badly. Money already earned is kept — you rode for it.
+$("pAbandon").addEventListener("click", () => {
+  if (!tour || tour.drill || tour.practice || dailyRun) { leaveRace(); return; }
+  if (!abandonArmed) {                          // destructive, so it asks once
+    abandonArmed = true;
+    $("pAbandon").textContent = "Abandon \u00b7 tap again to confirm";
+    $("pFoot").textContent = "The same tour and the same bike will be waiting. It counts as a "
+      + "tour ridden and not won. Prize money you have won is yours.";
+    return;
+  }
+  abandonArmed = false;
+  ladder.heldTour = { seed: tour.seed, build: committedBuild };   // the bet stands
+  ladder.savedTour = null;
+  applyLadder(8);                               // ridden, not won
+  Store.save(ladder);
+  setPaused(false);
+  race = null; tour = null; phase = "menu"; tut = null;
+  $("pauseBtn").classList.add("hide");
+  $("tutCard").classList.add("hide"); $("tutPrompt").classList.add("hide");
+  refreshMenu(); showProfile(null); show("menu");
+});
 $("rulesBtn").addEventListener("click", () => {
   const box = $("rulesList"); box.innerHTML = "";
   const rows = [
     ["Off your line", "Moving across a rider while contesting a sprint, summit or the finish. You may change your line; you may not change it into someone."],
     ["Cutting the median", "Hopping onto a median and riding over it instead of going round it."],
     ["Littering", "Getting rid of an empty bottle outside a bottle drop."],
+    ["Sheltering", "Sitting in another rider's draft in a time trial. Catching someone is a reward, not a tow: come past, do not sit on the wheel."],
     ["Sticky bottle", "Taking a tow from the team car when you have been dropped. Needs Team tactics at full support."]
   ];
   for (const [nm, why] of rows) {
@@ -5701,7 +6002,7 @@ const DRILLS = [
       if (o.dist < y.dist) { o.dist = y.dist + 9; o.speed = y.speed; }   // passed: reset ahead
       if (o.dist - y.dist > 26) o.dist = y.dist + 26;                    // never out of reach
     } },
-  { id: "throw", name: "The bike throw", tip: "Timing the lunge for the line.", tips: ["A THROW button appears above the pads as you approach a line.", "Hit it about two metres out. The button turns green when the timing is right.", "Too early and you are freewheeling before the line. There is a rider level with you: see who takes it."],
+  { id: "throw", name: "The bike throw", tip: "Timing the lunge for the line.", tips: ["A THROW button appears above the pads as you approach a line.", "Hit it about two metres out. The button FILLS as you close on the line and turns green when the timing is right.", "Too early and you are freewheeling before the line. There is a rider level with you: see who takes it."],
     stage: 3, setup: r => {
       tutWheel(r, 0);
       const o = r.riders[1]; o.dist = r.you.dist; o.x = r.you.x + 1.35;
