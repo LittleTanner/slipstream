@@ -47,6 +47,7 @@
   .profchip.t-mountain{background:rgba(204,0,102,.13)}
   .profchip.t-summit{background:rgba(204,0,102,.24)}
   .profchip.t-hills{background:rgba(120,150,60,.16)}
+  .profchip.t-tt{background:rgba(0,114,178,.18)}
   .card.locked{opacity:.6}
   .card.locked .note{font-style:italic}
   .pick{display:block;text-align:left;padding:13px 15px;border-radius:14px;
@@ -246,6 +247,7 @@
   <h2>Settings</h2>
   <div class="secthead">Steering</div>
   <button class="go ghost" id="steerBtn">Drag</button>
+  <button class="go ghost hide" id="tiltBtn">Tilt steering: normal</button>
   <button class="go ghost hide" id="leanBtn">Tilt lean: normal</button>
   <div class="secthead">Units</div>
   <button class="go ghost" id="unitBtn">Km</button>
@@ -391,6 +393,10 @@ const CFG = {
   roadW: 9, base: 12.8, fixedDt: 1 / 120,
   ease: 0.58, tempo: 0.86, attack: 1.24,
   gravG: 0.85, brakeMin: 0.28,        // downhill: gravity coast strength; how much soft-pedalling can scrub it
+  elevM: 7,                           // sim elevation unit -> metres of TOTAL CLIMBING on a stage
+  altM: 2.7,                          // sim elevation unit -> metres of HEIGHT above the course low point.
+                                      // Deliberately a smaller scale: the sum of every ascent on a stage is
+                                      // far more than the height of its highest pass above the valley.
   sprintFrom: 200, sameTimeGap: 0.4,
   // The bike throw: shove the bike forward at the line. Timed right it is worth
   // most of a bike length. It also stretches you out, so you stop pedalling for a
@@ -441,6 +447,7 @@ const CFG = {
   // Effort comes out of the pedals continuously. Stop pedalling and you soft pedal
   // and slowly lose ground; about two strokes a second holds tempo; more attacks.
   idle: 0.815, freeDraft: 0.72, strokeTempo: 2.0, strokeAttack: 4.0, strokeFull: 2.2,
+  ttCadence: 3.4, ttBand: 1.15, ttPeak: 0.45,   // time-trial rhythm: target cadence, tolerance, and how hard the rhythm pays
   // Every prime pays, so a climber still contests a sprint line and a sprinter
   // still goes over the top hard. Higher divisions pay far more, which keeps the
   // best earning at the top of the ladder rather than farming the bottom.
@@ -679,7 +686,11 @@ const STAGES = [
   { name: "Stage 3", sub: "Mountains", type: "mountain", len: 1700, hilly: 0.62, wind: 0.15, sprints: 1 },
   // pure days, used to give longer tours a shape sprinters and climbers can plan around
   { name: "Sprinters", sub: "Pan flat", type: "flat", len: 1350, hilly: 0.04, wind: 0.95, sprints: 2, flatDay: true },
-  { name: "Queen", sub: "High mountains", type: "mountain", len: 1780, hilly: 0.76, wind: 0.10, sprints: 1 }
+  { name: "Queen", sub: "High mountains", type: "mountain", len: 1780, hilly: 0.76, wind: 0.10, sprints: 1 },
+  // The race of truth. No wheel to hide behind, so it isolates the engine and finally
+  // gives the rouleur build a day that is unambiguously its own. Short, because riding
+  // alone against the clock has no bunch to make the quiet kilometres interesting.
+  { name: "Race of truth", sub: "Time trial", type: "flat", len: 900, hilly: 0.20, wind: 0.55, sprints: 0, tt: true }
 ];
 
 // A season mixes one-day classics with stage races. Length widens as you climb, so
@@ -731,6 +742,13 @@ function tourSchedule(seed, len) {
   out[mid.splice(Math.floor(R() * mid.length), 1)[0]] = 3;      // a sprinters' day
   if (mid.length) out[mid.splice(Math.floor(R() * mid.length), 1)[0]] = 4;   // a climbers' day
   for (const i of mid) { const r = R(); out[i] = r < 0.40 ? 0 : r < 0.80 ? 1 : 2; }
+  // Long tours get a TIME TRIAL, as every grand tour does. Kevin's call: 7 days and up
+  // only, so short tours keep their shape. Never the opener or the finale.
+  if (len >= 7) {
+    const slots = [];
+    for (let i = 1; i < len - 1; i++) if (out[i] !== 3 && out[i] !== 4) slots.push(i);
+    if (slots.length) out[slots[Math.floor(R() * slots.length)]] = 5;
+  }
   return out;
 }
 
@@ -745,7 +763,8 @@ function tierProfile(div) {
     hilly: 0.14 * t,          // more climbing
     wind: 0.75 + 0.70 * t,    // stronger crosswinds
     items: 1 - 0.42 * t,      // less on the road
-    strength: 0.025 * t,      // rivals barely faster
+    strength: 0.035 * t,      // rivals genuinely faster, not just better developed
+    spread: 0.035 - 0.021 * t, // ... but far more ALIKE: a tight field means one mistake costs places
     ai: t                     // rivals much sharper
   };
 }
@@ -791,6 +810,7 @@ function buildStage(seed, spec0, D) {
     len: Math.round(spec0.len * D.len),
     hilly: clamp(spec0.hilly + D.hilly * (spec0.flatDay ? 0.25 : 1), 0, 0.88),
     flatDay: spec0.flatDay,
+    tt: spec0.tt,
     wind: clamp(spec0.wind * D.wind, 0, 1)
   };
   const R = mulberry32(seed);
@@ -842,6 +862,14 @@ function buildStage(seed, spec0, D) {
   for (let i = 1; i < n; i++) elev[i] = elev[i - 1] + grades[i] * STEP;
   let eMin = Math.min.apply(null, elev), eMax = Math.max.apply(null, elev);
   if (eMax - eMin < 40) eMax = eMin + 40;
+  // WHERE ON EARTH THIS ROAD SITS. The elevation array is relative to the start line, so
+  // it can tell you a climb rises 600 m but never that it tops out at 2,100. A base
+  // altitude, drawn from its own PRNG so it cannot shift course generation, turns the
+  // profile into real numbers: mountain days start high, flat days near sea level.
+  const altR = mulberry32((seed ^ 0x7a1cf00d) >>> 0);
+  const baseElev = Math.round((spec.type === "mountain" ? 620 + altR() * 780
+    : spec.hilly > 0.34 ? 180 + altR() * 320
+    : 15 + altR() * 175) / 5) * 5;
   const gRaw = m => grades[clamp(Math.round(m / STEP), 0, n - 1)] || 0;
 
   const primes = [];
@@ -1085,7 +1113,11 @@ function buildStage(seed, spec0, D) {
     scenery.push({ d: m, side: R() < 0.5 ? -1 : 1, off: 1.6 + R() * 5.5, s: 0.5 + R() * 0.9, k: R() });
   }
 
-  return { spec, len: spec.len, grades, elev, eMin, eMax, climbs,
+  // A TIME TRIAL is 900 m flat out: there is no feed zone, nothing to pick up and no
+  // bottle to get rid of. Cleared AFTER generation rather than skipped during it, so the
+  // course PRNG is untouched and every other stage generates exactly as before.
+  if (spec.tt) { items.length = 0; feeds.length = 0; litters.length = 0; }
+  return { spec, len: spec.len, grades, elev, eMin, eMax, baseElev, climbs,
     primes, feeds, items, winds, scenery, narrows, rounds, surfaces, hazards, litters,
     // twistier in the mountains and twistier up the ladder
     // Tighter, more frequent corners rather than long sweeping ones. Drift scales
@@ -1111,6 +1143,8 @@ function gradeAt(c, m) {
   const i = m / STEP, i0 = clamp(Math.floor(i), 0, c.grades.length - 1), i1 = clamp(i0 + 1, 0, c.grades.length - 1);
   return lerp(c.grades[i0], c.grades[i1], clamp(i - i0, 0, 1));
 }
+// Metres above sea level, as opposed to metres above the start line.
+function altAt(c, m) { return (c.baseElev || 0) + (elevAt(c, m) - c.eMin) * CFG.altM; }
 function elevAt(c, m) {
   const i = m / STEP, i0 = clamp(Math.floor(i), 0, c.elev.length - 1), i1 = clamp(i0 + 1, 0, c.elev.length - 1);
   return lerp(c.elev[i0], c.elev[i1], clamp(i - i0, 0, 1));
@@ -1297,11 +1331,25 @@ function bendAt(c, m) { return (centreAt(c, m + 2.5) - centreAt(c, m - 2.5)) / 5
 // the inside of the bend, and the inside of a bend is a shorter path.
 function curveAt(c, m) { return (bendAt(c, m + 2.5) - bendAt(c, m - 2.5)) / 5; }
 
+// Blends an archetype toward the neutral body by division: at Division 8 a "climber" is a
+// club climber, at Division 1 they are the finished article. Mirrors bodyStats(career).
+function devStats(a, D) {
+  const t = D ? D.t : 1;
+  const devel = 0.30 + 0.70 * t;
+  const out = {};
+  for (const k in a) out[k] = BASE_STATS[k] + (a[k] - BASE_STATS[k]) * devel;
+  return out;
+}
 function makeRider(cfg, i, isYou, typeKey, R, extra) {
   const a = ARCHETYPES[typeKey];
   return {
     name: cfg.name, c: cfg.c, num: cfg.n, i, you: isYou, archetype: a,
-    stats: Object.assign({}, BASE_STATS, a.stats, extra || {}),
+    // RIVALS DEVELOP UP THE LADDER, exactly as the player's career body does. Before this,
+    // a Division 8 field already contained fully-formed 0.68 climbers and a Division 1 field
+    // was the SAME riders plus 2.5% strength — which is why the two divisions felt identical.
+    // Now an archetype is only partly grown at the bottom and complete at the top, so the
+    // ladder is a real progression in the riders themselves rather than in scenery.
+    stats: Object.assign({}, BASE_STATS, isYou ? a.stats : devStats(a.stats, cfg.D), extra || {}),
     dist: -(i * 2.2) - (isYou ? 4 : 0), prev: 0,
     x: clamp(((i % 5) - 2) * 1.5 + (Math.floor(i / 5) ? 0.7 : 0), -3.4, 3.4),
     tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0,
@@ -1323,7 +1371,14 @@ function makeRider(cfg, i, isYou, typeKey, R, extra) {
     tow: 0, towReason: "", sticky: 0, needTow: false, towHeld: 0, towTime: 0,
     towX: undefined, towBase: undefined, towT: 0,
     threw: null, throwCool: 0, throwQ: 0,
-    strength: isYou ? 1 : 0.995 + R() * 0.035, plan: null, think: R() * 0.4
+    // DECISION QUALITY, not power. Difficulty used to scale rivals' STATS while every
+    // rival, top to bottom, cornered and paced exactly as well as every other. Now a
+    // Division 8 field visibly makes mistakes you can ride away from and a Division 1
+    // field makes almost none. Derived from the index rather than drawn from R(), so
+    // adding it cannot shift course generation.
+    sharp: isYou ? 1 : clamp(0.20 + 0.76 * (cfg.D ? cfg.D.ai : 0.5)
+      + (((i * 37) % 11) / 10 - 0.5) * 0.30 * (1 - (cfg.D ? cfg.D.ai : 0.5)), 0.10, 1),
+    strength: isYou ? 1 : 0.995 + R() * (cfg.D && cfg.D.spread !== undefined ? cfg.D.spread : 0.035), plan: null, think: R() * 0.4
   };
 }
 function pickPlan(i, R) {
@@ -1347,7 +1402,7 @@ function createRace(opts) {
   // (a fully-developed body) rather than a bike preset, now that bike parts are only a tune.
   // Deterministic: the specialists are the riders whose archetype already suits the parcours.
   const parcoursArch = spec.type === "flat" ? "sprinter" : "climber";
-  const nSharp = Math.round(D.t * 3);
+  const nSharp = Math.round(D.t * 5);   // Div 1 fields the parcours specialists almost to a rider
   const byFit = FIELD.map((f, k) => k).sort((a, b) => (FIELD[b].type === parcoursArch ? 1 : 0) - (FIELD[a].type === parcoursArch ? 1 : 0));
   const sharp = new Set(byFit.slice(0, nSharp));
   FIELD.forEach((f, k) => {
@@ -1356,7 +1411,7 @@ function createRace(opts) {
     const type = sharp.has(k) ? parcoursArch : f.type;   // specialists become the terrain archetype
     const durb = {};                                     // durability grows toward a developed rider by division
     for (const st in RIVAL_DURAB) durb[st] = BASE_STATS[st] + RIVAL_DURAB[st] * D.t;
-    const r = makeRider(cf, k + 1, false, type, R, durb);
+    const r = makeRider(Object.assign({}, cf, { D }), k + 1, false, type, R, durb);
     r.plan = pickPlan(k + 1, R);
     r.strength += D.strength;
     riders.push(r);
@@ -1381,6 +1436,7 @@ function createRace(opts) {
     payScale: 1 + 2.5 * D.t, kit: kitId,
     stageIndex: opts.stageIndex, seed: opts.seed,
     rnd: null, rndN: 0, clock: 0, acc: 0, chase: 0, pelotonHead: 0, pelotonPace: 0, driver: null, youDriving: false,
+    ttChecks: course.spec.tt ? [course.len / 3, course.len * 2 / 3] : null, bestSplit: [], ttCheck: null,
     breakaway: [], breakGap: 0, over: false, events: [],
     leaders: opts.leaders || {}
   };
@@ -1541,6 +1597,10 @@ function draftFor(race, r) {
     if (q > bq) { bq = q; lead = o; }
   }
   r.q = 1 - through;
+  // A TIME TRIAL has no drafting at all. Rather than special-casing the wind, the
+  // shelter quality every rider offers is simply zero, so exposure resolves to full for
+  // everyone and the whole draft/peloton machinery below stays untouched.
+  if (race.spec && race.spec.tt) r.q = 0;
   r.stack = stack;
   r.wheel = lead;
   r.shelterOff = off;
@@ -1660,7 +1720,7 @@ function aiThink(race, r, dt) {
   if (r.energy < 25) r.spent = true;
   if (r.energy > 55) r.spent = false;
   if (want === "attack" && r.spent && togo > 120) want = "tempo";
-  if (want === "attack" && r.energy < 26 + 12 * ai && togo > 260) want = "tempo";  // better pacing up the ladder
+  if (want === "attack" && r.energy < 26 + 12 * r.sharp && togo > 260) want = "tempo";  // sloppy riders launch doomed attacks
   if (r.energy < 55 && r.q < 0.2 && want !== "attack" && togo > 320) want = "ease";
   if (r.energy < 14 || r.cracked) want = "ease";
 
@@ -1690,7 +1750,10 @@ function aiThink(race, r, dt) {
     for (let m = r.dist + 5; m < r.dist + lookM; m += 5) mb = Math.max(mb, Math.abs(bendAt(C, m)));
     if (mb > 0.08) {
       const safe = 2.05 * r.stats.descend / mb;                        // safe cornering speed for that bend
-      if (r.speed > safe * 1.06) want = "ease";
+      // A sharp rider brakes late and carries speed through; a sloppy one scrubs speed it
+      // never needed to lose. An efficiency difference, deliberately not a crash difference,
+      // so a weak field looks slow rather than chaotic.
+      if (r.speed > safe * (0.72 + 0.40 * r.sharp)) want = "ease";
     }
   }
   r.eff = want;
@@ -1698,12 +1761,12 @@ function aiThink(race, r, dt) {
   r.grab = null;
   let need = null;
   if (r.absorb < 45) {
-    if (r.fuel < 52 + 14 * ai) need = "food";                       // they feed earlier up top
-    if (r.fluid < 46 + 14 * ai && (need === null || r.fuel > 30)) need = race.rnd() < 0.35 ? "salt" : "water";
+    if (r.fuel < 52 + 14 * r.sharp) need = "food";                  // sharp riders eat before they need to
+    if (r.fluid < 46 + 14 * r.sharp && (need === null || r.fuel > 30)) need = race.rnd() < 0.35 ? "salt" : "water";
   }
   if (need) {
     const urgent = need === "food" ? r.fuel < 22 : r.fluid < 20;
-    const reach = (urgent ? 3.6 : 1.9) + 0.9 * ai;
+    const reach = (urgent ? 3.6 : 1.9) + 0.9 * r.sharp;             // and reach further for it
     r.grab = findItem(race, r, need, reach) || (need === "water" ? findItem(race, r, "salt", reach) : null);
   }
   // Bin the empties. Nothing ever told a rival to throw a bottle away, so they carried
@@ -1960,6 +2023,8 @@ function stepRider(race, r, dt) {
   const fresh = 0.90 + 0.10 * clamp(r.energy / 40, 0, 1);
   const dryPen = 0.85 + 0.15 * clamp(r.fluid / 35, 0, 1);
   const heavy = 1 - 0.15 * clamp(r.absorb / 100, 0, 1);   // full stomach, heavy legs
+  // How thin the air is here: nothing below 1,200 m, full effect by about 2,600 m.
+  const thin = clamp((altAt(C, r.dist) - 1200) / 1400, 0, 1);
   const sfP = surfaceAt(C, r.dist), SFP = sfP ? SURFACES[sfP.kind] : null;
   let p = effVal * r.strength * fresh * dryPen * heavy * (1 + 0.30 * r.burst) * (1 + 0.14 * r.spin)
     * (r.stumble > 0 ? 0.88 : 1) * (r.throwCool > 0 ? 0.80 : 1)
@@ -1992,7 +2057,7 @@ function stepRider(race, r, dt) {
   if (r.eff !== "attack" && r.ahead && tgt > r.ahead.speed && g < 0.14) tgt = r.ahead.speed;
   if (!r.you && r.inPeloton) {
     if (race.chase > 0.15) tgt *= 1 + 0.075 * race.chase;   // they have a reason to ride
-    else if (togo > 300) tgt *= 0.962 + 0.030 * race.D.ai;  // sharper fields never really soft-pedal
+    else if (togo > 300) tgt *= 0.962 + 0.030 * (r.sharp !== undefined ? r.sharp : race.D.ai);
     // follow the tempo the front is setting, within reason
     if (race.pelotonPace > 0 && r.q > 0.12) {
       const lead = clamp(race.pelotonPace / Math.max(tgt, 0.1), 0.92, 1.14);
@@ -2025,6 +2090,18 @@ function stepRider(race, r, dt) {
     // a real climber (low climbMul) can hold a fast pace uphill cheaply, while a
     // poor climber trying to match it drains far faster and cracks. This is what
     // lets a strong climber ride away and open a real gap.
+    // A TIME TRIAL is a steady state, not a series of attacks. The normal economy is built
+    // around short digs launched from shelter, so holding threshold for a whole TT emptied
+    // you in twenty seconds and CRUISING beat PACING — which made the rhythm pointless.
+    // Riding to a rhythm is far more economical, so the above-tempo cost is heavily reduced.
+    if (race.spec && race.spec.tt) {
+      // THRESHOLD IS BY DEFINITION SUSTAINABLE. Charging a TT by effort emptied the legs
+      // before the line even on a perfect rhythm, which made "optimal" a lie and meant the
+      // legs bar, not the rhythm, decided the stage. The cost now comes from being OFF the
+      // rhythm: hold it and you can hold it to the line, grind or over-spin and you fade.
+      const off = 1 - (r.ttHold === null || r.ttHold === undefined ? 1 : r.ttHold);
+      de = -(0.20 + 3.1 * off * off) * (1 + 1.6 * Math.max(0, g) * climbMul * climbMul);
+    } else
     de = -(effVal - CFG.tempo) * 29 * (1 + 1.6 * Math.max(0, g) * climbMul * climbMul) * (0.45 + 0.5 * exposure);
     // A jump makes the effort cheaper while it lasts. This used to be written as a
     // 55% SURCHARGE for attacking without a burst, which taxed ordinary sprinting
@@ -2042,12 +2119,20 @@ function stepRider(race, r, dt) {
     const shelterBonus = (0.28 + 2.15 * (1 - exposure)) * (1 - 0.85 * down) + 0.95 * 0.85 * down;
     // Faster recovery so an attack can be long and a second one is possible. The
     // race is more interesting when going again is on the table.
-    de = (2.4 + 5.0 * room) * shelterBonus * st.recover * (1 + 0.3 * down);
+    // THIN AIR. Deliberately NOT a power penalty and NOT a fifth rider stat: either would
+    // just duplicate "good at climbing", since altitude only ever happens on a climb. It
+    // bites on RECOVERY and WATER instead, so height changes how you PACE and FEED a
+    // mountain day rather than how strong you are on it.
+    de = (2.4 + 5.0 * room) * shelterBonus * st.recover * (1 + 0.3 * down) * (1 - 0.30 * thin);
   }
   // Exposure always bleeds a little, so a lone rider at tempo just barely loses
   // ground while the sheltered peloton just barely gains. This is the whole reason
   // a breakaway is caught, and it is stronger in a crosswind.
-  de -= (0.55 + 1.5 * exposure * (1 + 0.7 * w.str)) * st.windTax * (1 - 0.75 * down);
+  // The lone-rider bleed exists so a breakaway gets reeled in. In a time trial EVERY rider
+  // is alone, so it is not a breakaway penalty, it is just a tax on the whole field — and
+  // at full strength it emptied the legs before the line no matter how well you paced.
+  const ttAlone = (race.spec && race.spec.tt) ? 0.22 : 1;
+  de -= (0.55 + 1.5 * exposure * (1 + 0.7 * w.str)) * st.windTax * (1 - 0.75 * down) * ttAlone;
   if (!r.you && r.inPeloton && race.chase > 0.15) de -= 1.5 * race.chase;
   if (de > 0) de *= (r.bonk ? 0.25 : 1) * (r.fluid < 25 ? 0.55 : 1) * (r.fuel < 20 ? 0.6 : 1);
   if (de > 0) de *= 1 - r.fatigue * 0.003;          // tired legs come back slower
@@ -2068,14 +2153,17 @@ function stepRider(race, r, dt) {
   r.burnHot = clamp((r.burnHot || 0) + (effVal > CFG.tempo ? dt * 0.75 : -dt * 0.17), 0, 1);
   const burn = (0.42 + 0.95 * (effVal - CFG.ease) / 0.66)
     * (1 + 0.85 * r.burnHot) * (1 + 0.3 * Math.max(0, g)) * st.fuelUse;
-  r.fuel = clamp(r.fuel - burn * dt, 0, 100);
+  // You do not eat in a time trial, and it is over in a minute or two. Charging it at the
+  // normal rate emptied the FOOD bar before the finish, which is nonsense for the distance.
+  const ttShort = (race.spec && race.spec.tt) ? 0.18 : 1;
+  r.fuel = clamp(r.fuel - burn * ttShort * dt, 0, 100);
   const wasBonk = r.bonk; r.bonk = r.fuel <= 0;
   if (r.bonk && !wasBonk && r.you) race.events.push({ t: "BONKED", c: "fuel" });
 
-  const sweat = (0.42 + 0.62 * (effVal - CFG.ease) / 0.66)
+  const sweat = (1 + 0.34 * thin) * (0.42 + 0.62 * (effVal - CFG.ease) / 0.66)
     * (1 + 0.40 * Math.max(0, g) - 0.22 * Math.max(0, -g))
     * (1 + 0.30 * r.q) * st.sweatRate;
-  r.fluid = clamp(r.fluid - sweat * dt, 0, 100);
+  r.fluid = clamp(r.fluid - sweat * ttShort * dt, 0, 100);
   const wasDry = r.dry; r.dry = r.fluid < 12;
 
   // Position over the summit is the position you get on the way down. A good
@@ -2277,6 +2365,21 @@ function stepRider(race, r, dt) {
   }
   if (r.out && !r.finished) { r.finished = true; r.time = race.clock + 9999; r.rawTime = r.time; }
   if (r.dist >= C.len) { r.finished = true; r.time = race.clock; r.rawTime = race.clock; }
+  // TIME CHECKS. A time trial is not raced against riders on the road, it is raced
+  // against the clock, so the only meaningful comparison is time at the same point.
+  // Everyone starts together here, so elapsed time at a checkpoint IS the split, and
+  // the best time recorded so far is what a real time check reports you against.
+  if (race.ttChecks) {
+    for (let k = 0; k < race.ttChecks.length; k++) {
+      const d = race.ttChecks[k];
+      if (r.prev < d && r.dist >= d) {
+        (r.splits || (r.splits = []))[k] = race.clock;
+        const prevBest = race.bestSplit[k];
+        if (prevBest === undefined || race.clock < prevBest) race.bestSplit[k] = race.clock;
+        if (r.you) race.ttCheck = { k, t: race.clock, best: prevBest };
+      }
+    }
+  }
 }
 
 // Riders are solid. Nobody passes through anybody.
@@ -2289,6 +2392,7 @@ const HIT_LAT = 1.15, HIT_LON = 1.9;
 function separate(race, dt) { resolve(race, dt); resolve(race, 0); }   // second pass settles chains
 function zoneOf(race, r) { const z = sprintZone(race.course, r); return z ? z.d : null; }
 function resolve(race, dt) {
+  if (race.spec && race.spec.tt) return;   // a time trial is ridden alone: nobody to touch
   const rs = race.riders;
   const edgeHere = edgeAt(race.course, race.riders[0].dist);
   for (let a = 0; a < rs.length; a++) for (let b = a + 1; b < rs.length; b++) {
@@ -2384,9 +2488,41 @@ function step(race, frameDt, input) {
         ev = CFG.tempo + (you.stats.attack - CFG.tempo) * over;
       }
       if (input.ease) ev = CFG.ease;
+      // THE RACE OF TRUTH. With no wheel to sit on, pacing IS the stage: hold the rhythm
+      // and you roll; drift off it, either grinding too slow or spinning too fast, and you
+      // waste effort. The window narrows up the ladder, so Division 1 demands a cadence a
+      // Division 8 rider can only hold in patches.
+      if (race.spec && race.spec.tt && !input.ease) {
+        // Effort PEAKS at the rhythm rather than being taxed away from it. Simply taxing
+        // it failed: spinning flat out still bought more effort than the penalty removed,
+        // so over-spinning was the fastest way round, which is the opposite of a TT.
+        // Now grinding too slow AND spinning too fast both cost you, and the only way to
+        // go fast is to find the rhythm and hold it.
+        // Far more forgiving at the bottom, tighter at the top: Division 8 should be able
+        // to find the rhythm by feel, Division 1 should have to hold it precisely.
+        const band = CFG.ttBand * (1.9 - 1.15 * race.D.t);
+        // Smoothed, because raw tap rate jitters between strokes: unsmoothed it made the
+        // bar twitch AND meant you were being judged on the jitter rather than the rhythm.
+        you.ttRate = you.ttRate === undefined ? input.rate
+          : you.ttRate + (input.rate - you.ttRate) * Math.min(1, frameDt * 3.2);
+        const hold = clamp(1 - Math.abs(you.ttRate - CFG.ttCadence) / band, 0, 1);
+        const pedal = clamp(input.rate / CFG.strokeTempo, 0, 1);
+        you.ttHold = hold;
+        // The rhythm pays THRESHOLD effort, not attack. Mapping it to attack made holding
+        // the target the fastest way to blow up, so the extremes beat the rhythm — the
+        // opposite of a race of truth. A TT is ridden at the hardest pace you can SUSTAIN.
+        const peak = CFG.tempo + (you.stats.attack - CFG.tempo) * CFG.ttPeak;
+        ev = CFG.idle + (peak - CFG.idle) * pedal * (0.55 + 0.45 * hold);
+      } else you.ttHold = null;
       you.effV = ev;
-      you.eff = input.ease ? "ease" : (input.rate >= CFG.strokeTempo * 1.6 ? "attack" : "tempo");
-      you.spin = clamp((input.rate - CFG.strokeFull) / 2.0, 0, 1);
+      // In a TT the rhythm owns both of these. Left on raw rate, `spin` handed over-spinning
+      // a flat +14% of power and the "attack" label on top, which beat the rhythm bonus
+      // outright and made mashing the pedals the fastest way round.
+      const inTT = race.spec && race.spec.tt && !input.ease;
+      you.eff = input.ease ? "ease"
+        : inTT ? (you.ttHold > 0.5 ? "attack" : "tempo")
+        : (input.rate >= CFG.strokeTempo * 1.6 ? "attack" : "tempo");
+      you.spin = inTT ? you.ttHold : clamp((input.rate - CFG.strokeFull) / 2.0, 0, 1);
       you.launch = !!input.launch;                    // three alternating strokes earned a jump
       if (input.throwIt) you.wantThrow = true;
       if (input.discard) you.wantDiscard = true;
@@ -2533,7 +2669,7 @@ return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
-  createRace, snapshot, restore, step, tick, settle, liveOrder, byKey, gradeAt, elevAt, windAt, centreAt, dropIn,
+  createRace, snapshot, restore, step, tick, settle, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
   danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
   surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
@@ -2590,6 +2726,16 @@ let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, be
 // this backwards, which is why the lean felt inverted on a real device. Kept as a
 // setting because handedness and how you hold the phone are the one thing that cannot
 // be tested without a real hand: Settings > Tilt lean flips it with no rebuild.
+// How far you must tilt for full lock, and how far across the road full lock reaches.
+// Tilt felt SLOWER than dragging because 20 degrees of wrist only bought 46% of the
+// road: a smaller angle and a longer reach make it competitive. Handedness and how you
+// hold the phone decide which suits, so it is a setting rather than another guess.
+const TILT_SENS = [
+  { name: "low",    deg: 26, reach: 0.42, dead: 1.8 },
+  { name: "normal", deg: 20, reach: 0.46, dead: 1.4 },
+  { name: "high",   deg: 13, reach: 0.56, dead: 1.0 }
+];
+const tiltSens = () => TILT_SENS[clamp(Math.round((typeof ladder !== "undefined" && ladder ? ladder.tiltSens : 1) ?? 1), 0, 2)];
 const leanSign = () => (typeof ladder !== "undefined" && ladder && ladder.leanInvert ? -1 : 1);
 const Tilt = {
   on: false, ok: false, gamma: 0, zero: null, beta: 0, betaZero: null, state: "off", since: 0,
@@ -2630,13 +2776,14 @@ const Tilt = {
   // returns a road position, or null if tilt is not usable right now
   read() {
     if (!Tilt.on || !Tilt.ok || Tilt.zero === null) return null;
+    const s = tiltSens();
     let d = Tilt.gamma - Tilt.zero;
-    const dead = 1.4;
+    const dead = s.dead;
     if (Math.abs(d) < dead) d = 0; else d -= Math.sign(d) * dead;
     // Scaled to whatever road you are on, not to the default width: on a junction
     // this stopped you well short of the verge.
     const road = race ? Sim.widthAt(race.course, race.you.dist) : CFG.roadW;
-    return clamp(d / 20, -1, 1) * (road * 0.46);
+    return clamp(d / s.deg, -1, 1) * (road * s.reach);
   },
   label() {
     if (ladder.steer !== "tilt") return "";
@@ -2659,7 +2806,7 @@ const SCALE = 100;
 // elevation is that integrated over game metres. Neither is a real number, so both
 // are mapped for display: full steepness reads as 15%, which is a hard mountain
 // ramp, and the climbing total lands where a real stage of this kind would.
-const GRADE_PCT = 15, CLIMB_M = 7;
+const GRADE_PCT = 15, CLIMB_M = Sim.CFG.elevM;   // shared with the sim so altitude and climbing totals agree
 const M = {
   get imp() { return ladder.units === "imperial"; },
   speed(ms) { return M.imp ? ms * 2.23694 : ms * 3.6; },
@@ -2681,6 +2828,9 @@ const M = {
   grade(g) {                                  // steepness as a real gradient
     const pct = g * GRADE_PCT;
     return (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%";
+  },
+  alt(m) {                                    // height above sea level
+    return M.imp ? Math.round(m * 3.28084).toLocaleString() + " ft" : Math.round(m).toLocaleString() + " m";
   },
   climb(units) {                              // total climbing on a stage
     const m2 = units * CLIMB_M;
@@ -2793,6 +2943,8 @@ function refreshMenu() {
   // on drag. Toggling steering re-runs this, so it appears and disappears with it.
   $("leanBtn").textContent = "Tilt lean: " + (ladder.leanInvert ? "inverted" : "normal");
   $("leanBtn").classList.toggle("hide", ladder.steer !== "tilt");
+  $("tiltBtn").textContent = "Tilt steering: " + tiltSens().name;
+  $("tiltBtn").classList.toggle("hide", ladder.steer !== "tilt");
   $("mSteer").textContent = ladder.steer === "tilt" ? Tilt.label()
     : "Hold the left or right half to turn. Let go and you hold your line.";
   $("mDiv").textContent = "Division " + ladder.div + " of 8";
@@ -2812,8 +2964,13 @@ function refreshMenu() {
   // The build is locked for the length of a tour, so you can only re-build between tours.
   const bb = $("buildBtn");
   if (bb) {
-    bb.disabled = canResume;
-    bb.textContent = canResume ? "Rider locked for this tour"
+    // The hard lock has always had one intended exception, and this is it: a time trial
+    // is a different bike, so the lock opens for that stage only and closes again after.
+    const ttNext = canResume && tour && tour.schedule && Sim.STAGES[tour.schedule[tour.stage]]
+      && Sim.STAGES[tour.schedule[tour.stage]].tt;
+    bb.disabled = canResume && !ttNext;
+    bb.textContent = ttNext ? "Change your bike for the time trial"
+      : canResume ? "Rider locked for this tour"
       : committedBuild ? "Re-build your rider" : "Build your rider";
   }
 }
@@ -2910,6 +3067,7 @@ function stroke(side, now) {
   if (strokes.length > 24) strokes.shift();
   while (alt.length && now - alt[0] > 0.6) alt.shift();   // a jump is a quick burst
 }
+let lastRate = 0;
 function strokeRate(now) {
   let n = 0;
   for (let i = strokes.length - 1; i >= 0; i--) { if (now - strokes[i] > 1) break; n++; }
@@ -2983,6 +3141,7 @@ function readInput(dt) {
   hardTurn = Math.max(hardTurn, Tilt.pitch());         // tilt: pull the phone toward you to lean, analog
   const lean = Tilt.read();
   const rate = ease ? 0 : strokeRate(now);
+  lastRate = rate;                                     // the HUD rhythm gauge needs which SIDE of the target you are on
   const stumble = stumbleFlag; stumbleFlag = false;
   // Three clean alternating strokes inside 0.6 s commit a jump. Two shows a hint
   // so you learn the timing. Coasting (both held) can never launch.
@@ -3703,8 +3862,13 @@ function drawWakes() {
 function drawRiders() {
   const you = race.you;
   drawWakes();
+  // A TIME TRIAL is you alone against the clock. Rivals still ride the same course and
+  // still produce times for the GC, but they set off in their own start slots, so they
+  // are never on the road beside you and are not drawn.
+  const solo = race.spec && race.spec.tt;
   const ordered = race.riders.slice().sort((a, b) => b.dist - a.dist);
   for (const r of ordered) {
+    if (solo && !r.you) continue;
     const x = sx(r.dist, r.x), y = sy(r.dist);
     if (y < -60 || y > H + 60) continue;
     // The body IS the collision box, and at these scales that box is a circle.
@@ -3936,7 +4100,7 @@ function drawWind() {
     cx, cy + 16, 9.5, 700, "rgba(46,49,47," + (0.35 + 0.4 * w.str) + ")", "center", 1.6);
 }
 
-let pmVal = 0, pmPrevE = null;      // power-meter effort, smoothed across frames
+let pmVal = 0, pmPrevE = null, ttShown = 0;      // power-meter effort, smoothed across frames
 function drawHud(dt) {
   drawProfile(); drawWind();
   const c = C(), you = race.you, pad = Math.max(14, W * 0.045);
@@ -3947,12 +4111,30 @@ function drawHud(dt) {
   label(suffix, pad + textW(String(pos), 40, 700, -1) + 4, yTop + 32, 13, 700, "rgba(46,49,47,.5)", "left", 1);
   label("OF " + race.riders.length, pad, yTop + 48, 10.5, 500, "rgba(46,49,47,.42)", "left", 1.4);
 
+  if (race.spec && race.spec.tt) {
+    // Your clock, and how you stand against the best time at the last check. A distance
+    // to a rider who is not on the road with you would be meaningless here.
+    const mins = Math.floor(race.clock / 60), secs = race.clock - mins * 60;
+    label("YOUR TIME", W - pad, yTop + 14, 10.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
+    label(mins + ":" + (secs < 10 ? "0" : "") + secs.toFixed(1), W - pad, yTop + 42, 25, 700, PAL.ink, "right", -0.3);
+    const chk = race.ttCheck;
+    if (chk && chk.best !== undefined) {
+      const d = chk.t - chk.best;
+      label("CHECK " + (chk.k + 1) + "  " + (d <= 0 ? "-" : "+") + Math.abs(d).toFixed(1) + "s",
+        W - pad, yTop + 62, 11, 700, d <= 0 ? PAL.green : PAL.spot, "right", 1);
+    } else if (chk) {
+      label("CHECK " + (chk.k + 1) + "  FASTEST", W - pad, yTop + 62, 11, 700, PAL.green, "right", 1);
+    }
+  } else {
   const gap = leader === you ? 0 : leader.dist - you.dist;
   label(leader === you ? "LEADING" : "TO LEADER", W - pad, yTop + 14, 10.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
   label(leader === you ? "-" : "+" + M.near(gap), W - pad, yTop + 42, 25, 700,
     leader === you ? PAL.ink : (gap > 30 ? PAL.spot : PAL.ink), "right", -0.3);
-  label("POINTS " + you.sprintPts, W - pad, yTop + 62, 11, 700, "rgba(46,49,47,.55)", "right", 1);
-  label("KOM " + you.komPts, W - pad, yTop + 78, 11, 700, "rgba(46,49,47,.55)", "right", 1);
+  }
+  if (!(race.spec && race.spec.tt)) {
+    label("POINTS " + you.sprintPts, W - pad, yTop + 62, 11, 700, "rgba(46,49,47,.55)", "right", 1);
+    label("KOM " + you.komPts, W - pad, yTop + 78, 11, 700, "rgba(46,49,47,.55)", "right", 1);
+  }
   // Race radio (a tactic, only if fitted): calls out the race as it happens. Higher
   // levels add the time gap and name the attacker.
   if ((you.stats.radio || 0) > 0) {
@@ -3978,6 +4160,12 @@ function drawHud(dt) {
   const gw = Math.max(9, Math.min(13, W * 0.028)), gstep = gw + 16;
   const gy = yTop + 84, gh = Math.max(110, H * 0.24);
   let gx = pad;
+  // A TIME TRIAL shows ONE thing. Legs, food and fluid no longer decide it — hold the
+  // rhythm and they look after themselves, drift off it and the rhythm bar is already
+  // telling you why — so three near-static bars would be noise on the stage that is
+  // meant to be about a single skill.
+  const ttOnly = !!(race.spec && race.spec.tt);
+  if (!ttOnly) {
   gauge(gx, gy, gw, gh, you.energy, you.cracked ? PAL.spot : you.energy < 25 ? PAL.fuel : PAL.you, "LEGS");
   if (you.legCap < 99) {                                  // days in the legs
     ctx.fillStyle = "rgba(213,94,0,.85)";
@@ -4006,7 +4194,8 @@ function drawHud(dt) {
   gx += gstep;
   gauge(gx, gy, gw, gh, you.fluid, you.dry ? PAL.spot : PAL.water, "FLUID");
   // Power meter (a tactic, only if fitted): reads your effort so you can pace it.
-  if ((you.stats.powerMeter || 0) > 0) {
+  }
+  if (!ttOnly && (you.stats.powerMeter || 0) > 0) {
     const lvl = you.stats.powerMeter;
     const target = you.eff === "ease" ? 16 : you.eff === "attack" ? 92 : 52;
     pmVal += (target - pmVal) * Math.min(1, dt * 6);
@@ -4020,10 +4209,43 @@ function drawHud(dt) {
       gx + gw / 2, gy + gh + 14, 8, 700, col, "center", 0.5);
     if (lvl >= 3 && redline && you.energy < 38) label("EASE UP", gx + gw / 2, gy - 20, 8.5, 700, PAL.spot, "center", 0.7);
   }
+  // THE RHYTHM BAR. The bar IS your cadence and the line is the target, so one glance
+  // gives you both how far off you are and WHICH WAY: over the line means spinning too
+  // fast, short of it means grinding. The tolerance is drawn as a BAND rather than a
+  // hairline, because an invisible threshold is guesswork instead of a skill — and the
+  // band visibly narrows up the divisions, which is the difficulty made legible.
+  if (ttOnly) {
+    const bw = Math.max(20, gw * 2.1), bx = pad, bh2 = gh * 1.12, by = gy;
+    const maxRate = 5.4;
+    const shownSrc = you.ttRate === undefined ? lastRate : you.ttRate;
+    ttShown += (Math.min(shownSrc, maxRate) - ttShown) * Math.min(1, dt * 2.6);   // smoothed: raw taps jitter
+    const yOf = v => by + bh2 * (1 - clamp(v / maxRate, 0, 1));
+    const tgt = Sim.CFG.ttCadence;
+    const band = Sim.CFG.ttBand * (1.9 - 1.15 * race.D.t) * 0.35;   // the green pocket
+    const hold = you.ttHold === null || you.ttHold === undefined ? 0 : you.ttHold;
+    const inPocket = Math.abs(ttShown - tgt) <= band;
+    const col = inPocket ? PAL.green : hold > 0.35 ? PAL.fuel : PAL.spot;
+    ctx.fillStyle = "rgba(46,49,47,.12)"; roundRect(bx, by, bw, bh2, bw / 2); ctx.fill();
+    const fh = by + bh2 - yOf(ttShown);
+    ctx.fillStyle = col; roundRect(bx, yOf(ttShown), bw, fh, bw / 2); ctx.fill();
+    // The pocket is drawn OVER the fill, not behind it: behind, the bar covered it exactly
+    // when you were spinning above the target, which is when you most need to see where
+    // the target sits. Tinting over it keeps it visible at every cadence.
+    ctx.save();
+    ctx.globalAlpha = 0.34;
+    ctx.fillStyle = PAL.green;
+    ctx.fillRect(bx, yOf(tgt + band), bw, yOf(tgt - band) - yOf(tgt + band));
+    ctx.restore();
+    ctx.strokeStyle = PAL.ink; ctx.lineWidth = 2.4;   // the target itself
+    ctx.beginPath(); ctx.moveTo(bx - 4, yOf(tgt)); ctx.lineTo(bx + bw + 4, yOf(tgt)); ctx.stroke();
+    label("RHYTHM", bx + bw / 2, by - 7, 9, 700, "rgba(46,49,47,.5)", "center", 0.3);
+    label(inPocket ? "ON IT" : ttShown > tgt ? "TOO FAST" : "TOO SLOW",
+      bx + bw / 2, by + bh2 + 14, 8.5, 700, col, "center", 0.5);
+  }
   // Empties you are carrying, and the tap target for getting rid of them. Semantic,
   // top-left, and clear of both thumbs.
   binRect = { x: pad - 6, y: gy + gh + 10, w: gw * 3 + 34, h: 34 };
-  if (you.empties > 0) {
+  if (!ttOnly && you.empties > 0) {
     const inZone = (race.course.litters || []).some(l => you.dist >= l.s && you.dist <= l.e
       && Math.sign(you.x) === l.side && Math.abs(you.x) > 0.7);
     ctx.save();
@@ -4587,11 +4809,18 @@ function drawTutHint() {
   }
 }
 
+// Learns the phone's rest angle. One helper, so a new race path cannot silently ship
+// without calibration the way drills did.
+function tiltZero(k) {
+  if (!Tilt.on || !Tilt.ok) return;
+  Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * (1 - k) + Tilt.gamma * k;
+  Tilt.betaZero = Tilt.betaZero === null ? Tilt.beta : Tilt.betaZero * (1 - k) + Tilt.beta * k;
+}
 function tutTick(dt) {
   if (!tut || !race) return;
   // The tutorial skips the countdown, which is where tilt is normally zeroed, so
   // without this the phone's rest position is never learned and tilt does nothing.
-  if (Tilt.on && Tilt.ok) { Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * 0.94 + Tilt.gamma * 0.06; Tilt.betaZero = Tilt.betaZero === null ? Tilt.beta : Tilt.betaZero * 0.94 + Tilt.beta * 0.06; }
+  tiltZero(0.06);
   const you = race.you, c = race.course;
   if (you.dist > c.len * 0.55) {            // the lesson never runs out of road
     const back = c.len * 0.35;
@@ -4692,10 +4921,15 @@ function frame(now) {
   if (race && (phase === "race" || phase === "count")) {
     if (phase === "count") {
       countdown -= dt;
-      if (Tilt.on && Tilt.ok) { Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * 0.88 + Tilt.gamma * 0.12; Tilt.betaZero = Tilt.betaZero === null ? Tilt.beta : Tilt.betaZero * 0.88 + Tilt.beta * 0.12; }
+      tiltZero(0.12);
       if (countdown <= 0) phase = "race";
     }
     else if (!paused && (!tut || $("tutCard").classList.contains("hide"))) {
+      // DRILLS jump straight to "race" and never see the countdown, which is where the
+      // sensor was zeroed, so tilt did nothing at all in a drill: the exact place you go
+      // to test tilt quickly. Any race that starts without a countdown learns the rest
+      // position in its first frames instead.
+      if (Tilt.zero === null) tiltZero(0.3);
       Sim.step(race, dt, readInput(dt));
       tutTick(dt);
       drillTick(dt);
@@ -4760,6 +4994,22 @@ function drawMiniProfile(canvas, course) {
   g.strokeStyle = "rgba(46,49,47,.4)"; g.lineWidth = 1.5; g.beginPath();
   for (let i = 0; i <= 120; i++) { const x = w * (i / 120), y = py((i / 120) * course.len); i ? g.lineTo(x, y) : g.moveTo(x, y); }
   g.stroke();
+  // THE ROOF OF THE STAGE, in real numbers. The profile could always show you that a
+  // climb rose, never how high it topped out — and "2,272 m" is exactly the detail a
+  // cycling fan reads a stage profile for.
+  let hiM = 0, hiA = -1e9;
+  for (let i = 0; i <= 120; i++) {
+    const m = (i / 120) * course.len, a = Sim.altAt(course, m);
+    if (a > hiA) { hiA = a; hiM = m; }
+  }
+  if (hiA - Sim.altAt(course, 0) > 120) {          // only when there is a summit worth naming
+    const x = w * (hiM / course.len), y = py(hiM);
+    g.font = '700 9px "Space Grotesk", system-ui, sans-serif';
+    g.fillStyle = "rgba(46,49,47,.62)";
+    g.textAlign = x > w * 0.82 ? "right" : x < w * 0.18 ? "left" : "center";
+    g.fillText(M.alt(hiA), x, Math.max(9, y - 5));
+    g.textAlign = "left";
+  }
   for (const f of course.feeds) {
     g.fillStyle = "rgba(230,159,0,.4)";
     g.fillRect(w * (f.s / course.len), h - 12, w * ((f.e - f.s) / course.len), 5);
@@ -5035,6 +5285,10 @@ function armTiltOnFirstTap() {
   };
   addEventListener("pointerdown", go, true);
 }
+$("tiltBtn").addEventListener("click", () => {
+  ladder.tiltSens = ((ladder.tiltSens ?? 1) + 1) % TILT_SENS.length;
+  Store.save(ladder); refreshMenu();
+});
 $("leanBtn").addEventListener("click", () => {
   ladder.leanInvert = !ladder.leanInvert; Store.save(ladder); refreshMenu();
 });
@@ -5413,10 +5667,11 @@ function renderTourProfile(host) {
       const r = Sim.createRace({ seed, stageIndex: si, playerType, kit: ladder.kit, gc, leaders: {}, div: ladder.div });
       summit = Sim.gradeAt(r.course, r.course.len - 30) > 0.2;
     }
-    const label = spec.type === "mountain" ? (summit ? "Summit" : "Mountain")
+    const label = spec.tt ? "Time trial"
+      : spec.type === "mountain" ? (summit ? "Summit" : "Mountain")
       : spec.type === "flat" ? (spec.flatDay ? "Pan flat" : "Flat") : "Hills";
     const chip = document.createElement("div");
-    chip.className = "profchip t-" + (summit ? "summit" : spec.type);
+    chip.className = "profchip t-" + (spec.tt ? "tt" : summit ? "summit" : spec.type);
     chip.innerHTML = "<b>" + (i + 1) + "</b><span>" + label + "</span>";
     strip.appendChild(chip);
   });
