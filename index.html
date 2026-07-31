@@ -140,6 +140,10 @@
     border:1.5px solid rgba(46,49,47,.2);background:rgba(244,242,236,.9);font:inherit;font-size:12px;
     font-weight:700;letter-spacing:.12em;color:var(--ink);cursor:pointer}
   #pauseBtn.hide{display:none}
+  /* .hide alone never beat button.go, which sets display:block at higher specificity,
+     so every .go button "hidden" in JS was still on screen. This fixes the whole class. */
+  button.go.hide{display:none}
+  #leanBtn.hide{display:none}
   #pauseCard{position:fixed;left:0;right:0;bottom:0;z-index:42;background:var(--paper);
     border-top:1.5px solid rgba(46,49,47,.16);border-radius:20px 20px 0 0;padding:10px 18px 20px;
     box-shadow:0 -12px 34px rgba(46,49,47,.18)}
@@ -197,16 +201,6 @@
   <div class="eyebrow" id="mDiv">Division 8 of 8</div>
   <h1>SLIP<span class="cut">STREAM</span></h1>
   <div class="ladder"><span id="mDots">○○○○○○○●</span><span id="mStat"></span></div>
-  <p class="lede">Three things run down. Only your legs come back for free.</p>
-  <div class="rules">
-    <div class="rule"><b class="k1">Legs</b><span>Wind is what costs you. Sit on a wheel and they come back.</span></div>
-    <div class="rule"><b class="k2">Food</b><span>Drains every stage and never returns on its own. Eat before you need to.</span></div>
-    <div class="rule"><b class="k3">Fluid</b><span>You sweat harder climbing, and harder still in the peloton where there is no air.</span></div>
-    <div class="rule"><b class="k2">Gut</b><span>You only take on so much at once. Grab two things together and you waste the second.</span></div>
-    <div class="rule"><b class="k4">Wind</b><span>A crosswind moves the shelter sideways. Get on the right side of the wheel or ride in the gutter.</span></div>
-    <div class="rule"><b class="k1">The jump</b><span>Alternate the L and R pedals to lift the pace, faster for more. Two strokes on the same side is a missed pedal and it costs you. Hold both to soft pedal and recover.</span></div>
-    <div class="rule"><b class="k5">The peloton</b><span>They only chase what scares them. Go up the road before you are worth chasing.</span></div>
-  </div>
   <div class="secthead">Your kit colour</div>
   <div class="kits" id="mKits"></div>
   <canvas class="radar" id="mRadar"></canvas>
@@ -215,6 +209,7 @@
   <button class="go" id="dailyBtn">Daily challenge</button>
   <button class="go ghost" id="startBtn">Start tour</button>
   <button class="go ghost" id="buildBtn">Build your rider</button>
+  <button class="go ghost" id="routesBtn">Routes</button>
   <button class="go ghost" id="pracBtn">Practice</button>
   <div class="foot" id="mSteer"></div>
   <div class="foot">Hold a side to steer · alternate L and R to pedal · hold both to soft pedal</div>
@@ -228,6 +223,7 @@
     <p id="tcBody"></p>
     <button class="go" id="tcGo">Let me try</button>
     <button class="go ghost hide" id="tcMore">Learn more</button>
+    <button class="go ghost hide" id="tcRules">The rules</button>
     <button class="go ghost" id="tcSkip">Skip the tutorial</button>
   </div>
 </div>
@@ -250,7 +246,7 @@
   <h2>Settings</h2>
   <div class="secthead">Steering</div>
   <button class="go ghost" id="steerBtn">Drag</button>
-  <button class="go ghost" id="leanBtn">Tilt lean: normal</button>
+  <button class="go ghost hide" id="leanBtn">Tilt lean: normal</button>
   <div class="secthead">Units</div>
   <button class="go ghost" id="unitBtn">Km</button>
   <div class="secthead">Help</div>
@@ -264,6 +260,13 @@
   <h2>Riding data</h2>
   <p class="sub" id="dataSub"></p>
   <div id="dataBody"></div>
+</div></div>
+
+<div class="screen hide" id="routes"><div class="inner">
+  <button class="navback" id="routesBack" aria-label="Back">&#8592;</button>
+  <h2>Routes</h2>
+  <p class="sub" id="routesSub"></p>
+  <div id="routesBody"></div>
 </div></div>
 
 <div class="screen hide" id="drillBrief"><div class="inner">
@@ -285,6 +288,17 @@
 <div class="screen hide" id="rules"><div class="inner">
   <button class="navback" id="rulesBack" aria-label="Back">&#8592;</button>
   <h2>The rules</h2>
+  <p class="lede">Three things run down. Only your legs come back for free.</p>
+  <div class="rules">
+    <div class="rule"><b class="k1">Legs</b><span>Wind is what costs you. Sit on a wheel and they come back.</span></div>
+    <div class="rule"><b class="k2">Food</b><span>Drains every stage and never returns on its own. Eat before you need to.</span></div>
+    <div class="rule"><b class="k3">Fluid</b><span>You sweat harder climbing, and harder still in the peloton where there is no air.</span></div>
+    <div class="rule"><b class="k2">Gut</b><span>You only take on so much at once. Grab two things together and you waste the second.</span></div>
+    <div class="rule"><b class="k4">Wind</b><span>A crosswind moves the shelter sideways. Get on the right side of the wheel or ride in the gutter.</span></div>
+    <div class="rule"><b class="k1">The jump</b><span>Alternate the L and R pedals to lift the pace, faster for more. Two strokes on the same side is a missed pedal and it costs you. Hold both to soft pedal and recover.</span></div>
+    <div class="rule"><b class="k5">The peloton</b><span>They only chase what scares them. Go up the road before you are worth chasing.</span></div>
+  </div>
+  <div class="secthead">Penalties</div>
   <p class="sub">Commissaires judge you and your rivals alike. Lower divisions forgive a second offence; Division 1 forgives nothing.</p>
   <div class="earn" id="rulesList"></div>
   <p class="sub">Fines come out of your prize money. Time penalties are added to your finishing time. Losing a sprint means you take no points and no money at that line.</p>
@@ -384,7 +398,7 @@ const CFG = {
   throwWindow: 12, throwPeak: 2.0, throwGain: 1.4, throwCool: 0.45,
   // Empties you are still carrying. Barely felt on the flat, real on a climb, and
   // you can only hold three: so the decision is whether to lug them to the next
-  // litter zone or bin them where you are and take the fine.
+  // bottle drop or let go where you are and take the littering fine.
   carryMax: 3, carryDrag: 0.008, carryClimb: 0.030,
   // You may change your line in a sprint. You may not change it INTO someone. The
   // offence needs all three: you are off your line, you are moving toward them, and
@@ -1694,7 +1708,7 @@ function aiThink(race, r, dt) {
   }
   // Bin the empties. Nothing ever told a rival to throw a bottle away, so they carried
   // every empty to the finish, took the carry drag all day, and no bottle ever hit the
-  // verge. They now move to the litter zone's side on approach and let go inside it.
+  // verge. They now move to the bottle drop's side on approach and let go inside it.
   r.binTo = null;
   if (r.empties > 0) {
     const zone = (C.litters || []).find(l => r.dist > l.s - 70 && r.dist < l.e);
@@ -2151,7 +2165,10 @@ function stepRider(race, r, dt) {
     if (off > 0.95 * st.reach) continue;
     it.taken.add(r);
     if (off > 0.95 && st.feedSmooth < 2) r.stumble = Math.max(r.stumble, 0.2 - 0.06 * st.feedSmooth);
-    const eff = 1 - 0.85 * clamp(r.absorb / 100, 0, 1);
+    // Absorption is a RATE ceiling, not a wall. At 0.85 a stacked pickup returned almost
+    // nothing and read as a bug rather than a rule; at 0.50 stacking is inefficient but
+    // never wasted, which is the honest version of "you only take on so much at once".
+    const eff = 1 - 0.50 * clamp(r.absorb / 100, 0, 1);
     const give = CFG.give[it.kind] * eff;
     r.absorb = clamp(r.absorb + CFG.load[it.kind], 0, 100);
     if (it.kind === "food") {
@@ -2772,7 +2789,10 @@ function divDots(cur) {
 function refreshMenu() {
   $("unitBtn").textContent = ladder.units === "imperial" ? "Miles" : "Km";
   $("steerBtn").textContent = ladder.steer === "tilt" ? "Tilt" : "Drag";
+  // Only meaningful when you are actually steering by tilt, so it stays out of the way
+  // on drag. Toggling steering re-runs this, so it appears and disappears with it.
   $("leanBtn").textContent = "Tilt lean: " + (ladder.leanInvert ? "inverted" : "normal");
+  $("leanBtn").classList.toggle("hide", ladder.steer !== "tilt");
   $("mSteer").textContent = ladder.steer === "tilt" ? Tilt.label()
     : "Hold the left or right half to turn. Let go and you hold your line.";
   $("mDiv").textContent = "Division " + ladder.div + " of 8";
@@ -3451,7 +3471,7 @@ function drawRoad() {
       ctx.lineTo(sx(d, l.side > 0 ? e : -e * 0.34), sy(d)); }
     ctx.closePath(); ctx.fill(); ctx.restore();
     if (l.s > dBot && l.s < dTop)
-      label("LITTER ZONE", sx(l.s, l.side * 2.4), sy(l.s) - 6, 10, 700, PAL.water, "center", 1.5);
+      label("BOTTLE DROP", sx(l.s, l.side * 2.4), sy(l.s) - 6, 10, 700, PAL.water, "center", 1.5);
   }
   for (const f of c.feeds) {
     if (f.e < dBot || f.s > dTop) continue;
@@ -3564,7 +3584,7 @@ function drawItems() {
     }
     const col = it.kind === "water" ? PAL.water : it.kind === "salt" ? PAL.green : PAL.fuel;
     ctx.save();
-    ctx.globalAlpha = 1 - 0.62 * clamp(you.absorb / 100, 0, 1);   // still digesting
+    ctx.globalAlpha = 1 - 0.42 * clamp(you.absorb / 100, 0, 1);   // still digesting
     ctx.fillStyle = "rgba(46,49,47,.14)";
     roundRect(x - w / 2 + 1.5, y - h / 2 + 2.5, w, h, w * 0.34); ctx.fill();
     ctx.fillStyle = col; roundRect(x - w / 2, y - h / 2, w, h, w * 0.34); ctx.fill();
@@ -3805,7 +3825,7 @@ function coach() {
   const y = race.you;
   if (y.fuel < 55) tip("fuel", "FOOD LOW. EAT SOON", PAL.fuel);
   if (y.fluid < 55) tip("fluid", "DRINK BEFORE YOU CRAMP", PAL.water);
-  if (y.absorb > 60) tip("absorb", "STILL DIGESTING. ONE AT A TIME", PAL.green);
+  if (y.absorb > 50) tip("absorb", "STILL DIGESTING. ONE AT A TIME", PAL.green);
 }
 
 function drawFlashes(dt) {
@@ -3964,7 +3984,26 @@ function drawHud(dt) {
     ctx.fillRect(gx - 3, gy + gh * (1 - you.legCap / 100) - 1, gw + 6, 2);
   }
   gx += gstep;
-  gauge(gx, gy, gw, gh, you.fuel, you.bonk ? PAL.spot : PAL.fuel, "FOOD"); gx += gstep;
+  gauge(gx, gy, gw, gh, you.fuel, you.bonk ? PAL.spot : PAL.fuel, "FOOD");
+  // Still digesting: a ghost segment stacked on top of the FOOD fill — what you have
+  // swallowed but not yet absorbed. While it is tall, another pickup is worth less, so
+  // the reason is on screen as it happens instead of only in a number that flashes past.
+  const dgs = clamp(you.absorb / 100, 0, 1);
+  if (dgs > 0.02) {
+    const ffh = gh * clamp(you.fuel / 100, 0, 1);
+    // A PALE SLICE OFF THE TOP OF THE FILL, not a block stacked above it: stacked above,
+    // it vanished exactly when the bar was full, which is the moment you have just
+    // over-eaten and most need to see it. Inside the fill it is always visible.
+    const dh = Math.min(ffh, gh * 0.20 * dgs);
+    if (dh > 0.5) {
+      ctx.save();
+      ctx.globalAlpha = 0.45 + 0.25 * dgs;
+      ctx.fillStyle = PAL.chalk;
+      roundRect(gx, gy + gh - ffh, gw, dh, gw / 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+  gx += gstep;
   gauge(gx, gy, gw, gh, you.fluid, you.dry ? PAL.spot : PAL.water, "FLUID");
   // Power meter (a tactic, only if fitted): reads your effort so you can pace it.
   if ((you.stats.powerMeter || 0) > 0) {
@@ -4027,8 +4066,8 @@ function drawHud(dt) {
     : { at: nf.s, t: "FEED ZONE IN " + M.near(nf.s - you.dist), c: PAL.fuel });
   const nl = (c.litters || []).find(x => you.dist < x.e && x.s - you.dist < 150);
   if (nl && you.empties > 0) cands.push(you.dist > nl.s
-    ? { at: you.dist, t: "LITTER ZONE", c: PAL.water }
-    : { at: nl.s, t: "LITTER ZONE IN " + M.near(nl.s - you.dist), c: PAL.water });
+    ? { at: you.dist, t: "BOTTLE DROP", c: PAL.water }
+    : { at: nl.s, t: "BOTTLE DROP IN " + M.near(nl.s - you.dist), c: PAL.water });
   const ns = (c.surfaces || []).find(x => x.kind !== "rough" && you.dist < x.e && x.s - you.dist < 190);
   if (ns) cands.push(you.dist > ns.s
     ? { at: you.dist, t: Sim.SURFACES[ns.kind].name.toUpperCase(), c: PAL.ink }
@@ -4305,6 +4344,26 @@ const TUTORIAL = [
     },
     b: "Food and fluid never come back on their own. They sit on the road through the feed zones: gels and bars for fuel, bottles for fluid. Steer over them to take them. Miss them and you will run empty long before the finish.",
     p: "Collect three", need: 3, get: () => tutFed },
+  { t: "Your gut", demo: "gut",
+    setup: r => {
+      tutClear(r);
+      // An empty-ish stomach and room in the FOOD gauge, or both pickups read "+0" and
+      // the whole lesson is invisible. The pair sit close enough that there is no time
+      // to digest between them.
+      r.you.fuel = 8; r.you.absorb = 0;
+      r.course.items.length = 0;
+      const d = r.you.dist;
+      // Two, not three: a third lands with the FOOD bar nearly full, so the number you
+      // see would be the gauge running out of room rather than the gut, which teaches
+      // the wrong thing.
+      r.course.items.push({ kind: "food", d: d + 45, x: -0.4, taken: new Set() });
+      r.course.items.push({ kind: "food", d: d + 53, x: 0.4, taken: new Set() });
+    },
+    b: "You only take on so much at once. Take these two gels back to back and watch the FOOD "
+      + "gauge: the pale block stacked on top of it is what is sitting in your stomach, and while "
+      + "it is there the next one is worth less. The second gel gives about a third less than the "
+      + "first. Leave a gap between them and you keep the lot.",
+    p: "Take both gels and watch the FOOD bar", need: 2, get: () => tutGut },
   { t: "Soft pedal", demo: "coast", setup: tutClear,
     b: "Hold BOTH pads at once to soft pedal. You drift back, but your legs come back faster. Watch the LEGS bar on the left refill.",
     p: "Hold both pads for 2 seconds", need: 120, timed: 1, get: () => Math.round(tutCoast) },
@@ -4346,7 +4405,7 @@ const TUTORIAL = [
     b: "Three quick strokes in under a second, swapping sides each time, fires a jump: a burst of hard acceleration. Either side can start it. It spends the charge you build while sitting quietly on a wheel, so save it for when it counts.",
     p: "Three quick strokes", need: 3, get: () => tutJumps }
 ];
-let tutDraft = 0, tutRest = 0, tutJumps = 0, tutWind = 0, tutLeft = 0, tutRight = 0, tutCadence = 0, tutFed = 0,
+let tutDraft = 0, tutRest = 0, tutJumps = 0, tutWind = 0, tutLeft = 0, tutRight = 0, tutCadence = 0, tutFed = 0, tutGut = 0,
   tutThrew = 0, tutLean = 0, tutWaiting = false;
 function armCard(ms) {                         // buttons dead briefly on appearing
   $("tcGo").disabled = true; $("tcSkip").disabled = true;
@@ -4365,11 +4424,13 @@ function showTutCard() {
     $("tutQuit").classList.add("hide");
     $("tcGo").textContent = "Race now";
     $("tcMore").classList.remove("hide");
-    $("tcSkip").classList.add("hide");
+    $("tcRules").classList.remove("hide");   // penalties have no step of their own; this is the one
+    $("tcSkip").classList.add("hide");       // moment they are already choosing how much more to learn
     armCard(750);
     return;
   }
   $("tcMore").classList.add("hide");
+  $("tcRules").classList.add("hide");
   const coreN = TUTORIAL.findIndex(x => x.demo === "coreEnd");
   $("tcStep").textContent = tut.i < coreN
     ? "Step " + (tut.i + 1) + " of " + coreN
@@ -4431,7 +4492,7 @@ function startTutorial(from) {
 function startTutStep() {
   $("tutCard").classList.add("hide");
   tutStrokes = 0; tutSteered = 0; tutDraft = 0; tutRest = 0; tutCoast = 0; tutJumps = 0; tutWind = 0;
-  tutLeft = 0; tutRight = 0; tutCadence = 0; tutFed = 0; tutThrew = 0; tutLean = 0;
+  tutLeft = 0; tutRight = 0; tutCadence = 0; tutFed = 0; tutGut = 0; tutThrew = 0; tutLean = 0;
   tutWaiting = true;
   const st = TUTORIAL[tut.i];
   if (st.setup && race) st.setup(race);      // stage the situation this lesson needs
@@ -4548,6 +4609,9 @@ function tutTick(dt) {
   if (st.demo === "feed") {
     tutFed = race.course.items.filter(it => it.taken.has(you)).length;
   }
+  if (st.demo === "gut") {
+    tutGut = race.course.items.filter(it => it.taken.has(you)).length;
+  }
   if (st.demo === "steer") {                 // right edge first, then all the way back
     if (!tutRight && you.x > 2.8) tutRight = 1;
     if (tutRight && you.x < -2.8) tutLeft = 1;
@@ -4660,7 +4724,7 @@ function frame(now) {
 // ---------------------------------------------------------------- screens
 const $ = id => document.getElementById(id);
 const show = id => {
-  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data"])
+  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes"])
     $(s).classList.toggle("hide", s !== id);
   $("drillDone").classList.add("hide");       // never leaves it stranded over a screen
 };
@@ -5003,7 +5067,7 @@ $("rulesBtn").addEventListener("click", () => {
   const rows = [
     ["Off your line", "Moving across a rider while contesting a sprint, summit or the finish. You may change your line; you may not change it into someone."],
     ["Cutting the median", "Hopping onto a median and riding over it instead of going round it."],
-    ["Littering", "Getting rid of an empty bottle outside a litter zone."],
+    ["Littering", "Getting rid of an empty bottle outside a bottle drop."],
     ["Sticky bottle", "Taking a tow from the team car when you have been dropped. Needs Team tactics at full support."]
   ];
   for (const [nm, why] of rows) {
@@ -5015,9 +5079,24 @@ $("rulesBtn").addEventListener("click", () => {
   }
   show("rules");
 });
-$("rulesBack").addEventListener("click", () => show("settings"));
+$("rulesBack").addEventListener("click", () => {
+  if (rulesFrom === "tutorial") {            // straight back into the tutorial card, mid-race
+    rulesFrom = "settings";
+    $("rules").classList.add("hide");
+    showTutCard();
+    return;
+  }
+  show("settings");
+});
+$("tcRules").addEventListener("click", () => {
+  rulesFrom = "tutorial";
+  $("tutCard").classList.add("hide");
+  show("rules");
+});
 $("drillBtn").addEventListener("click", () => { renderDrills(); show("drills"); });
 $("dataBack").addEventListener("click", () => show(dataFrom));
+$("routesBtn").addEventListener("click", () => { show("routes"); renderRoutes(); });
+$("routesBack").addEventListener("click", () => show("menu"));
 for (const [btn, from] of [["dataBtnMenu", "settings"], ["dataBtnRes", "result"]])
   $(btn).addEventListener("click", () => { dataFrom = from; show("data"); renderData(); });
 $("drillBack").addEventListener("click", () => { renderPractice(); show("practice"); });
@@ -5393,7 +5472,7 @@ const DRILLS = [
       r.course.surfaces.push(Sim.MAKE.surface("cobbles", r.you.dist + 220, 200, 1));
       r.course.surfaces.push(Sim.MAKE.surface("gravel", r.you.dist + 480, 170, 1));
     } },
-  { id: "bottles", name: "Bottles and litter zones", tip: "Getting rid of your empties.", tips: ["Empties sit under the FLUID gauge. Carrying them slows you, worst on a climb.", "Litter zones run down one side of the road. Get over to that side and tap the bottles.", "Binning them anywhere else is a fine. Zones are shorter the higher you race."],
+  { id: "bottles", name: "Bottles and drop zones", tip: "Getting rid of your empties.", tips: ["Empties sit under the FLUID gauge. Carrying them slows you, worst on a climb.", "A BOTTLE DROP runs down one side of the road. Get over to that side and tap the bottles.", "Letting go anywhere else is littering, and a fine. Drops are shorter the higher you race."],
     stage: 3, setup: r => {
       tutClear(r);
       r.you.empties = 3;
@@ -5570,6 +5649,7 @@ function checkDrills() {
 }
 
 let dataFrom = "menu";
+let rulesFrom = "settings";
 
 // Every figure, no verdict. Yours beside the winners' across the same races, so the
 // conclusion is one you reach rather than one the game hands you.
@@ -5583,6 +5663,65 @@ const nth = n => {
   if (t >= 11 && t <= 13) return "th";
   return ["th", "st", "nd", "rd"][n % 10] || "th";
 };
+// ---- routes (PLACEHOLDER) ------------------------------------------------------
+// Routes are not built yet. This screen exists so prize money has somewhere to LIVE
+// and somewhere to GO: until now the balance was buried in a stats line on the menu
+// and nothing in the game ever spent it. Prize money has exactly one job (buying
+// routes), so the balance belongs on the screen that will sell them.
+// PORT NOTE: the packs below are placeholder copy, not a catalogue. When routes are
+// real these become products (~$2.99 each, or bought with prize money), and the real
+// climbs inside them must stay undated and clear of race branding.
+const ROUTE_PACKS = [
+  { name: "The high Alps", note: "Hors categorie passes and a descent that keeps going.", cost: 9000 },
+  { name: "The cobbles", note: "Flat, brutal, and decided by position rather than legs.", cost: 9000 },
+  { name: "The Pyrenees", note: "Shorter climbs, steeper ramps, no time to recover.", cost: 9000 }
+];
+function renderRoutes() {
+  $("routesSub").textContent = "Prize money is only ever spent here.";
+  const box = $("routesBody"); box.innerHTML = "";
+
+  const bal = document.createElement("div");
+  bal.style.cssText = "margin:6px 0 2px;display:flex;align-items:baseline;gap:10px";
+  const big = document.createElement("b");
+  big.style.cssText = "font-size:34px;letter-spacing:-.02em";
+  big.textContent = ladder.money || 0;
+  const cap = document.createElement("span");
+  cap.style.cssText = "font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.45";
+  cap.textContent = "prize money";
+  bal.appendChild(big); bal.appendChild(cap); box.appendChild(bal);
+
+  const how = document.createElement("p");
+  how.className = "sub";
+  how.textContent = "Won at intermediate sprints, at the top of climbs, and for finishing "
+    + "places on a stage and overall. The daily challenge pays nothing: it is for bragging rights.";
+  box.appendChild(how);
+
+  const head = document.createElement("div");
+  head.className = "secthead"; head.textContent = "Route packs";
+  box.appendChild(head);
+
+  for (const p of ROUTE_PACKS) {
+    const card = document.createElement("div"); card.className = "card locked";
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = p.name; top.appendChild(nb);
+    const tag = document.createElement("span"); tag.className = "pips"; tag.textContent = "in the works";
+    top.appendChild(tag); card.appendChild(top);
+    const note = document.createElement("div"); note.className = "note"; note.textContent = p.note;
+    card.appendChild(note);
+    const btns = document.createElement("div"); btns.className = "btns";
+    const b = document.createElement("button");
+    b.className = "mini"; b.disabled = true; b.textContent = p.cost + " prize money";
+    btns.appendChild(b); card.appendChild(btns);
+    box.appendChild(card);
+  }
+
+  const foot = document.createElement("p");
+  foot.className = "sub";
+  foot.style.cssText = "margin-top:14px";
+  foot.textContent = "Routes are not in the game yet. Every stage you ride is generated. "
+    + "Keep racing: prize money carries over and nothing here expires.";
+  box.appendChild(foot);
+}
 function renderData() {
   const box = $("dataBody"); box.innerHTML = "";
   const races = history.length;
