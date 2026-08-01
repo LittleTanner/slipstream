@@ -48,6 +48,8 @@
   .profchip.t-summit{background:rgba(204,0,102,.24)}
   .profchip.t-hills{background:rgba(120,150,60,.16)}
   .profchip.t-tt{background:rgba(0,114,178,.18)}
+  .profchip.t-route{background:rgba(204,0,102,.34);font-weight:700}
+  #grandBtn.hide{display:none}
   .card.locked{opacity:.6}
   .card.locked .note{font-style:italic}
   .pick{display:block;text-align:left;padding:13px 15px;border-radius:14px;
@@ -210,6 +212,7 @@
   <button class="go" id="dailyBtn">Daily challenge</button>
   <button class="go ghost" id="startBtn">Start tour</button>
   <button class="go ghost" id="buildBtn">Build your rider</button>
+  <button class="go ghost hide" id="grandBtn">The Grand Tour</button>
   <button class="go ghost" id="routesBtn">Routes</button>
   <button class="go ghost" id="pracBtn">Practice</button>
   <div class="foot" id="mSteer"></div>
@@ -263,6 +266,20 @@
   <h2>Riding data</h2>
   <p class="sub" id="dataSub"></p>
   <div id="dataBody"></div>
+</div></div>
+
+<div class="screen hide" id="pick"><div class="inner">
+  <button class="navback" id="pickBack" aria-label="Back">&#8592;</button>
+  <h2>Choose your race</h2>
+  <p class="sub" id="pickSub"></p>
+  <div id="pickBody"></div>
+</div></div>
+
+<div class="screen hide" id="rest"><div class="inner">
+  <div class="eyebrow">Rest day</div>
+  <h2 id="restTitle"></h2>
+  <p class="sub" id="restNote"></p>
+  <button class="go" id="restGo">Back on the bike</button>
 </div></div>
 
 <div class="screen hide" id="routes"><div class="inner">
@@ -394,6 +411,8 @@ const CFG = {
   roadW: 9, base: 12.8, fixedDt: 1 / 120,
   ease: 0.58, tempo: 0.86, attack: 1.24,
   gravG: 0.85, brakeMin: 0.16,        // downhill: gravity coast strength; how much soft-pedalling can scrub it
+  scaleM: 100,                        // sim distance unit -> display metres (10 units per km)
+  gradePct: 15,                       // sim gradient -> displayed percent
   elevM: 7,                           // sim elevation unit -> metres of TOTAL CLIMBING on a stage
   altM: 2.7,                          // sim elevation unit -> metres of HEIGHT above the course low point.
                                       // Deliberately a smaller scale: the sum of every ascent on a stage is
@@ -449,7 +468,7 @@ const CFG = {
   // and slowly lose ground; about two strokes a second holds tempo; more attacks.
   idle: 0.815, freeDraft: 0.72, strokeTempo: 2.0, strokeAttack: 4.0, strokeFull: 2.2,
   ttCadence: 3.4, ttBand: 1.15, ttPeak: 0.45,
-  ttGap: 5, ttDraftMax: 3.0, ttDraftQ: 0.22,   // start interval, seconds of shelter allowed, what counts as sheltering   // time-trial rhythm: target cadence, tolerance, and how hard the rhythm pays
+  ttGap: 12, ttDraftMax: 3.0, ttDraftQ: 0.22,  // start interval, seconds of shelter allowed, what counts as sheltering   // time-trial rhythm: target cadence, tolerance, and how hard the rhythm pays
   // Every prime pays, so a climber still contests a sprint line and a sprinter
   // still goes over the top hard. Higher divisions pay far more, which keeps the
   // best earning at the top of the ladder rather than farming the bottom.
@@ -682,6 +701,25 @@ function buildArchetype(build) {
   return "Rouleur";
 }
 
+// REAL CLIMBS. Public mountain passes, described the way a cycling fan knows them:
+// length, average gradient, summit altitude. Deliberately geography and not race branding,
+// so nothing here is tied to a dated event.
+// AUTHORED TO WHAT YOU READ WHILE RIDING: `km` and `grade` land exactly on the distance and
+// the live gradient readout. The stage's "total climbing" figure will under-report, because
+// the game's three display scales (gradePct 15, elevM 7, altM 2.7) disagree with each other
+// and always have — see the note in [[cycling-game]]. The summit altitude is pinned
+// explicitly by `top` so the profile label reads the real number.
+const ROUTES = [
+  { id: "alpe", pack: "alps", name: "Alpe d'Huez", km: 13.8, grade: 8.1, top: 1850, summit: true,
+    note: "Twenty-one hairpins stacked above the valley. The first ramps are the steepest." },
+  { id: "galibier", pack: "alps", name: "Col du Galibier", km: 18.1, grade: 6.9, top: 2642, summit: false,
+    note: "Long, high and cold. It keeps going after you think it is done." },
+  { id: "madeleine", pack: "alps", name: "Col de la Madeleine", km: 19.2, grade: 7.9, top: 2000, summit: false,
+    note: "Nineteen kilometres that never once lets you sit down." }
+];
+const ROUTE_BY_ID = {};
+for (const r of ROUTES) ROUTE_BY_ID[r.id] = r;
+
 const STAGES = [
   { name: "Stage 1", sub: "Flat", type: "flat", len: 1400, hilly: 0.16, wind: 0.85, sprints: 2 },
   { name: "Stage 2", sub: "Hills", type: "hills", len: 1550, hilly: 0.44, wind: 0.40, sprints: 2 },
@@ -741,15 +779,28 @@ function tourSchedule(seed, len) {
   out[len - 1] = R() < 0.5 ? 4 : 2;
   const mid = [];
   for (let i = 1; i < len - 1; i++) mid.push(i);
-  out[mid.splice(Math.floor(R() * mid.length), 1)[0]] = 3;      // a sprinters' day
-  if (mid.length) out[mid.splice(Math.floor(R() * mid.length), 1)[0]] = 4;   // a climbers' day
+  // Scale the set pieces with the length. One climbers' day is a shape for a week; across
+  // three weeks it would leave the middle formless, so a longer race gets more of both.
+  const nSpecial = len >= 14 ? 2 : 1;
+  for (let k = 0; k < nSpecial && mid.length; k++)
+    out[mid.splice(Math.floor(R() * mid.length), 1)[0]] = 3;   // a sprinters' day
+  for (let k = 0; k < nSpecial && mid.length; k++)
+    out[mid.splice(Math.floor(R() * mid.length), 1)[0]] = 4;   // a climbers' day
   for (const i of mid) { const r = R(); out[i] = r < 0.40 ? 0 : r < 0.80 ? 1 : 2; }
   // Long tours get a TIME TRIAL, as every grand tour does. Kevin's call: 7 days and up
   // only, so short tours keep their shape. Never the opener or the finale.
   if (len >= 7) {
-    const slots = [];
-    for (let i = 1; i < len - 1; i++) if (out[i] !== 3 && out[i] !== 4) slots.push(i);
-    if (slots.length) out[slots[Math.floor(R() * slots.length)]] = 5;
+    const nTT = len >= 14 ? 2 : 1;                 // a three-week race has two races of truth
+    for (let k = 0; k < nTT; k++) {
+      const slots = [];
+      for (let i = 1; i < len - 1; i++) {
+        if (out[i] === 3 || out[i] === 4 || out[i] === 5) continue;
+        let near = false;                          // never two time trials in the same week
+        for (let j = Math.max(0, i - 3); j <= Math.min(len - 1, i + 3); j++) if (out[j] === 5) near = true;
+        if (!near) slots.push(i);
+      }
+      if (slots.length) out[slots[Math.floor(R() * slots.length)]] = 5;
+    }
   }
   return out;
 }
@@ -813,6 +864,7 @@ function buildStage(seed, spec0, D) {
     hilly: clamp(spec0.hilly + D.hilly * (spec0.flatDay ? 0.25 : 1), 0, 0.88),
     flatDay: spec0.flatDay,
     tt: spec0.tt,
+    route: spec0.route,
     wind: clamp(spec0.wind * D.wind, 0, 1)
   };
   const R = mulberry32(seed);
@@ -851,6 +903,28 @@ function buildStage(seed, spec0, D) {
     climbs = climbs.filter(c => c.e <= start + 20);     // absorb any climb the ramp overlaps
     climbs.push({ s: start, e: spec.len });
   }
+  // AN AUTHORED CLIMB. Stamped into the raw terrain exactly like the summit finish above,
+  // so everything downstream — smoothing, KOM primes, the climb board, altitude — treats it
+  // as an ordinary climb and needs no special case. Only the shape is hand-made.
+  const route = spec.route ? ROUTE_BY_ID[spec.route] : null;
+  let routeEnd = 0;
+  if (route) {
+    const cLen = Math.round(route.km * 1000 / CFG.scaleM);
+    const g = route.grade / CFG.gradePct;
+    const end = route.summit ? spec.len : Math.round(spec.len * 0.66);
+    const start = Math.max(200, end - cLen);
+    routeEnd = end;
+    for (let i = Math.floor(start / STEP); i < Math.ceil(end / STEP); i++) raw[i] = g;
+    // A pass is not a finish: put a real descent off the far side, which is where the
+    // descending skill gets its say and why a climber cannot simply ride away over the top.
+    if (!route.summit) {
+      const dEnd = Math.min(spec.len - 120, end + cLen * 0.75);
+      for (let i = Math.ceil(end / STEP); i < Math.ceil(dEnd / STEP); i++) raw[i] = -g * 0.92;
+    }
+    climbs = climbs.filter(c => c.e <= start - 20 || c.s >= end + 20);
+    climbs.push({ s: start, e: end, route: route.id });
+    climbs.sort((a, b) => a.s - b.s);
+  }
   const grades = new Array(n).fill(0), K = 5;
   for (let i = 0; i < n; i++) {
     let s = 0, w = 0;
@@ -869,9 +943,15 @@ function buildStage(seed, spec0, D) {
   // altitude, drawn from its own PRNG so it cannot shift course generation, turns the
   // profile into real numbers: mountain days start high, flat days near sea level.
   const altR = mulberry32((seed ^ 0x7a1cf00d) >>> 0);
-  const baseElev = Math.round((spec.type === "mountain" ? 620 + altR() * 780
+  let baseElev = Math.round((spec.type === "mountain" ? 620 + altR() * 780
     : spec.hilly > 0.34 ? 180 + altR() * 320
     : 15 + altR() * 175) / 5) * 5;
+  // A named pass has a real height, and that is one of the few numbers a cycling fan will
+  // check. The road is placed so the top of the authored climb reads exactly that.
+  if (route) {
+    const si = clamp(Math.round(routeEnd / STEP), 0, n - 1);
+    baseElev = Math.round((route.top - (elev[si] - eMin) * CFG.altM) / 5) * 5;
+  }
   const gRaw = m => grades[clamp(Math.round(m / STEP), 0, n - 1)] || 0;
 
   const primes = [];
@@ -1422,7 +1502,10 @@ function pickPlan(i, R) {
 }
 
 function createRace(opts) {
-  const spec = STAGES[opts.stageIndex];
+  const spec0 = STAGES[opts.stageIndex];
+  // A route is an option on the stage, not a stage type of its own: the day is still a
+  // mountain stage, it just happens to go over a road with a name.
+  const spec = opts.route ? Object.assign({}, spec0, { route: opts.route }) : spec0;
   const D = tierProfile(opts.div === undefined ? 8 : opts.div);
   const course = buildStage(opts.seed, spec, D);
   const R = mulberry32(opts.seed ^ 0x5f3d17);
@@ -1513,10 +1596,12 @@ function createRace(opts) {
   // already up the road at the distances their own rides earned, and your elapsed clock
   // begins at zero. Deterministic, and it consumes no player input because a rider whose
   // slot has not come cannot move.
-  if (ttGap > 0 && you.startAt > 0) {
-    const steps = Math.round(you.startAt / CFG.fixedDt);
-    for (let k = 0; k < steps; k++) tick(race, CFG.fixedDt);
-  }
+  // The pre-roll is recorded as a DEBT rather than run here. Simulating it inline froze the
+  // game for nearly two seconds on every time trial, and the cost is per-tick so coarsening
+  // alone could not fix it. The view pays it off across the countdown frames instead, and
+  // step() flushes whatever is left, so a headless caller that just starts stepping still
+  // gets the correct world without having to know the mechanism exists.
+  race.preRoll = ttGap > 0 ? you.startAt : 0;
   return race;
 }
 
@@ -2624,6 +2709,19 @@ function bump(race, r, text) {
   if (r.you && text) race.events.push({ t: text, c: "spot" });
 }
 
+// Pays down the pre-roll, up to `ticks` steps. Coarse and fixed at 1/20 so it stays
+// deterministic: nobody ever sees these frames, they only decide where the riders who
+// started before you have got to. Returns true once the debt is clear.
+function preRoll(race, ticks) {
+  const dtPre = 1 / 20;
+  let n = ticks === undefined ? 1e9 : ticks;
+  while (race.preRoll > 1e-6 && n-- > 0) {
+    tick(race, dtPre);
+    race.preRoll -= dtPre;
+  }
+  if (race.preRoll <= 1e-6) { race.preRoll = 0; return true; }
+  return false;
+}
 function tick(race, dt) {
   if (!race.neutral) race.clock += dt;      // the stage is timed from the flag, not the roll-out
   updateGroups(race, dt);
@@ -2632,6 +2730,8 @@ function tick(race, dt) {
 }
 
 function step(race, frameDt, input) {
+  if (race.preRoll > 0) preRoll(race);      // never race a world that has not caught up
+
   race.acc += Math.min(frameDt, 0.25);
   while (race.acc >= CFG.fixedDt) {
     if (input) {
@@ -2844,7 +2944,7 @@ return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
-  createRace, snapshot, restore, step, tick, settle, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
+  createRace, snapshot, restore, step, tick, preRoll, settle, ROUTES, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
   danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
   surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
@@ -2890,7 +2990,7 @@ let committedBuild = null;
 let playerKit = "magenta";
 let dailyRun = false;
 let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", daily: null,
-  owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0 };
+  owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0, packs: [], req: {} };
 
 // ---------------------------------------------------------------- tilt steering
 // iOS 13+ needs an explicit permission grant from inside a user gesture, and the
@@ -3086,19 +3186,60 @@ function recordStage(race, spec, div) {
 }
 
 // One rule up, one rule down. The equilibrium of that is "wins sometimes".
-function applyLadder(place) {
+// PROMOTION BY A SEASON, NOT A SINGLE RESULT. Winning one tour used to move you up, and
+// since more than half of a low division's draws are one-day races you could climb the whole
+// ladder without ever managing a general classification. Now each division asks for a SHORT,
+// a MEDIUM and a LONG race, and the result you need tightens as you climb. It also fixes a
+// content problem: seven-day tours never occurred below Division 2, so routes and the time
+// trial were gated behind a draw most of the game could not make.
+const REQ_ORDER = ["short", "medium", "long"];
+// "Grand tour" was the first label for the long requirement and it collided head-on with
+// THE Grand Tour, the fixed race you unlock by taking Division 1. Two different things
+// cannot share a name in the one sentence that explains how to progress.
+const REQ_LABEL = { short: "one-day race", medium: "short tour", long: "long tour" };
+const reqVerb = div => ["", "win", "finish top two in", "finish top three in"][reqPlace(div)];
+function reqList(ks) {
+  const a = ks.map(k => "a " + REQ_LABEL[k]);
+  return a.length > 1 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a[0];
+}
+// Division 1 has nowhere above it, so "to reach Division 0" was nonsense. Taking it is the
+// achievement in its own right, and it is what opens the Grand Tour.
+function reqSentence() {
+  const need = reqLeft();
+  if (!need.length) return "Division " + ladder.div + " is complete.";
+  const tail = reqVerb(ladder.div) + " " + reqList(need) + ".";
+  return ladder.div === 1
+    ? "To take Division 1 and open the Grand Tour you must " + tail
+    : "To reach Division " + (ladder.div - 1) + " you must " + tail;
+}
+const reqPlace = div => div >= 6 ? 3 : div >= 3 ? 2 : 1;
+// Division 8 is where you learn the game; asking for a twenty-minute stage race to escape it
+// is a poor first impression, so the long race is required from Division 7 down.
+const reqNeeded = div => div === 8 ? ["short", "medium"] : REQ_ORDER;
+const kindForLen = len => len === 1 ? "short" : len >= 7 ? "long" : "medium";
+const reqDone = k => !!(ladder.req && ladder.req[k]);
+const reqLeft = () => reqNeeded(ladder.div).filter(k => !reqDone(k));
+
+function applyLadder(place, kind) {
   ladder.tours++;
   let moved = "held";
-  if (place === 1) {
-    ladder.wins++;
-    if (ladder.div === 1) ladder.topWins++;
-    if (ladder.div > 1) { ladder.div--; moved = "up"; ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); }
-    ladder.strikes = 0;
-  } else if (place >= 5) {
+  if (place === 1) ladder.wins++;
+  if (kind && place <= reqPlace(ladder.div)) {
+    (ladder.req || (ladder.req = {}))[kind] = true;
+    if (reqNeeded(ladder.div).every(reqDone)) {
+      ladder.req = {};
+      ladder.strikes = 0;
+      // At Division 1 there is nowhere left to be promoted to, so completing it IS the
+      // achievement — and it is what opens the Grand Tour.
+      if (ladder.div > 1) { ladder.div--; moved = "up"; ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); }
+      else { ladder.topWins = (ladder.topWins || 0) + 1; moved = "top"; }
+    }
+  }
+  if (place >= 5) {
     ladder.strikes++;
     if (ladder.strikes >= 2) {                       // two bad tours, not one
       ladder.strikes = 0;
-      if (ladder.div < 8) { ladder.div++; moved = "down"; }
+      if (ladder.div < 8) { ladder.div++; moved = "down"; ladder.req = {}; }
     }
   } else ladder.strikes = 0;
   if (ladder.div < ladder.best) ladder.best = ladder.div;
@@ -3133,8 +3274,14 @@ function refreshMenu() {
     ? (sv.race ? "Resume mid-race · stage " : "Resume · stage ")
       + (sv.stage + 1) + " of " + sv.schedule.length
     : "Start tour";
-  $("mStat").textContent = ladder.tours === 0 ? "Win a tour to move up. Two bad tours and you drop."
-    : ladder.tours + " tours · " + ladder.wins + " won · " + ladder.money + " prize money"
+  // What the division still wants from you, in plain words, on the menu. "Win a tour to move
+  // up" stopped being true the moment promotion became a season rather than a single result.
+  const left = reqLeft();
+  $("mStat").textContent = ladder.tours === 0
+    ? reqSentence()
+    : (left.length ? "Still to " + reqVerb(ladder.div) + " " + reqList(left)
+                   : "Division " + ladder.div + " complete")
+      + " · " + ladder.money + " prize money"
       + (ladder.strikes ? " · one more bad tour and you drop" : "");
   // The build is locked for the length of a tour, so you can only re-build between tours.
   const bb = $("buildBtn");
@@ -3144,6 +3291,11 @@ function refreshMenu() {
     const ttNext = canResume && tour && tour.schedule && Sim.STAGES[tour.schedule[tour.stage]]
       && Sim.STAGES[tour.schedule[tour.stage]].tt;
     bb.disabled = canResume && !ttNext;
+    // The summit only appears once you have earned it — seeing a locked door you cannot
+    // open is worse than not knowing it is there, and winning Div 1 is the reveal.
+    $("grandBtn").classList.toggle("hide", !grandUnlocked());
+    $("grandBtn").textContent = (ladder.grandWins || 0) > 0
+      ? "The Grand Tour \u00b7 won " + ladder.grandWins + "\u00d7" : "The Grand Tour";
     bb.textContent = ttNext ? "Change your bike for the time trial"
       : canResume ? "Rider locked for this tour"
       : committedBuild ? "Re-build your rider" : "Build your rider";
@@ -3158,7 +3310,7 @@ function saveTour(withRace) {
     race: (withRace && race && !race.over && !tut) ? Sim.snapshot(race) : null } : null;
   Store.save(ladder);
 }
-function newTour() {
+function newTour(wantLen) {
   // AN ABANDONED TOUR IS NOT RE-ROLLED. You may leave any time, but you cannot shop for a
   // parcours that suits your rider: the same draw and the same committed build are waiting.
   // That is what keeps the per-tour build lock meaningful — without it, quitting after
@@ -3169,9 +3321,16 @@ function newTour() {
     if (held.build) { committedBuild = held.build; ladder.build = held.build; }
     ladder.heldTour = null; Store.save(ladder);
   }
-  const len = Sim.tourLength(seed, ladder.div);
+  // The LENGTH is chosen, not drawn — the ladder now asks for one of each, so being handed
+  // a random length would leave you waiting on a dice roll for the race you still need.
+  // The parcours is still drawn, so the build lock is untouched.
+  const len = (held && held.len) || wantLen || 3;
   tour = { seed, stage: 0, gc: {}, leaders: {}, fatigue: {},
     schedule: Sim.tourSchedule(seed, len) };
+  // Three weeks is long enough that the bunch gets a day off, twice. Purely a beat between
+  // the racing, and the one place in this game allowed to be funny.
+  if (len >= 21) tour.restAfter = [6, 13];
+  assignRoute(tour, len);
   const names = [Sim.YOU.name].concat(Sim.FIELD.map(f => f.name));
   for (const n of names) tour.gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
 }
@@ -3187,6 +3346,7 @@ function startStage() {
         playerStats: raceStats(dailyBuild, null, true) })
     : Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
+        route: stageRoute(tour.stage),
         fatigue: tour.fatigue, playerStats: bStats });
   // ROLL-OUT. Road stages neutralise behind the car for a few seconds: you can move up or
   // down the bunch but nobody can go up the road, and the clock does not start until the
@@ -4255,6 +4415,17 @@ function drawProfile() {
   roundRect(x0 + bw * clamp(you.dist / c.len, 0, 1) - 3, yTop + bh - 11, 6, 22, 3); ctx.fill();
   const togo = Math.max(0, c.len - you.dist);
   label(M.togo(togo), x0, yTop + bh + 17, 11, 700, "rgba(46,49,47,.55)", "left", 1.2);
+  // A ROAD YOU PAID FOR IS NEVER A GUESS. Named on the profile and the briefing is not
+  // enough — once you roll out those are gone, so the road gets its own pill on the HUD
+  // for the WHOLE stage, not just while you are on the climb.
+  const rcl = (c.climbs || []).find(x => x.route);
+  const rrt = rcl ? Sim.ROUTES.filter(x => x.id === rcl.route)[0] : null;
+  if (rrt) {
+    const t = rrt.name.toUpperCase();
+    const pw = textW(t, 10, 700, 1.6) + 22, px = x0, py = yTop + bh + 24;
+    ctx.fillStyle = PAL.you; roundRect(px, py, pw, 20, 10); ctx.fill();
+    label(t, px + pw / 2, py + 14, 10, 700, PAL.paper, "center", 1.6);
+  }
   const g = Sim.gradeAt(c, you.dist);
 }
 
@@ -4511,6 +4682,20 @@ function drawHud(dt) {
     ? { at: you.dist, t: "ROAD NARROWS", c: PAL.ink }
     : { at: nn2.s - nn2.taper, t: "NARROWS IN " + M.near(nn2.s - nn2.taper - you.dist), c: PAL.ink });
   cands.sort((a, b2) => a.at - b2.at);
+  // The named climb outranks everything: it is the reason this stage exists. Held for the
+  // approach and the first stretch of the climb, then it stands down so a feed zone or a
+  // narrowing further up a 14 km ascent can still warn you.
+  // Looked up again here: the HUD pill lives in drawProfile(), a different function, so the
+  // banner cannot borrow its variables.
+  const bcl = (c.climbs || []).find(x => x.route);
+  const brt = bcl ? Sim.ROUTES.filter(x => x.id === bcl.route)[0] : null;
+  if (bcl && brt && you.dist < bcl.e) {
+    const onIt = you.dist > bcl.s;
+    if (!onIt && bcl.s - you.dist < 600)
+      cands.unshift({ at: -1e9, t: brt.name.toUpperCase() + " IN " + M.near(bcl.s - you.dist), c: PAL.you });
+    else if (onIt && you.dist - bcl.s < 60)
+      cands.unshift({ at: -1e9, t: brt.name.toUpperCase(), c: PAL.you });
+  }
   let banner = cands[0] || null;
   if (banner) {
     const bwid = textW(banner.t, 12, 700, 2) + 30, bx = W / 2 - bwid / 2, by = topBar + 40;
@@ -5180,6 +5365,7 @@ function frame(now) {
     if (phase === "count") {
       countdown -= dt;
       tiltZero(0.12);
+      if (race.preRoll > 0) Sim.preRoll(race, 24);   // a slice per frame, so no freeze
       if (race.neutral) Sim.step(race, dt, readInput(dt));   // roll behind the car, and position
       if (countdown <= 0) {
         phase = "race";
@@ -5187,7 +5373,10 @@ function frame(now) {
           race.neutral = false;   // the car is NOT hidden here: drawPacer drives it up the road
                                   // and retires it once it is well clear, so it leaves rather
                                   // than vanishing under you.
-          flashes.push({ text: "FLAG DROP", colour: PAL.green, t: 0 });
+          const fc = (race.course.climbs || []).find(x => x.route);
+          const fr = fc ? Sim.ROUTES.filter(x => x.id === fc.route)[0] : null;
+          flashes.push({ text: fr ? fr.name.toUpperCase() + " TODAY" : "FLAG DROP",
+            colour: fr ? PAL.you : PAL.green, t: 0 });
         }
       }
     }
@@ -5235,7 +5424,7 @@ function frame(now) {
 // ---------------------------------------------------------------- screens
 const $ = id => document.getElementById(id);
 const show = id => {
-  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes"])
+  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest"])
     $(s).classList.toggle("hide", s !== id);
   $("drillDone").classList.add("hide");       // never leaves it stranded over a screen
 };
@@ -5366,6 +5555,7 @@ function showBriefing() {
         playerType, kit: ladder.kit, gc: {}, leaders: {}, div: tour.daily.div })
     : Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
+        route: stageRoute(tour.stage),
         fatigue: tour.fatigue, playerStats: Sim.buildStats(committedBuild || Sim.neutralBuild()) });
   const c = preview.course;
   // How much climbing is in it: the number every rider looks at first.
@@ -5380,6 +5570,12 @@ function showBriefing() {
   $("bTitle").textContent = spec.type === "flat" ? "One for the sprinters"
     : spec.type === "hills" ? "A day for the brave" : "The mountains decide it";
   const notes = [];
+  // NAME THE ROAD. A pack you bought should announce itself before you ride it, and the
+  // figures come from the catalogue rather than being measured off the terrain, so they
+  // read as the climb's real, exact numbers.
+  const rt = c.spec && c.spec.route ? Sim.ROUTES.filter(x => x.id === c.spec.route)[0] : null;
+  if (rt) notes.push(rt.name + ", " + M.long(rt.km * 1000 / Sim.CFG.scaleM) + " at "
+    + rt.grade.toFixed(1) + "%, topping out at " + M.alt(rt.top) + ". " + rt.note);
   const ns = c.primes.filter(p => p.kind === "sprint").length;
   const nk = c.primes.filter(p => p.kind === "kom").length;
   notes.push(ns + " sprint line" + (ns === 1 ? "" : "s") + ", " + nk + " summit" + (nk === 1 ? "" : "s")
@@ -5490,14 +5686,22 @@ function finishStage() {
   if (lastStage) ladder.savedTour = null; else saveTour(false);
   Store.save(ladder);
   let moved = null;
-  if (lastStage) moved = applyLadder(gcPlace);
+  if (lastStage) {
+    if (tour.grand) {
+      // It sits outside the ladder entirely — you cannot be promoted past Division 1 and
+      // it would be perverse to be relegated by the race you climbed the ladder to reach.
+      ladder.tours++;
+      if (gcPlace === 1) ladder.grandWins = (ladder.grandWins || 0) + 1;
+      Store.save(ladder);
+    } else moved = applyLadder(gcPlace, kindForLen(tour.schedule.length));
+  }
   $("pauseBtn").classList.add("hide");
   $("rEyebrow").textContent = lastStage
     ? (oneDay ? "Race finished · Division " : "Tour finished · Division ")
       + (moved === "up" ? ladder.div + 1 : moved === "down" ? ladder.div - 1 : ladder.div)
     : stageLabel() + " · " + fmt(you.time);
   $("rVerdict").textContent = lastStage
-    ? (gcPlace === 1 ? (oneDay ? "You win the race" : "You win the tour") : gcPlace + "th overall")
+    ? (gcPlace === 1 ? (tour.grand ? "You win the Grand Tour" : oneDay ? "You win the race" : "You win the tour") : gcPlace + "th overall")
     : (words[you.place - 1] || you.place + "th");
 
   let note;
@@ -5606,7 +5810,7 @@ $("pAbandon").addEventListener("click", () => {
     return;
   }
   abandonArmed = false;
-  ladder.heldTour = { seed: tour.seed, build: committedBuild };   // the bet stands
+  if (!tour.grand) ladder.heldTour = { seed: tour.seed, build: committedBuild };   // the bet stands
   ladder.savedTour = null;
   applyLadder(8);                               // ridden, not won
   Store.save(ladder);
@@ -5652,6 +5856,23 @@ $("drillBtn").addEventListener("click", () => { renderDrills(); show("drills"); 
 $("dataBack").addEventListener("click", () => show(dataFrom));
 $("routesBtn").addEventListener("click", () => { show("routes"); renderRoutes(); });
 $("routesBack").addEventListener("click", () => show("menu"));
+$("pickBack").addEventListener("click", () => { refreshMenu(); show("menu"); });
+// The one place this game is allowed to be funny. Real rest days are famously not restful:
+// riders still go out for hours, and then answer questions about it.
+const REST_DAYS = [
+  ["A day off", "Four hours of easy spinning, a press conference, and a nap. The nap was the important part."],
+  ["A day off", "The whole bunch went out for three hours this morning. Nobody has ever satisfactorily explained why this counts as rest."],
+  ["A day off", "You were photographed eating a pastry. It is the lead item on two cycling websites."],
+  ["A day off", "Your soigneur has washed everything you own. The bus smells like a laundrette and nobody is complaining."],
+  ["A day off", "A long transfer, a mediocre hotel, and a lift that fits two bikes at a time. This is the glamour."]
+];
+function showRest() {
+  const r = REST_DAYS[(tour.seed + tour.stage) % REST_DAYS.length];
+  $("restTitle").textContent = r[0];
+  $("restNote").textContent = r[1];
+  hideAll(); show("rest");
+}
+$("restGo").addEventListener("click", () => { tour.stage++; showBriefing(); });
 for (const [btn, from] of [["dataBtnMenu", "settings"], ["dataBtnRes", "result"]])
   $(btn).addEventListener("click", () => { dataFrom = from; show("data"); renderData(); });
 $("drillBack").addEventListener("click", () => { renderPractice(); show("practice"); });
@@ -5684,11 +5905,16 @@ $("tcGo").addEventListener("click", () => {
   startTutStep();
 });
 $("howBtn").addEventListener("click", () => startTutorial("menu"));
+$("grandBtn").addEventListener("click", () => {
+  const sv = ladder.savedTour;
+  if (sv && sv.grand && sv.schedule && sv.stage < sv.schedule.length) { resumeTour(); return; }
+  startGrand();
+});
 $("startBtn").addEventListener("click", () => {
   if (!ladder.tutorialDone) { startTutorial("start"); return; }
   const sv = ladder.savedTour;
-  if (sv && sv.schedule && sv.schedule.length && sv.stage < sv.schedule.length) { resumeTour(); return; }
-  newTour(); openBuild("tour");                 // commit a build for this tour, then it starts
+  if (sv && !sv.grand && sv.schedule && sv.schedule.length && sv.stage < sv.schedule.length) { resumeTour(); return; }
+  renderPick(); show("pick");                   // choose the race, then commit a build for it
 });
 const OFF_METERS = [
   { label: "Fresh",  val: s => (1.00 - (s.fatigueResist || 1)) / (1.00 - 0.76) },
@@ -5968,11 +6194,16 @@ function renderTourProfile(host) {
       const r = Sim.createRace({ seed, stageIndex: si, playerType, kit: ladder.kit, gc, leaders: {}, div: ladder.div });
       summit = Sim.gradeAt(r.course, r.course.len - 30) > 0.2;
     }
-    const label = spec.tt ? "Time trial"
+    // A named road is the single most important thing on the profile: it is the day you
+    // build your rider around, so it replaces the generic label rather than hiding behind it.
+    const rid = (tour && tour.routeMap) ? (tour.routeMap[i] || null) : null;
+    const rt = rid ? Sim.ROUTES.filter(x => x.id === rid)[0] : null;
+    const label = rt ? rt.name
+      : spec.tt ? "Time trial"
       : spec.type === "mountain" ? (summit ? "Summit" : "Mountain")
       : spec.type === "flat" ? (spec.flatDay ? "Pan flat" : "Flat") : "Hills";
     const chip = document.createElement("div");
-    chip.className = "profchip t-" + (spec.tt ? "tt" : summit ? "summit" : spec.type);
+    chip.className = "profchip t-" + (rt ? "route" : spec.tt ? "tt" : summit ? "summit" : spec.type);
     chip.innerHTML = "<b>" + (i + 1) + "</b><span>" + label + "</span>";
     strip.appendChild(chip);
   });
@@ -6228,10 +6459,112 @@ const nth = n => {
 // real these become products (~$2.99 each, or bought with prize money), and the real
 // climbs inside them must stay undated and clear of race branding.
 const ROUTE_PACKS = [
-  { name: "The high Alps", note: "Hors categorie passes and a descent that keeps going.", cost: 9000 },
-  { name: "The cobbles", note: "Flat, brutal, and decided by position rather than legs.", cost: 9000 },
-  { name: "The Pyrenees", note: "Shorter climbs, steeper ramps, no time to recover.", cost: 9000 }
+  { id: "alps", name: "The high Alps", note: "Three passes that decide grand tours." },
+  { id: "cobbles", name: "The cobbles", note: "Flat, brutal, and decided by position rather than legs." },
+  { id: "pyrenees", name: "The Pyrenees", note: "Shorter climbs, steeper ramps, no time to recover." }
 ];
+// PACKS GET DEARER AS YOU COLLECT THEM, and the price depends on HOW MANY YOU OWN rather
+// than on which pack it is — tie it to the pack and whoever wants the Pyrenees first pays
+// the cheap price for it while the Alps becomes arbitrarily expensive. Doubling keeps every
+// purchase a real decision: earnings climb steeply with the ladder (a division's required
+// races pay 553 at Div 8 and 3,227 at Div 4), so a flat price would cost nothing in real
+// terms by the top and prize money would stop being a choice.
+// The FIRST pack is deliberately cheap enough to land around Division 6-5, so a road with a
+// name is in your tours for most of the climb instead of arriving at the end of it.
+// The CAP is Kevin's rule: the price of three three-week tours, measured at ~5,900 each.
+const PACK_BASE = 3000, PACK_CAP = 18000;
+const packCost = () => Math.min(PACK_CAP, PACK_BASE * Math.pow(2, (ladder.packs || []).length));
+const packOwned = id => (ladder.packs || []).indexOf(id) >= 0;
+const routesIn = id => Sim.ROUTES.filter(r => r.pack === id);
+const ownedRoutes = () => Sim.ROUTES.filter(r => packOwned(r.pack)).map(r => r.id);
+// Which stage of a tour goes over a named road, and which one. Kevin's call: SEVEN-DAY
+// TOURS ONLY, so a route stays an event rather than wallpaper — and one per tour, on a
+// mountain day, never the opener or the finale. Derived from the tour seed so it is fixed
+// for that draw and cannot be re-rolled by abandoning.
+function assignRoute(t, len) {
+  t.routeMap = {};
+  const own = ownedRoutes();
+  if (!own.length) return;
+  const mtn = [];
+  for (let i = 1; i < len - 1; i++) if (t.schedule[i] === 2 || t.schedule[i] === 4) mtn.push(i);
+  if (!mtn.length) return;
+  if (t.grand) {
+    // The grand tour is the showcase: every road you own gets its day, spread across the
+    // mountain stages. It is the reason to have bought them.
+    // Spread them across the whole race, and put the LAST one on the LAST mountain, which
+    // is where a grand tour is decided. Clustering them mid-race left the decisive late
+    // climb generic, which is exactly backwards.
+    for (let k = 0; k < own.length && k < mtn.length; k++) {
+      t.routeMap[mtn[Math.round(k * (mtn.length - 1) / Math.max(1, Math.min(own.length, mtn.length) - 1))]] = own[k];
+    }
+    return;
+  }
+  if (len < 7) return;
+  t.routeMap[mtn[(t.seed >>> 3) % mtn.length]] = own[(t.seed >>> 9) % own.length];
+}
+const stageRoute = st => (tour && tour.routeMap) ? (tour.routeMap[st] || null) : null;
+
+// ---- the grand tour -------------------------------------------------------------
+// THE SUMMIT OF THE LADDER. Winning Division 1 used to increment a counter and nothing
+// else: you climbed eight divisions and arrived nowhere. This is the destination — a
+// named, FIXED race, always the same roads, so unlike every procedurally drawn tour it
+// can actually be learned and mastered. Fourteen stages shaped like a real grand tour:
+// it opens flat, tests you in the first mountains, has a race of truth in the middle,
+// and is decided late.
+const GRAND = {
+  name: "The Grand Tour",
+  seed: 1903,
+  schedule: [0, 0, 1, 3, 2, 1, 5, 0, 4, 2, 3, 1, 4, 0]
+};
+const grandUnlocked = () => (ladder.topWins || 0) > 0;
+function startGrand() {
+  ladder.savedTour = null;
+  tour = { seed: GRAND.seed, stage: 0, gc: {}, leaders: {}, fatigue: {},
+    schedule: GRAND.schedule.slice(), grand: true };
+  assignRoute(tour, tour.schedule.length);
+  const names = [Sim.YOU.name].concat(Sim.FIELD.map(f => f.name));
+  for (const n of names) tour.gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
+  openBuild("tour");
+}
+// Every race you can enter, and what it is worth to you. Showing the required placing on
+// the card is the point: the ladder asks something different of you at the top.
+const RACE_MENU = [
+  { len: 1,  name: "One-day race",   sub: "One stage. No general classification, no second chances." },
+  { len: 3,  name: "Three-day tour", sub: "Short enough that one bad day decides it." },
+  { len: 5,  name: "Five-day tour",  sub: "Long enough to need a plan." },
+  { len: 7,  name: "Seven-day tour", sub: "A race of truth, and a road with a name if you own one." },
+  { len: 21, name: "Three-week tour", sub: "Twenty-one stages, two time trials and two rest days.", minDiv: 3 }
+];
+function renderPick() {
+  const held = ladder.heldTour;
+  const place = reqPlace(ladder.div);
+  const words = ["", "win it", "top two", "top three"];
+  $("pickSub").textContent = held
+    ? "You abandoned a race. The same one is waiting for you."
+    : reqSentence();
+  const box = $("pickBody"); box.innerHTML = "";
+  for (const r of RACE_MENU) {
+    if (r.minDiv && ladder.div > r.minDiv) continue;
+    const kind = kindForLen(r.len), done = reqDone(kind);
+    const locked = held && held.len !== r.len;
+    const card = document.createElement("div");
+    card.className = "card" + (locked ? " locked" : "");
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = r.name; top.appendChild(nb);
+    const tag = document.createElement("span"); tag.className = "pips";
+    tag.textContent = done ? "done" : reqNeeded(ladder.div).indexOf(kind) < 0 ? "optional" : words[place];
+    top.appendChild(tag); card.appendChild(top);
+    const note = document.createElement("div"); note.className = "note"; note.textContent = r.sub;
+    card.appendChild(note);
+    const btns = document.createElement("div"); btns.className = "btns";
+    const b = document.createElement("button"); b.className = "mini";
+    b.textContent = locked ? "Finish the other one first" : done ? "Ride it again" : "Ride it";
+    b.disabled = !!locked;
+    b.addEventListener("click", () => { newTour(r.len); openBuild("tour"); });
+    btns.appendChild(b); card.appendChild(btns);
+    box.appendChild(card);
+  }
+}
 function renderRoutes() {
   $("routesSub").textContent = "Prize money is only ever spent here.";
   const box = $("routesBody"); box.innerHTML = "";
@@ -6255,18 +6588,50 @@ function renderRoutes() {
   const head = document.createElement("div");
   head.className = "secthead"; head.textContent = "Route packs";
   box.appendChild(head);
+  const cost = packCost();
+  const owned = (ladder.packs || []).length;
+  if (owned < ROUTE_PACKS.length) {
+    const pr = document.createElement("p"); pr.className = "sub";
+    pr.style.cssText = "margin-top:-2px";
+    pr.textContent = (owned === 0 ? "Your first pack costs " : "Packs get dearer as you collect them. Your next costs ")
+      + cost + (cost >= PACK_CAP ? ", which is the ceiling." : ", and the one after that twice as much.");
+    box.appendChild(pr);
+  }
 
   for (const p of ROUTE_PACKS) {
-    const card = document.createElement("div"); card.className = "card locked";
+    const climbs = routesIn(p.id), have = packOwned(p.id), ready = climbs.length > 0;
+    const card = document.createElement("div");
+    card.className = "card" + (ready ? "" : " locked");
     const top = document.createElement("div"); top.className = "top";
     const nb = document.createElement("b"); nb.textContent = p.name; top.appendChild(nb);
-    const tag = document.createElement("span"); tag.className = "pips"; tag.textContent = "in the works";
+    const tag = document.createElement("span"); tag.className = "pips";
+    tag.textContent = have ? "owned" : ready ? climbs.length + " climbs" : "in the works";
     top.appendChild(tag); card.appendChild(top);
     const note = document.createElement("div"); note.className = "note"; note.textContent = p.note;
     card.appendChild(note);
+    // Name the roads. A pack you cannot see inside is just a price.
+    for (const c of climbs) {
+      const li = document.createElement("div"); li.className = "note";
+      li.style.cssText = "opacity:.75;margin-top:4px";
+      li.textContent = c.name + " \u00b7 " + M.long(c.km * 1000 / Sim.CFG.scaleM)
+        + " at " + c.grade.toFixed(1) + "% \u00b7 tops out at " + M.alt(c.top);
+      card.appendChild(li);
+    }
     const btns = document.createElement("div"); btns.className = "btns";
-    const b = document.createElement("button");
-    b.className = "mini"; b.disabled = true; b.textContent = p.cost + " prize money";
+    const b = document.createElement("button"); b.className = "mini";
+    if (have) { b.disabled = true; b.textContent = "In your tours"; }
+    else if (!ready) { b.disabled = true; b.textContent = "in the works"; }
+    else {
+      const can = (ladder.money || 0) >= cost;
+      b.disabled = !can;
+      b.textContent = can ? "Buy \u00b7 " + cost : cost + " prize money";
+      b.addEventListener("click", () => {
+        if ((ladder.money || 0) < packCost()) return;
+        ladder.money -= packCost();
+        (ladder.packs || (ladder.packs = [])).push(p.id);
+        Store.save(ladder); renderRoutes(); refreshMenu();
+      });
+    }
     btns.appendChild(b); card.appendChild(btns);
     box.appendChild(card);
   }
@@ -6274,8 +6639,9 @@ function renderRoutes() {
   const foot = document.createElement("p");
   foot.className = "sub";
   foot.style.cssText = "margin-top:14px";
-  foot.textContent = "Routes are not in the game yet. Every stage you ride is generated. "
-    + "Keep racing: prize money carries over and nothing here expires.";
+  foot.textContent = ownedRoutes().length
+    ? "A road you own turns up on one mountain stage of a seven-day tour. Ridden on its own in practice it pays nothing, the same as any practice ride."
+    : "Routes are real roads that appear in your seven-day tours. Prize money carries over and nothing here expires.";
   box.appendChild(foot);
 }
 function renderData() {
@@ -6496,6 +6862,7 @@ $("nextBtn").addEventListener("click", () => {
   if (tour && tour.practice) { tour = null; renderPractice(); show("practice"); return; }
   if (tour && tour.daily) { tour = null; renderDaily(); show("daily"); return; }
   if (tour.stage === tour.schedule.length - 1) { refreshMenu(); show("menu"); return; }
+  if (tour.restAfter && tour.restAfter.indexOf(tour.stage) >= 0) { showRest(); return; }
   tour.stage++; showBriefing();
 });
 requestAnimationFrame(frame);
