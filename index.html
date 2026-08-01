@@ -147,6 +147,9 @@
      so every .go button "hidden" in JS was still on screen. This fixes the whole class. */
   button.go.hide{display:none}
   #leanBtn.hide{display:none}
+  /* .segmented sets display:flex at the same specificity as .hide and comes later, so
+     .hide alone never hid the slot picker. Same trap as button.go — see the dev-loop note. */
+  .segmented.hide{display:none}
   #pauseCard{position:fixed;left:0;right:0;bottom:0;z-index:42;background:var(--paper);
     border-top:1.5px solid rgba(46,49,47,.16);border-radius:20px 20px 0 0;padding:10px 18px 20px;
     box-shadow:0 -12px 34px rgba(46,49,47,.18)}
@@ -258,6 +261,7 @@
   <div class="secthead">Help</div>
   <button class="go ghost" id="howBtn">How to play</button>
   <button class="go ghost" id="dataBtnMenu">Riding data</button>
+  <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
 </div></div>
 
@@ -302,6 +306,8 @@
   <button class="navback" id="drillBack" aria-label="Back">&#8592;</button>
   <h2>Drills</h2>
   <p class="sub">One technique at a time, on a loop. Nothing is scored and nothing is lost.</p>
+  <div class="secthead">Division</div>
+  <div id="drillDivs"></div>
   <div id="drillList"></div>
 </div></div>
 
@@ -332,6 +338,8 @@
   <button class="go ghost" id="drillBtn">Drills · one technique at a time</button>
   <div class="secthead">Or ride a stage</div>
   <div id="pStages"></div>
+  <div class="secthead hide" id="pRoutesHead">Or a road you own</div>
+  <div id="pRoutes" class="hide"></div>
   <div class="secthead">Division</div>
   <div id="pDivs"></div>
   <button class="go" id="pRide">Ride it</button>
@@ -353,6 +361,7 @@
   <div class="eyebrow" id="bArche"></div>
   <h2>Build your rider</h2>
   <p class="sub">One part per slot. Every part is a trade &mdash; the radar is the only verdict.</p>
+  <p class="sub hide" id="bPracNote"></p>
   <div class="hide" id="bProfile"></div>
   <div class="stickytop">
     <canvas class="radar" id="bRadar"></canvas>
@@ -411,6 +420,7 @@ const CFG = {
   roadW: 9, base: 12.8, fixedDt: 1 / 120,
   ease: 0.58, tempo: 0.86, attack: 1.24,
   gravG: 0.85, brakeMin: 0.16,        // downhill: gravity coast strength; how much soft-pedalling can scrub it
+  brakeFull: 1.5,                     // seconds of holding the pads to reach full braking
   scaleM: 100,                        // sim distance unit -> display metres (10 units per km)
   gradePct: 15,                       // sim gradient -> displayed percent
   elevM: 7,                           // sim elevation unit -> metres of TOTAL CLIMBING on a stage
@@ -1261,8 +1271,12 @@ function dropIn(c, startDist, lenM) {
   }
   for (let k = steps; k < steps + 22 && i0 + k < c.grades.length; k++) c.grades[i0 + k] = -0.02;  // run-out to wash off speed
   for (let i = 1; i < c.elev.length; i++) c.elev[i] = c.elev[i - 1] + c.grades[i] * STEP;
-  c.swAmp = 1.5;   // sharp switchbacks for the lesson, regardless of division
-  c.descW = 5.0;   // and a narrow road to take them on
+  // SHARPER THAN THE STAGE IT SITS IN, BUT STILL THE DIVISION'S OWN DESCENT. These used to
+  // be flat overrides (swAmp 1.5, descW 5.0), which made the descending drill IDENTICAL at
+  // every division — so practising a Division 1 descent taught you a Division 4 road. Now
+  // the drill scales the course's own division-derived values instead of replacing them.
+  c.swAmp = (c.swAmp || 1) * 1.3;
+  c.descW = Math.min(c.descW || CFG.roadW, CFG.roadW);
 }
 // Wind is now a continuous field rather than blocks of "left" and "right". It
 // wanders through headwind, diagonal and full crosswind, and its strength rises and
@@ -2247,7 +2261,17 @@ function stepRider(race, r, dt) {
   const down0 = Math.max(0, -g);
   if (down0 > 0.012) {
     const grav = CFG.base * CFG.gravG * down0 * (0.72 + 0.28 * st.descend);
-    const brakeF = clamp((effVal - CFG.ease) / (CFG.tempo - CFG.ease), 0, 1);   // 0 = full brake, 1 = coast fast
+    // ONE PROGRESSIVE BRAKE FOR THE PLAYER, not two stacked. This scrub used to snap
+    // straight to brakeMin the instant you eased — an 84% cut to gravity in a SINGLE
+    // frame — while the hold-to-stop ramp piled on top of it. That is why a flick of the
+    // pads felt like grabbing a handful of brake. It now ramps with how long you hold,
+    // and QUADRATICALLY, so a tap trims a little and a held lever still stops you.
+    // Coasting without touching the brake now keeps full gravity, which is also what a
+    // bicycle does. Rivals keep the effort-based version: their braking is a decision,
+    // not a held control.
+    const bt = r.you ? clamp((r.brakeT || 0) / CFG.brakeFull, 0, 1) : 0;
+    const brakeF = r.you ? 1 - bt * bt
+      : clamp((effVal - CFG.ease) / (CFG.tempo - CFG.ease), 0, 1);   // 0 = full brake, 1 = coast fast
     tgt += grav * (CFG.brakeMin + (1 - CFG.brakeMin) * brakeF);
   }
   // You cannot coast through the wheel in front on flat or rolling roads. On a real
@@ -2283,7 +2307,10 @@ function stepRider(race, r, dt) {
   }
   // The brake outranks everything above it, gravity included: at full lever there is no
   // target speed left to chase, which is what lets you stop on a descent.
-  if (r.you && r.brakeT > 0) tgt *= clamp(1 - r.brakeT * 1.15, 0, 1);
+  if (r.you && r.brakeT > 0) {
+    const bt = clamp(r.brakeT / CFG.brakeFull, 0, 1);
+    tgt *= 1 - bt * bt;                        // same curve, so the two agree instead of fighting
+  }
   r.speed += (tgt - r.speed) * (1 - Math.exp(-dt * (braking ? 3.4 : 1.35)));
 
   // Your single wheel gives the main shelter, but sitting deep in a big group is
@@ -3338,8 +3365,8 @@ function startStage() {
   const bStats = raceStats(committedBuild, ladder.career, false);
   race = tour.practice
     ? Sim.createRace({ seed: tour.seed, stageIndex: tour.schedule[0], playerType, kit: ladder.kit,
-        gc: {}, leaders: {}, div: tour.practice.div,
-        playerStats: bStats })
+        gc: {}, leaders: {}, div: tour.practice.div, route: tour.practice.route || null,
+        playerStats: raceStats(pracBuild || committedBuild, ladder.career, false) })
     : tour.daily
     ? Sim.createRace({ seed: tour.daily.seed, stageIndex: tour.daily.stageIndex,
         playerType, kit: ladder.kit, gc: {}, leaders: {}, div: tour.daily.div,
@@ -5548,8 +5575,8 @@ function showBriefing() {
   const spec = specAt(tour.stage);
   const preview = tour.practice
     ? Sim.createRace({ seed: tour.seed, stageIndex: tour.schedule[0], playerType, kit: ladder.kit,
-        gc: {}, leaders: {}, div: tour.practice.div,
-        playerStats: Sim.buildStats(committedBuild || Sim.neutralBuild()) })
+        gc: {}, leaders: {}, div: tour.practice.div, route: tour.practice.route || null,
+        playerStats: Sim.buildStats(pracBuild || committedBuild || Sim.neutralBuild()) })
     : tour.daily
     ? Sim.createRace({ seed: tour.daily.seed, stageIndex: tour.daily.stageIndex,
         playerType, kit: ladder.kit, gc: {}, leaders: {}, div: tour.daily.div })
@@ -5770,6 +5797,33 @@ $("tiltBtn").addEventListener("click", () => {
   ladder.tiltSens = ((ladder.tiltSens ?? 1) + 1) % TILT_SENS.length;
   Store.save(ladder); refreshMenu();
 });
+// A TEST SHORTCUT, and only that. Kevin asked for it so he can reach any part of the game
+// without riding the ladder first. It is deliberately in Settings, deliberately labelled
+// "(testing)", and deliberately two-tap: it rewrites a real save. REMOVE OR HIDE THIS BEFORE
+// SHIPPING — it hands over the $4.99 career and every $2.99 route pack for free.
+let devArmed = false;
+$("devBtn").addEventListener("click", () => {
+  if (!devArmed) {
+    devArmed = true;
+    $("devBtn").textContent = "Unlock everything \u00b7 tap again";
+    return;
+  }
+  devArmed = false;
+  $("devBtn").textContent = "Unlock everything (testing)";
+  ladder.tutorialDone = true;
+  ladder.div = 1; ladder.peakDiv = 1; ladder.best = 1;
+  ladder.topWins = Math.max(1, ladder.topWins || 0);   // opens the Grand Tour
+  ladder.strikes = 0; ladder.req = {};
+  ladder.money = 99999;
+  ladder.packs = ROUTE_PACKS.map(p => p.id);
+  ladder.radio = 3; ladder.powerMeter = 3;
+  ladder.career = { climb: 150, sprint: 150, endur: 150, durab: 150 };
+  ladder.rust = { climb: 0, sprint: 0, endur: 0, durab: 0 };
+  // Gear needs no line of its own: parts unlock off peakDiv, which is now 1.
+  Store.save(ladder);
+  refreshMenu(); showProfile(null);
+  show("menu");
+});
 $("leanBtn").addEventListener("click", () => {
   ladder.leanInvert = !ladder.leanInvert; Store.save(ladder); refreshMenu();
 });
@@ -5883,7 +5937,7 @@ $("setBtn").addEventListener("click", () => show("settings"));
 $("setBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });
 $("pracBtn").addEventListener("click", () => { renderPractice(); show("practice"); });
 $("pBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });
-$("pRide").addEventListener("click", startPractice);
+$("pRide").addEventListener("click", () => openBuild("practice"));
 $("dailyBtn").addEventListener("click", () => { renderDaily(); show("daily"); });
 $("dBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });
 $("dRide").addEventListener("click", () => openBuild("daily"));
@@ -5943,8 +5997,21 @@ function renderMeters(main, ghost, previewing, host) {
 }
 
 // ---- build-your-rider: the build-from-scratch rider selector (redesign step 2) ----
-let buildDraft = null, buildSlot = null, buildFrom = "menu", buildAllUnlocked = false, dailyBuild = null;
-function partUnlocked(part) { return buildAllUnlocked || !part.extreme || (ladder.peakDiv || 8) <= part.unlockDiv; }
+let buildDraft = null, buildSlot = null, buildFrom = "menu", buildAllUnlocked = false, dailyBuild = null, pracBuild = null;
+// You always build with the gear YOU OWN — practice never hands out parts you have not
+// earned, so the unlock reveal still belongs to promotion.
+function buildDivFor() { return ladder.peakDiv || 8; }
+// Have you actually been to the division you are practising? Lower number = higher division,
+// so a peak of 8 has reached only Division 8. Practising DOWN into a division you have
+// cleared is your own rider on familiar roads; practising UP into one you have not is a
+// look at a race you cannot yet enter.
+const pracOwnsDiv = () => pracDiv >= (ladder.peakDiv || 8);
+// ARCHETYPE-ONLY above your level: you pick a rider TYPE and ride their complete bike, but
+// the individual parts stay hidden. You get to experience the division without being shown
+// the gear you have not unlocked, which keeps the reveal intact.
+const archetypeOnly = () => buildFrom === "practice" && !pracOwnsDiv();
+const fullPreset = name => Object.assign({}, Sim.PRESETS[name]);
+function partUnlocked(part) { return buildAllUnlocked || !part.extreme || buildDivFor() <= part.unlockDiv; }
 // A preset with any locked parts swapped for that slot's neutral, so a fresh rider can
 // always ride a gentle version of the archetype and unlock the sharp parts later.
 function ridablePreset(name) {
@@ -5958,7 +6025,9 @@ function ridablePreset(name) {
 function openBuild(from) {
   buildFrom = from || "menu";
   buildAllUnlocked = (buildFrom === "daily");     // the daily gives everyone every part
-  const src = buildFrom === "daily" ? (dailyBuild || committedBuild) : committedBuild;
+  const src = buildFrom === "daily" ? (dailyBuild || committedBuild)
+    : buildFrom === "practice" ? (archetypeOnly() ? fullPreset("climber") : (pracBuild || committedBuild))
+    : committedBuild;
   buildDraft = src ? Object.assign({}, src) : Sim.neutralBuild();
   buildSlot = Sim.SLOTS[0][0];
   renderBuild(); show("build");
@@ -5967,7 +6036,17 @@ function renderBuild() {
   if (!buildDraft) buildDraft = Sim.neutralBuild();
   if (!buildSlot) buildSlot = Sim.SLOTS[0][0];
   const tourMode = buildFrom === "tour";
-  $("bLock").textContent = tourMode ? "Lock in & start tour" : buildFrom === "daily" ? "Lock in & ride" : "Lock in this build";
+  $("bLock").textContent = tourMode ? "Lock in & start tour"
+    : buildFrom === "daily" || buildFrom === "practice" ? "Lock in & ride" : "Lock in this build";
+  // Say which division's gear you are looking at, so an unavailable part reads as a
+  // division you have not practised rather than a bug.
+  const pn = $("bPracNote");
+  if (pn) {
+    pn.classList.toggle("hide", buildFrom !== "practice");
+    if (buildFrom === "practice") pn.textContent = archetypeOnly()
+      ? "Division " + pracDiv + " is above you, so you ride a type rather than a bike. Pick an archetype and see what that race is like."
+      : "Practice rider \u00b7 your own gear. Nothing here follows you into a tour.";
+  }
   const prof = $("bProfile");
   if (tourMode) { renderTourProfile(prof); prof.classList.remove("hide"); }
   else prof.classList.add("hide");
@@ -5975,7 +6054,9 @@ function renderBuild() {
   // Your saved rider IS a preset. You built them once; picking six parts again just to
   // ride the rider you already have is busywork, so the build you last locked sits
   // first in the row and comes back in one tap.
-  const saved = buildFrom === "daily" ? (dailyBuild || committedBuild) : committedBuild;
+  const saved = archetypeOnly() ? null
+    : buildFrom === "daily" ? (dailyBuild || committedBuild)
+    : buildFrom === "practice" ? (pracBuild || committedBuild) : committedBuild;
   if (saved) {
     const yb = document.createElement("button");
     yb.textContent = "Your rider";
@@ -5986,9 +6067,12 @@ function renderBuild() {
   for (const name of Object.keys(Sim.PRESETS)) {
     const b = document.createElement("button");
     b.textContent = name;
-    const target = ridablePreset(name);
+    const target = archetypeOnly() ? fullPreset(name) : ridablePreset(name);
     b.setAttribute("aria-pressed", Sim.SLOTS.every(([s]) => buildDraft[s] === target[s]) ? "true" : "false");
-    b.addEventListener("click", () => { buildDraft = ridablePreset(name); renderBuild(); });
+    b.addEventListener("click", () => {
+      buildDraft = archetypeOnly() ? fullPreset(name) : ridablePreset(name);
+      renderBuild();
+    });
     pr.appendChild(b);
   }
   const seg = $("bSlots"); seg.innerHTML = "";
@@ -6000,6 +6084,10 @@ function renderBuild() {
     seg.appendChild(s);
   }
   const list = $("bList"); list.innerHTML = "";
+  const hideParts = archetypeOnly();
+  $("bSlots").classList.toggle("hide", hideParts);
+  list.classList.toggle("hide", hideParts);
+  if (hideParts) return;
   const strip = document.createElement("div"); strip.className = "strip";
   for (const part of Sim.PARTS[buildSlot]) {
     const chosen = buildDraft[buildSlot] === part.id;
@@ -6160,12 +6248,18 @@ function raceStats(build, career, daily) {
   return s;
 }
 $("buildBtn").addEventListener("click", () => openBuild("menu"));
-$("buildBack").addEventListener("click", () => show(buildFrom === "tour" ? "menu" : buildFrom === "daily" ? "daily" : buildFrom));
+$("buildBack").addEventListener("click", () => show(buildFrom === "tour" ? "menu" : buildFrom));
 $("bLock").addEventListener("click", () => {
   if (buildFrom === "daily") {                    // the daily uses its own all-unlocked build
     dailyBuild = Object.assign({}, buildDraft);
     buildAllUnlocked = false;
     startDaily();
+    return;
+  }
+  if (buildFrom === "practice") {               // practice keeps its own rider, never the tour one
+    pracBuild = Object.assign({}, buildDraft);
+    ladder.pracBuild = pracBuild; Store.save(ladder);
+    startPractice();
     return;
   }
   committedBuild = Object.assign({}, buildDraft);
@@ -6372,8 +6466,12 @@ function startDrill(i) {
   const d = DRILLS[i];
   drill = { i, tip: d.tip, name: d.name };
   tut = null; tutFinished = false;
+  // DRILLS RUN AT THE DIVISION YOU PICKED. They were pinned to Division 4, which made the
+  // descending drill a lie: descent road width (5.0 - 1.2*D.t), switchback bite (swAmp),
+  // corner sharpness, rival decision quality and wind all scale with the division, so
+  // practising a Division 1 descent on a Division 4 road taught the wrong thing.
   race = Sim.createRace({ seed: 90210 + i, stageIndex: d.stage, playerType, kit: ladder.kit,
-    gc: {}, leaders: {}, div: 4 });
+    gc: {}, leaders: {}, div: pracDiv });
   tour = { seed: 90210, stage: 0, gc: {}, leaders: {}, fatigue: {}, schedule: [d.stage], drill: true };
   d.setup(race);
   flashes = []; phase = "race"; paused = false; Tilt.recentre();
@@ -6727,6 +6825,16 @@ function renderData() {
 checkDrills();                               // runs here, once DRILLS actually exists
 
 function renderDrills() {
+  // The division belongs on this screen too: it is now the thing that most changes what a
+  // drill teaches, and sending you back to the practice screen to alter it would be silly.
+  const dv = $("drillDivs"); dv.innerHTML = ""; dv.className = "chips";
+  for (let d = 8; d >= 1; d--) {
+    const b = document.createElement("button");
+    b.textContent = "Div " + d;
+    b.setAttribute("aria-pressed", String(pracDiv === d));
+    b.addEventListener("click", () => { pracDiv = d; renderDrills(); });
+    dv.appendChild(b);
+  }
   const box = $("drillList"); box.innerHTML = ""; box.className = "picks";
   DRILLS.forEach((d, i) => {
     const b = document.createElement("button");
@@ -6742,16 +6850,34 @@ function renderDrills() {
 }
 
 // ---- practice ----
-let pracStage = 0, pracDiv = 4;
+let pracStage = 0, pracDiv = 4, pracRoute = null;
 function renderPractice() {
   const sBox = $("pStages"); sBox.innerHTML = ""; sBox.className = "chips";
   Sim.STAGES.forEach((st, i) => {
     const b = document.createElement("button");
     b.textContent = st.sub;
     b.setAttribute("aria-pressed", String(pracStage === i));
-    b.addEventListener("click", () => { pracStage = i; renderPractice(); });
+    b.addEventListener("click", () => { pracStage = i; pracRoute = null; renderPractice(); });
     sBox.appendChild(b);
   });
+  // ROADS YOU OWN, rideable on their own. This was claimed as "already covered by practice"
+  // when routes were planned and it simply was not — practice builds its own tour object and
+  // never went near the route assignment, so a pack you had paid for was invisible here.
+  const own = Sim.ROUTES.filter(r => (ladder.packs || []).indexOf(r.pack) >= 0);
+  $("pRoutesHead").classList.toggle("hide", !own.length);
+  const rBox = $("pRoutes"); rBox.innerHTML = ""; rBox.className = "chips";
+  rBox.classList.toggle("hide", !own.length);
+  for (const r of own) {
+    const b = document.createElement("button");
+    b.textContent = r.name;
+    b.setAttribute("aria-pressed", String(pracRoute === r.id));
+    b.addEventListener("click", () => {
+      pracRoute = pracRoute === r.id ? null : r.id;
+      if (pracRoute) pracStage = 4;          // a named pass wants a mountain day around it
+      renderPractice();
+    });
+    rBox.appendChild(b);
+  }
   const dBox = $("pDivs"); dBox.innerHTML = ""; dBox.className = "chips";
   for (let d = 8; d >= 1; d--) {
     const b = document.createElement("button");
@@ -6764,7 +6890,7 @@ function renderPractice() {
 function startPractice() {
   ladder.savedTour = null; Store.save(ladder);
   tour = { seed: (Date.now() ^ 0x5eed) >>> 0, stage: 0, gc: {}, leaders: {}, fatigue: {},
-    schedule: [pracStage], practice: { div: pracDiv } };
+    schedule: [pracStage], practice: { div: pracDiv, route: pracRoute } };
   showBriefing();
 }
 
@@ -6855,7 +6981,7 @@ function showProfile(ghostKey) {
 }
 requestAnimationFrame(() => { showProfile(null); renderKits(); });
 refreshMenu();
-Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); if (ladder.steer === "tilt") { ladder.steer = "drag"; armTiltOnFirstTap(); } ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build || null; refreshMenu(); renderKits(); showProfile(null); } });
+Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); if (ladder.steer === "tilt") { ladder.steer = "drag"; armTiltOnFirstTap(); } ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build || null; pracBuild = ladder.pracBuild || null; refreshMenu(); renderKits(); showProfile(null); } });
 Store.loadData().then(v => { history = v || []; });   // PORT: a @Query, not a blob read
 $("rollBtn").addEventListener("click", () => { hideAll(); startStage(); });
 $("nextBtn").addEventListener("click", () => {
