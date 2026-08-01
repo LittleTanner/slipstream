@@ -150,6 +150,7 @@
   /* .segmented sets display:flex at the same specificity as .hide and comes later, so
      .hide alone never hid the slot picker. Same trap as button.go — see the dev-loop note. */
   .segmented.hide{display:none}
+  #calBtn.hide{display:none}
   #pauseCard{position:fixed;left:0;right:0;bottom:0;z-index:42;background:var(--paper);
     border-top:1.5px solid rgba(46,49,47,.16);border-radius:20px 20px 0 0;padding:10px 18px 20px;
     box-shadow:0 -12px 34px rgba(46,49,47,.18)}
@@ -254,8 +255,9 @@
   <h2>Settings</h2>
   <div class="secthead">Steering</div>
   <button class="go ghost" id="steerBtn">Drag</button>
-  <button class="go ghost hide" id="tiltBtn">Tilt steering: normal</button>
-  <button class="go ghost hide" id="leanBtn">Tilt lean: normal</button>
+  <button class="go ghost hide" id="calBtn">Calibrate tilt</button>
+  <button class="go ghost hide" id="tiltBtn">Tilt sensitivity: normal</button>
+  <button class="go ghost hide" id="leanBtn">Lean direction: normal</button>
   <div class="secthead">Units</div>
   <button class="go ghost" id="unitBtn">Km</button>
   <div class="secthead">Help</div>
@@ -421,6 +423,20 @@ const CFG = {
   ease: 0.58, tempo: 0.86, attack: 1.24,
   gravG: 0.85, brakeMin: 0.16,        // downhill: gravity coast strength; how much soft-pedalling can scrub it
   brakeFull: 1.5,                     // seconds of holding the pads to reach full braking
+  carDraft: 13,                       // metres behind the pace car that its slipstream reaches
+  carRecover: 4.2,                    // how much faster legs come back while you are in the car's hole
+  musetteWin: 0.34,                   // how close to the middle of the feed zone the grab must be
+  musetteFill: 78,                    // food the bag holds, released to you slowly
+  musetteRate: 1.55,                  // food per second it feeds you (about a minute to empty)
+  turnLen: 4.0,                       // seconds a rider spends on the front before swinging off
+  turnGrace: 14,                      // how long after your turn you still count as working
+  suckWarn: 22,                       // seconds glued on before they flick an elbow at you
+  suckGiveUp: 34,                     // ...and how long before the group stops working for you
+  neutralBand: 0.14,                  // how far off the car's pace you may ride during the roll-out
+  // What still counts as flat enough for a junction or a road pinch. Sim gradient, so this
+  // is about 4% real (displayed % = g * gradePct). The first attempt used 0.09, which is
+  // ~1.4% — nearly level ground — and banned junctions and pinches from almost every stage.
+  flatMax: 0.27,
   scaleM: 100,                        // sim distance unit -> display metres (10 units per km)
   gradePct: 15,                       // sim gradient -> displayed percent
   elevM: 7,                           // sim elevation unit -> metres of TOTAL CLIMBING on a stage
@@ -1015,6 +1031,16 @@ function buildStage(seed, spec0, D) {
       const len = 240 + R() * 220;
       if (at + len > spec.len - 260) continue;         // never into the finish run-in
       if (narrows.some(n => Math.abs(n.s - at) < 420)) continue;
+      // NOT ON A CLIMB OR A DESCENT either. A descent road is ALREADY narrowed to descW,
+      // and dropping a pinch on top of it stacked two narrowings — measured, it took a
+      // Division 1 descent from its intended 5.4m down to 4.2m, which is what made
+      // descending feel cramped rather than demanding.
+      // Judged on the AVERAGE gradient of the section itself, not the steepest point in a
+      // wide band around it: rolling ground touches 4% somewhere in almost any 500 m, so
+      // the max test banned pinches from every stage in the game.
+      let gsum = 0, gn = 0;
+      for (let q = at; q < at + len; q += 12) { gsum += Math.abs(gradeAt({ grades, len: spec.len }, clamp(q, 0, spec.len))); gn++; }
+      if (gn && gsum / gn > CFG.flatMax) continue;
       narrows.push({ s: at, e: at + len, w: tight + R() * 0.7, taper: 110 });
     }
   }
@@ -1033,6 +1059,15 @@ function buildStage(seed, spec0, D) {
       for (let cand = spec.len * 0.14; cand < spec.len - 320; cand += 18) {
         if (rounds.some(x => Math.abs(x.s - cand) < 320)) continue;
         if (primes.some(pr => pr.d > cand - 125 && pr.d < cand + rlen + 125)) continue;
+        // NOT ON A CLIMB OR A DESCENT. Mountain roads do not have roundabouts and traffic
+        // islands on them; junctions belong in the valley where the towns are. It also
+        // stopped a median landing in the middle of a switchback, where the road is already
+        // as narrow and as demanding as it is meant to get.
+        let steep = false;
+        for (let q = cand - 40; q < cand + rlen + 40; q += 10) {
+          if (Math.abs(gradeAt({ grades, len: spec.len }, clamp(q, 0, spec.len))) > CFG.flatMax) { steep = true; break; }
+        }
+        if (steep) continue;
         // A pinch running into or out of a junction is fine and reads well: the
         // roundabout widens the road over whatever it meets, so a narrow lane opening
         // into a junction is exactly what a real road does.
@@ -1240,7 +1275,7 @@ function buildStage(seed, spec0, D) {
             f: 1.8 + spec.hilly * 0.7 + 0.45 * D.t,
             p: R() * 6.283 },
     swAmp: 0.7 + 0.5 * D.t,          // switchback bite: gentle descents at Div 8, tight hairpins at Div 1
-    descW: 5.7 - 1.2 * D.t,          // and the road they run on: tight at Div 8, tighter at Div 1
+    descW: 6.6 - 1.2 * D.t,          // and the road they run on: tight at Div 8, tighter at Div 1
     // Daily challenge segments. The sprint board is the 200 m into EVERY sprint
     // line including the finish, summed, so it rewards repeatable power rather
     // than one saved kick. The climb board is the longest climb on the course.
@@ -1481,7 +1516,7 @@ function makeRider(cfg, i, isYou, typeKey, R, extra) {
     stats: Object.assign({}, BASE_STATS, isYou ? a.stats : devStats(a.stats, cfg.D), extra || {}),
     dist: -(i * 2.2) - (isYou ? 4 : 0), prev: 0,
     x: clamp(((i % 5) - 2) * 1.5 + (Math.floor(i / 5) ? 0.7 : 0), -3.4, 3.4),
-    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0,
+    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0, musette: 0,
     energy: 100, fuel: 100, fluid: 100,
     cracked: false, bonk: false, dry: false, absorb: 0, jump: 1, burst: 0, effV: undefined, launch: false, launched: false, prevEff: "tempo", bump: 0,
     eff: "tempo", q: 0, wheel: null, inPeloton: true, stumble: 0, spin: 0,
@@ -1771,6 +1806,21 @@ function draftFor(race, r) {
     if (q > bq) { bq = q; lead = o; }
   }
   r.q = 1 - through;
+  // ★ THE PACE CAR'S SLIPSTREAM. A car punches a much bigger hole in the air than a bike,
+  // and for a few seconds after the flag it is still right there on the front of the bunch.
+  // Sprint off the gun, get on its bumper before it pulls away, and it slings you up the
+  // road — which is a real breakaway launched by knowing something, not by pressing harder.
+  // The RIVALS know it too (see aiThink), so it is a race to the bumper rather than a
+  // private trick, and it closes itself: the car accelerates away and the window shuts.
+  if (race.pacer && !race.pacer.gone && race.pacer.dist !== undefined && !race.neutral) {
+    const gap = race.pacer.dist - r.dist;
+    if (gap > 0.5 && gap < CFG.carDraft) {
+      const near = 1 - gap / CFG.carDraft;                        // right on the bumper is best
+      const lined = clamp(1 - Math.abs(r.x - race.pacer.x) / 2.6, 0, 1);
+      r.q = Math.max(r.q, near * lined * 1.35);                   // a car shelters harder than a wheel
+      r.carTow = near * lined;
+    } else r.carTow = 0;
+  } else r.carTow = 0;
   // A TIME TRIAL has no drafting at all. Rather than special-casing the wind, the
   // shelter quality every rider offers is simply zero, so exposure resolves to full for
   // everyone and the whole draft/peloton machinery below stays untouched.
@@ -1847,6 +1897,56 @@ function updateGroups(race, dt) {
   const done = head / race.course.len;
   race.breakGap = gap;
   race.chase = clamp(threat * threat * clamp(gap / 18, 0, 1) * (0.45 + 0.55 * done) * (1.35 + 0.3 * race.D.ai), 0, 1);
+
+  // ★ THROUGH AND OFF. A breakaway that rotates shares the wind, so everyone recovers and
+  // the group holds off the chase. That is the single biggest piece of race craft in the
+  // sport and the game never modelled it inside a break. Riders who take their turn get a
+  // recovery bonus; a rider who sits on and never comes through gets an ELBOW FLICK, and if
+  // they still refuse the group SITS UP — no penalty, because wheelsucking is not an
+  // offence. The consequence is simply that the shelter evaporates and everyone gets caught.
+  const rot = brk.length >= 2 ? brk.slice() : null;
+  race.rotating = false;
+  if (rot) {
+    let front = null;
+    for (const r of rot) if (!front || r.dist > front.dist) front = r;
+    race.breakFront = front;
+    let working = 0;
+    for (const r of rot) {
+      const onFront = r === front;
+      if (r.flick > 0) r.flick = Math.max(0, r.flick - dt);
+      if (onFront) { r.turnT = (r.turnT || 0) + dt; r.sinceTurn = 0; }
+      else { r.sinceTurn = (r.sinceTurn || 0) + dt; r.turnT = 0; }
+      // A rider who has come through recently is part of the train.
+      r.inTrain = r.sinceTurn < CFG.turnGrace;
+      if (r.inTrain) working++;
+      // The AI simply rides its turn and swings off; only the player can freeload.
+      // Swing off only in a break big enough to have a rotation at all, and only from a
+      // steady effort — overriding an attacking rider rewrote break racing wholesale and
+      // knocked three parts out of contention.
+      // Deliberately NO effort override on the AI: making front riders swing off changed break
+      // racing enough to knock three parts out of contention. The rotation is now expressed
+      // through RECOVERY and the sit-up consequence only, which leaves the balance alone.
+    }
+    race.rotating = working >= 2;
+    // Sitting on: warned once, then the group stops working.
+    const you = race.you;
+    if (rot.indexOf(you) >= 0) {
+      if (you.sinceTurn > CFG.suckWarn && !race.suckWarned) {
+        race.suckWarned = true;
+        race.events.push({ t: "COME THROUGH", c: "spot" });
+        if (front) front.flick = 1.4;                     // the elbow, drawn beside them
+      }
+      race.breakSitUp = you.sinceTurn > CFG.suckGiveUp;
+    } else { race.suckWarned = false; race.breakSitUp = false; }
+    // The train's reward, and its collapse.
+    for (const r of rot) {
+      r.trainBoost = (race.rotating && r.inTrain && !race.breakSitUp) ? 1 : 0;
+      if (race.breakSitUp && !r.you) r.eff = "ease";      // they sit up and let it come back
+    }
+  } else {
+    race.breakFront = null; race.suckWarned = false; race.breakSitUp = false;
+    for (const r of race.riders) { r.trainBoost = 0; r.inTrain = false; }
+  }
 }
 
 function nearestPrime(race, r, kind, range) {
@@ -1884,6 +1984,23 @@ function aiThink(race, r, dt) {
   // wheel, and the timer started again — which is why fines stayed high however wide the
   // start interval was. They now commit to the pass while the rider is anywhere near.
   if (race.spec && race.spec.tt) {
+    // BEING CAUGHT? MOVE OVER. Kevin got stuck behind two rivals on a narrow road, could not
+    // get past, and took a SHELTERING penalty for their blocking — the rule punished him for
+    // their line. A rider who is being closed down now yields to the clear side, which is
+    // both what the sport requires and the only way the penalty can be fair.
+    let chaser = null, cd = 1e9;
+    for (const o of race.riders) {
+      if (o === r || o.finished || o.startAt > race.clock) continue;
+      const gap = r.dist - o.dist;                       // positive: they are behind you
+      if (gap > 0.3 && gap < 16 && o.speed > r.speed - 0.4 && gap < cd
+        && Math.abs(o.x - r.x) < 4.6) { cd = gap; chaser = o; }
+    }
+    if (chaser) {
+      const lane = edgeAt(race.course, r.dist) - 0.8;
+      r.tx = chaser.x > 0 ? -lane : lane;                // clear the side they are coming up
+      r.grab = null;
+      return;
+    }
     let ahead = null, best = 1e9;
     for (const o of race.riders) {
       if (o === r || o.finished || o.startAt > race.clock) continue;
@@ -1905,6 +2022,18 @@ function aiThink(race, r, dt) {
   if (r.think > 0) return;
   r.think = 0.3 + race.rnd() * 0.2;
   const C = race.course, togo = C.len - r.dist, prog = r.dist / C.len, g = gradeAt(C, r.dist);
+  // THE RIVALS KNOW ABOUT THE CAR. The sharper the rider, the more likely they go for it,
+  // so at Division 1 you have to fight for the bumper and at Division 8 you often get it
+  // free. Whoever gets there attacks off it, which is what makes it a breakaway rather
+  // than a tow.
+  if (race.pacer && !race.pacer.gone && !race.neutral && race.clock < 12 && r.sharp > 0.45) {
+    const gap = race.pacer.dist - r.dist;
+    if (gap > 0.5 && gap < CFG.carDraft + 6) {
+      r.tx = clamp(race.pacer.x, -3.2, 3.2);
+      r.eff = "attack";
+      return;
+    }
+  }
   const p = r.plan;
   let want = "tempo";
 
@@ -2258,6 +2387,10 @@ function stepRider(race, r, dt) {
   // TAILWIND PUSHES, headwind holds you up. Sheltered riders feel less of either, the same
   // way the draft already blunts a crosswind, so sitting in still matters.
   tgt *= 1 - 0.085 * w.lon * w.str * (1 - 0.55 * r.q);
+  // The car's slipstream is a REAL tow, not just shelter. A wheel's draft is worth about 6%
+  // of your speed, which is nowhere near enough to launch anything; sitting in the hole a
+  // car punches slings you properly, and that is the whole point of the trick.
+  if (r.carTow > 0) tgt += CFG.base * 0.26 * r.carTow;
   const down0 = Math.max(0, -g);
   if (down0 > 0.012) {
     const grav = CFG.base * CFG.gravG * down0 * (0.72 + 0.28 * st.descend);
@@ -2301,9 +2434,15 @@ function stepRider(race, r, dt) {
   // no one can steal a metre. Steering is untouched, which is the whole point — the roll-out
   // is for moving up, not for going up the road.
   if (race.neutral) {
-    tgt = race.rollIn;
+    // YOU CAN RIDE THE ROLL-OUT. Speed used to be PINNED to the car's pace, so the pads did
+    // nothing and the only way to place yourself was sideways. Now pedalling moves you UP the
+    // bunch and soft-pedalling drops you BACK, but the whole band is narrow and centred on
+    // the car — so where you sit at the flag is genuinely ridden, and nobody can go up the
+    // road, which is what neutralised means.
+    const band = r.you ? CFG.neutralBand : CFG.neutralBand * 0.35;
+    tgt = clamp(tgt, race.rollIn * (1 - band), race.rollIn * (1 + band));
     r.eff = "tempo";
-    r.speed = race.rollIn;   // pinned, not merely targeted: smoothing alone let the bunch drift apart
+    r.speed = clamp(r.speed, race.rollIn * (1 - band), race.rollIn * (1 + band));
   }
   // The brake outranks everything above it, gravity included: at full lever there is no
   // target speed left to chase, which is what lets you stop on a descent.
@@ -2383,6 +2522,16 @@ function stepRider(race, r, dt) {
   // stomach it was 0.15/s, which is not slow recovery, it is none, so a single attack that
   // did not stick ended your stage. Running on empty still hurts, it just no longer traps you.
   if (r.easing && de < r.easeFloor) de = r.easeFloor;
+  // IN THE CAR'S HOLE YOUR LEGS COME BACK FAST. The tow is only worth a few seconds, so
+  // without this a sprint to reach it left you empty the moment it pulled away and the
+  // trick cost more than it paid. Now the hole itself refills you, which turns "get on the
+  // bumper" into "get on the bumper and FIGHT to stay there" — the sprint is the mechanic.
+  // Rotating shares the wind, so a working train recovers better than the same riders
+  // strung out. This is what makes joining the rotation the right move rather than a
+  // courtesy — and what makes refusing it cost you the group.
+  if (r.trainBoost > 0 && de > 0) de *= 1.22;
+  if (r.carTow > 0 && de > 0) de *= 1 + CFG.carRecover * r.carTow;
+  else if (r.carTow > 0) de += CFG.carRecover * 0.9 * r.carTow;
   if (race.neutral) de = 0;                 // nothing is spent before the flag drops
   r.energy = clamp(r.energy + de * dt, 0, r.legCap);
   const wasCracked = r.cracked;
@@ -2404,6 +2553,15 @@ function stepRider(race, r, dt) {
   // You do not eat in a time trial, and it is over in a minute or two. Charging it at the
   // normal rate emptied the FOOD bar before the finish, which is nonsense for the distance.
   const ttShort = (race.spec && race.spec.tt) ? 0.18 : 1;
+  // ★ THE MUSETTE feeds you from your POCKETS over the next minute rather than in one
+  // swallow, which is exactly why it beats a gel: eaten gradually it never hits the
+  // absorption ceiling. It deliberately does NOT touch `absorb`, so it is a way round the
+  // gut limit earned by timing rather than a way of raising it.
+  if (r.musette > 0) {
+    const bite = Math.min(r.musette, CFG.musetteRate * dt);
+    r.musette -= bite;
+    r.fuel = clamp(r.fuel + bite, 0, 100);
+  }
   if (!race.neutral) r.fuel = clamp(r.fuel - burn * ttShort * dt, 0, 100);
   const wasBonk = r.bonk; r.bonk = r.fuel <= 0;
   if (r.bonk && !wasBonk && r.you) race.events.push({ t: "BONKED", c: "fuel" });
@@ -2431,8 +2589,11 @@ function stepRider(race, r, dt) {
   // that is the whole game, because the corner arrives before you can ease into it.
   // A junction is decided in a couple of seconds, so you get the authority to place
   // yourself in it rather than watching the island arrive.
-  const atJunction = (C.rounds || []).some(x => r.dist > x.s - 60 && r.dist < x.e + 12) ? 1.75 : 1;
-  const lean = (r.you ? 1 + 0.9 * (r.hardTurn || 0) : 1) * atJunction;
+  // NO JUNCTION STEERING BONUS. Roundabouts used to hand you 1.75x lateral authority, so the
+  // bike went from barely steerable to darting across the road and back again the moment one
+  // arrived. Consistent handling everywhere is worth more than making a junction easy: if a
+  // junction needs to be more makeable, widen the road there rather than changing the bike.
+  const lean = r.you ? 1 + 0.9 * (r.hardTurn || 0) : 1;
   if (r.you) r.speed *= 1 - 0.30 * (r.hardTurn || 0) * dt;
   const maxLat = (r.you ? 2.6 : 2.1) * st.handling * pin * pace * grip * lean;
   const wantV = clamp((r.txS - r.x) * 2.4, -maxLat, maxLat);
@@ -2751,6 +2912,19 @@ function preRoll(race, ticks) {
 }
 function tick(race, dt) {
   if (!race.neutral) race.clock += dt;      // the stage is timed from the flag, not the roll-out
+  // THE PACE CAR IS A SIM ENTITY. It used to be moved only by the renderer, which meant the
+  // physics saw no car at all — its slipstream could never work headlessly, and the AI had
+  // nothing to chase. It advances here now and the view simply draws it.
+  const pc = race.pacer;
+  if (pc && !pc.gone) {
+    const head = Math.max.apply(null, race.riders.map(r => r.dist));
+    if (race.neutral) { pc.dist = head + 16; pc.v = race.rollIn; }
+    else {
+      pc.v = (pc.v || race.rollIn) + 2.6 * dt;
+      pc.dist = (pc.dist === undefined ? head + 16 : pc.dist) + pc.v * dt;
+      if (pc.dist - head > 320) pc.gone = true;
+    }
+  }
   updateGroups(race, dt);
   for (const r of race.riders) stepRider(race, r, dt);
   separate(race, dt);
@@ -2960,6 +3134,31 @@ function restore(snap, opts) {
 }
 
 function liveOrder(race) {
+  // A TIME TRIAL IS RANKED ON TIME, NOT ROAD POSITION. With start intervals the rider ahead
+  // of you set off minutes earlier, so sorting by distance said you were last simply for
+  // starting last. Everyone is compared at the SAME point on the road — your elapsed time
+  // at the furthest checkpoint you have both passed — which is exactly what a time check is.
+  if (race.spec && race.spec.tt) {
+    // Compared at the LAST CHECKPOINT EVERYONE HAS PASSED, which is what a real time check
+    // is. Ranking by how MANY checks you had passed was wrong in the obvious way: the player
+    // starts last, so they always trail on checkpoints reached and read 6th while actually
+    // winning by half a minute.
+    const deepest = r => {
+      const sp = r.splits || [];
+      let last = -1;
+      for (let i = 0; i < sp.length; i++) if (sp[i] !== undefined) last = i;
+      return last;
+    };
+    let ref = 1e9;
+    for (const r of race.riders) ref = Math.min(ref, deepest(r));
+    const key = r => {
+      if (ref >= 0) return (r.splits || [])[ref];
+      // Nobody has reached a check yet, so pace is all the information there is.
+      const el = race.clock - (r.startAt || 0);
+      return el > 0.5 ? -r.dist / el : 1e9 - r.dist;
+    };
+    return race.riders.slice().sort((a, b) => key(a) - key(b));
+  }
   return race.riders.slice().sort((a, b) =>
     a.finished !== b.finished ? (a.finished ? -1 : 1)
       : a.finished ? a.time - b.time : b.dist - a.dist);
@@ -3064,7 +3263,23 @@ const Tilt = {
     window.removeEventListener("deviceorientation", Tilt.handle);
     Tilt.on = false; Tilt.ok = false; Tilt.state = "off"; Tilt.zero = null; Tilt.betaZero = null;
   },
-  recentre() { Tilt.zero = null; Tilt.betaZero = null; },
+  // A SAVED CALIBRATION SURVIVES THE RACE. Every stage used to throw the zero away and
+  // relearn it from however you happened to be holding the phone during the countdown,
+  // which drifts and is maddening across a 21-stage tour. Calibrate once in Settings and
+  // it is restored at the start of every race instead.
+  recentre() {
+    const s = ladder && ladder.tiltCal;
+    if (s) { Tilt.zero = s.g; Tilt.betaZero = s.b; return; }
+    Tilt.zero = null; Tilt.betaZero = null;
+  },
+  // Take THIS position as level. Returns false if the sensor is not reporting.
+  calibrate() {
+    if (!Tilt.on || !Tilt.ok) return false;
+    Tilt.zero = Tilt.gamma; Tilt.betaZero = Tilt.beta;
+    ladder.tiltCal = { g: Tilt.gamma, b: Tilt.beta };
+    Store.save(ladder);
+    return true;
+  },
   // Pull-up amount 0..1 for LEANING: tilt the top of the phone toward you past neutral.
   // betaZero is auto-calibrated to your hold angle (same as the steer zero). Sign/range
   // are provisional and meant to be tuned on a device: PITCH_SIGN flips if it feels inverted.
@@ -3247,6 +3462,17 @@ const kindForLen = len => len === 1 ? "short" : len >= 7 ? "long" : "medium";
 const reqDone = k => !!(ladder.req && ladder.req[k]);
 const reqLeft = () => reqNeeded(ladder.div).filter(k => !reqDone(k));
 
+// ★ THE LANTERNE ROUGE. Finish a three-week race DEAD LAST having ridden every stage, and
+// that is an honour in cycling rather than a joke — riders have chased it deliberately.
+// Scoped to 21-stage races and the Grand Tour, where surviving the whole thing is a real
+// achievement, so it can never be farmed on a short tour.
+function awardLanterne(place) {
+  const long = tour.grand || tour.schedule.length >= 21;
+  if (!long || place !== 8) return;
+  ladder.lanterne = (ladder.lanterne || 0) + 1;
+  lanterneJustWon = true;
+}
+let lanterneJustWon = false;
 function applyLadder(place, kind) {
   ladder.tours++;
   let moved = "held";
@@ -3284,10 +3510,12 @@ function refreshMenu() {
   $("steerBtn").textContent = ladder.steer === "tilt" ? "Tilt" : "Drag";
   // Only meaningful when you are actually steering by tilt, so it stays out of the way
   // on drag. Toggling steering re-runs this, so it appears and disappears with it.
-  $("leanBtn").textContent = "Tilt lean: " + (ladder.leanInvert ? "inverted" : "normal");
+  $("leanBtn").textContent = "Lean direction: " + (ladder.leanInvert ? "inverted" : "normal");
   $("leanBtn").classList.toggle("hide", ladder.steer !== "tilt");
-  $("tiltBtn").textContent = "Tilt steering: " + tiltSens().name;
+  $("tiltBtn").textContent = "Tilt sensitivity: " + tiltSens().name;
   $("tiltBtn").classList.toggle("hide", ladder.steer !== "tilt");
+  $("calBtn").classList.toggle("hide", ladder.steer !== "tilt");
+  $("calBtn").textContent = ladder.tiltCal ? "Recalibrate tilt" : "Calibrate tilt";
   $("mSteer").textContent = ladder.steer === "tilt" ? Tilt.label()
     : "Hold the left or right half to turn. Let go and you hold your line.";
   $("mDiv").textContent = "Division " + ladder.div + " of 8";
@@ -3338,6 +3566,7 @@ function saveTour(withRace) {
   Store.save(ladder);
 }
 function newTour(wantLen) {
+  ghost = null;                              // ghosts are a practice thing only
   // AN ABANDONED TOUR IS NOT RE-ROLLED. You may leave any time, but you cannot shop for a
   // parcours that suits your rider: the same draw and the same committed build are waiting.
   // That is what keeps the per-tour build lock meaningful — without it, quitting after
@@ -3397,6 +3626,26 @@ const keys = new Set();
 let btn = { ease: false, attack: false };
 const touches = new Map();     // id -> { x, y, t }
 let binRect = null, binHit = false;
+// ★ THE MUSETTE. In a feed zone a soigneur holds out a cloth bag; take it cleanly at speed
+// and you have a minute of food in your pockets. It is OPTIONAL and it costs nothing to
+// ignore — riding through the zone and grabbing gels works exactly as before. Missing the
+// grab simply means you get nothing, which is the only downside Kevin wanted.
+function musetteZone() {
+  if (!race || race.over) return null;
+  const you = race.you;
+  for (const f of (race.course.feeds || [])) {
+    if (you.dist > f.s - 8 && you.dist < f.e) {
+      if (you.musetteTook === f.s) return null;      // one bag per zone, not one per stage
+      return f;
+    }
+  }
+  return null;
+}
+// How good the grab is: 1 in the middle of the zone, falling away toward the ends.
+function musetteQuality(f) {
+  const you = race.you, t = (you.dist - f.s) / Math.max(1, f.e - f.s);
+  return clamp(1 - Math.abs(t - 0.5) / Sim.CFG.musetteWin, 0, 1);
+}
 function btnR() {
   const h = Math.max(56, Math.min(74, H * 0.088));
   const m = Math.max(14, W * 0.045);
@@ -3460,6 +3709,7 @@ function down(id, x, y) {
     const tl = Sim.throwLine(race.course, race.you);
     if (tl && race.you.threw !== tl.d) { btn.throwHit = true; return; }
     if (Sim.hopTarget(race.course, race.you) && race.you.hop <= 0) { btn.hopHit = true; return; }
+    if (musetteZone()) { btn.musetteHit = true; return; }
     btn.stickyHit = true; return;
   }
   if (inBtn(x, y, "ease")) { btn.ease = id; stroke("L", now); }
@@ -3507,6 +3757,22 @@ function readInput(dt) {
   btn.throwHit = false;
   const hopIt = btn.hopHit; btn.hopHit = false;
   const sticky = btn.stickyHit; btn.stickyHit = false;
+  // Taking the bag. Judged on WHERE in the zone you grab, so it is a timed action like the
+  // hop and the throw rather than a free pickup for being present.
+  if (btn.musetteHit) {
+    btn.musetteHit = false;
+    const f = musetteZone();
+    if (f) {
+      const q = musetteQuality(f);
+      race.you.musetteTook = f.s;
+      if (q > 0.25) {
+        race.you.musette = Sim.CFG.musetteFill * (0.55 + 0.45 * q);
+        flashes.push({ text: q > 0.8 ? "MUSETTE \u00b7 CLEAN" : "MUSETTE", colour: PAL.green, t: 0 });
+      } else {
+        flashes.push({ text: "MISSED THE BAG", colour: PAL.spot, t: 0 });
+      }
+    }
+  }
   const ease = bothDown;
   const bh2 = btnR();
   let hardTurn = keys.has("Shift") ? 1 : 0;
@@ -4247,6 +4513,22 @@ function drawRiders() {
 
     const x = sx(r.dist, r.x), y = sy(r.dist);
     if (y < -60 || y > H + 60) continue;
+    // ★ THE ELBOW FLICK. In a break, a rider you have sat on without ever coming through
+    // flicks an elbow: come past and take your turn. It is drawn ON THE RIDER rather than
+    // as HUD furniture, which is the only kind of new visual that has survived in this game.
+    if (r.flick > 0) {
+      const sw = r.x > race.you.x ? -1 : 1, a = Math.min(1, r.flick / 0.5);
+      ctx.save();
+      ctx.strokeStyle = "rgba(213,94,0," + (0.55 + 0.45 * a).toFixed(2) + ")";
+      ctx.lineWidth = 2.6; ctx.lineCap = "round";
+      const ex = x + sw * riderR * 0.8, ey = y - riderR * 0.15;
+      ctx.beginPath();
+      ctx.moveTo(x + sw * riderR * 0.25, y);
+      ctx.lineTo(ex, ey);
+      ctx.lineTo(ex + sw * riderR * 0.55, y + riderR * 0.25);
+      ctx.stroke();
+      ctx.restore();
+    }
     // The body IS the collision box, and at these scales that box is a circle.
     const bw = riderR, bh = riderR;
     ctx.fillStyle = "rgba(46,49,47,.12)";
@@ -4448,10 +4730,12 @@ function drawProfile() {
   const rcl = (c.climbs || []).find(x => x.route);
   const rrt = rcl ? Sim.ROUTES.filter(x => x.id === rcl.route)[0] : null;
   if (rrt) {
+    // RIGHT-ALIGNED, above the profile. It used to sit under the "km to go" line, which is
+    // directly on top of the big 1ST / OF 8 block below — the two overlapped all race.
     const t = rrt.name.toUpperCase();
-    const pw = textW(t, 10, 700, 1.6) + 22, px = x0, py = yTop + bh + 24;
-    ctx.fillStyle = PAL.you; roundRect(px, py, pw, 20, 10); ctx.fill();
-    label(t, px + pw / 2, py + 14, 10, 700, PAL.paper, "center", 1.6);
+    const pw = textW(t, 9.5, 700, 1.6) + 20, py = yTop - 2;
+    ctx.fillStyle = PAL.you; roundRect(x0 + bw - pw, py, pw, 17, 8.5); ctx.fill();
+    label(t, x0 + bw - pw / 2, py + 12, 9.5, 700, PAL.paper, "center", 1.6);
   }
   const g = Sim.gradeAt(c, you.dist);
 }
@@ -4790,8 +5074,27 @@ function drawHud(dt) {
   // thumbs and cannot be read while you are actually pedalling.
   // Only offered when you are genuinely off the back, which is the one moment the
   // game otherwise gives you nothing to do.
+  // ★ THE MUSETTE BUTTON. Same filling gauge as the hop and the throw, peaking in the middle
+  // of the feed zone, so it is a timed grab rather than a reward for being present.
+  const mz = musetteZone();
+  if (mz && !Sim.throwLine(race.course, you) && !Sim.hopTarget(race.course, you)) {
+    const q = musetteQuality(mz);
+    const col = q > 0.72 ? PAL.green : q > 0.42 ? PAL.fuel : PAL.spot;
+    ctx.save();
+    ctx.fillStyle = "rgba(46,49,47,.06)";
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.fill();
+    ctx.save();
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.clip();
+    ctx.fillStyle = col + "3a";
+    ctx.fillRect(b.thX, b.thY + b.thH * (1 - q), b.thW, b.thH * q);
+    ctx.restore();
+    ctx.strokeStyle = col; ctx.lineWidth = q > 0.72 ? 3.5 : 2;
+    roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.stroke();
+    ctx.restore();
+    label("TAKE THE MUSETTE", W / 2, b.thY + b.thH / 2 + 5, 13, 700, PAL.ink, "center", 1.6);
+  }
   const gapBack = (race.pelotonHead || 0) - you.dist;
-  const canSticky = you.sticky > 0 && you.tow <= 0 && !you.inPeloton
+  const canSticky = !mz && you.sticky > 0 && you.tow <= 0 && !you.inPeloton
     && gapBack > Sim.CFG.stickyNeed && you.dist < race.pelotonHead;
   if (canSticky) {
     ctx.save();
@@ -4892,22 +5195,34 @@ function drawHud(dt) {
 // tried and cut: the streaks read as a rendering fault and the vignette was decoration on
 // top of a game whose whole look is flat and clean.
 let camFast = 0;
+// ★ THE GHOST. A translucent marker riding the road at a reference pace, labelled so there
+// is no mystery about what it is — Kevin's call, and the right one: an unexplained rider on
+// the road would read as a bug. Practice only, no collision, no draft, no effect on anything.
+function drawGhost() {
+  if (!ghost || !race) return;
+  const best = ghost.mine || ghost.mark;
+  if (!best) return;
+  const gy = sy(ghost.dist);
+  if (gy < -40 || gy > H + 40) return;
+  const gx = sx(ghost.dist, -1.6);
+  ctx.save();
+  ctx.globalAlpha = 0.42;
+  ctx.strokeStyle = PAL.ink; ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(gx - riderR * 1.5, gy); ctx.lineTo(gx + riderR * 1.5, gy); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+  label(ghost.mine ? "YOUR BEST" : "THE MARK", gx, gy - 8, 8.5, 700,
+    "rgba(46,49,47,.55)", "center", 1.2);
+}
 function drawPacer(dt) {
   if (!race || !race.pacer || race.pacer.gone) return;
   const p = race.pacer;
   const head = Math.max.apply(null, race.riders.map(r => r.dist));
   const t = performance.now() / 1000;
   p.x = Math.sin(t * 0.7) * 1.1;
-  if (race.neutral) {
-    p.dist = head + 16;                       // sits just off the front of the bunch
-    p.v = race.rollIn;
-  } else {
-    // IT DRIVES AWAY. Blinking out at the flag looked like a bug; a car that accelerates up
-    // the road and over the horizon is the moment the race actually starts.
-    p.v = (p.v || race.rollIn) + 2.6 * dt;   // eases away over a few seconds, not in one
-    p.dist = (p.dist === undefined ? head + 16 : p.dist) + p.v * dt;
-    if (p.dist - head > 320) { p.gone = true; return; }
-  }
+  // Where it IS and when it leaves are the sim's job now (see tick); this only draws.
+  if (p.dist === undefined) return;
   const cx = sx(p.dist, p.x), cy = sy(p.dist);
   if (cy < -90 || cy > H + 90) return;
   const cw = riderR * 2.0, ch = riderR * 3.4;
@@ -5277,6 +5592,7 @@ function drawTutHint() {
 // without calibration the way drills did.
 function tiltZero(k) {
   if (!Tilt.on || !Tilt.ok) return;
+  if (ladder && ladder.tiltCal) return;      // you set it deliberately; do not drift it
   Tilt.zero = Tilt.zero === null ? Tilt.gamma : Tilt.zero * (1 - k) + Tilt.gamma * k;
   Tilt.betaZero = Tilt.betaZero === null ? Tilt.beta : Tilt.betaZero * (1 - k) + Tilt.beta * k;
 }
@@ -5439,7 +5755,12 @@ function frame(now) {
     camFast += (fastN - camFast) * clamp(dt * 1.6, 0, 1);
     playerY = H * (0.635 + 0.155 * camFast);
     ctx.fillStyle = PAL.paper; ctx.fillRect(0, 0, W, H);
-    drawRoad(); drawItems(); drawRiders(); drawHud(dt);
+    if (ghost && phase === "race" && !paused) {
+      ghost.t += dt;
+      const best = ghost.mine || ghost.mark;
+      if (best) ghost.dist = race.course.len * clamp(ghost.t / best, 0, 1);
+    }
+    drawRoad(); drawItems(); drawGhost(); drawRiders(); drawHud(dt);
     drawPacer(dt);
     if (phase === "count") drawCountdown();
     drawTutHint();
@@ -5638,7 +5959,7 @@ function showBriefing() {
     : fat > 28 ? "There are days in your legs. You have fewer matches than you did on stage one."
     : "A little tiredness from the days behind you.");
   $("bNote").textContent = notes.join(" ");
-  requestAnimationFrame(() => drawMiniProfile($("bProf"), c));
+  requestAnimationFrame(() => drawMiniProfile($("bProf"), c));;
   const hasGC = tour.stage > 0;
   $("bGCHead").style.display = hasGC ? "" : "none";
   $("bGC").style.display = hasGC ? "" : "none";
@@ -5651,6 +5972,15 @@ function showBriefing() {
 }
 
 function finishStage() {
+  // Your best time on a road, kept per division since the course is not the same race at
+  // Division 8 and Division 1.
+  if (ghost && race && race.you.finished && race.you.time > 0) {
+    const prev = (ladder.ghosts || (ladder.ghosts = {}))[ghost.key];
+    if (!prev || race.you.time < prev) {
+      ladder.ghosts[ghost.key] = race.you.time;
+      Store.save(ladder);
+    }
+  }
   phase = "done";
   const order = Sim.settle(race);
   const you = race.you;
@@ -5719,8 +6049,12 @@ function finishStage() {
       // it would be perverse to be relegated by the race you climbed the ladder to reach.
       ladder.tours++;
       if (gcPlace === 1) ladder.grandWins = (ladder.grandWins || 0) + 1;
+      awardLanterne(gcPlace);
       Store.save(ladder);
-    } else moved = applyLadder(gcPlace, kindForLen(tour.schedule.length));
+    } else {
+      awardLanterne(gcPlace);
+      moved = applyLadder(gcPlace, kindForLen(tour.schedule.length));
+    }
   }
   $("pauseBtn").classList.add("hide");
   $("rEyebrow").textContent = lastStage
@@ -5728,7 +6062,8 @@ function finishStage() {
       + (moved === "up" ? ladder.div + 1 : moved === "down" ? ladder.div - 1 : ladder.div)
     : stageLabel() + " · " + fmt(you.time);
   $("rVerdict").textContent = lastStage
-    ? (gcPlace === 1 ? (tour.grand ? "You win the Grand Tour" : oneDay ? "You win the race" : "You win the tour") : gcPlace + "th overall")
+    ? (lanterneJustWon ? "Lanterne rouge"
+      : gcPlace === 1 ? (tour.grand ? "You win the Grand Tour" : oneDay ? "You win the race" : "You win the tour") : gcPlace + "th overall")
     : (words[you.place - 1] || you.place + "th");
 
   let note;
@@ -5793,6 +6128,16 @@ function armTiltOnFirstTap() {
   };
   addEventListener("pointerdown", go, true);
 }
+$("calBtn").addEventListener("click", () => {
+  const b = $("calBtn");
+  if (Tilt.calibrate()) {
+    b.textContent = "Set \u2713 \u00b7 that is level now";
+    setTimeout(() => refreshMenu(), 1400);
+  } else {
+    b.textContent = "Turn tilt steering on first";
+    setTimeout(() => refreshMenu(), 1600);
+  }
+});
 $("tiltBtn").addEventListener("click", () => {
   ladder.tiltSens = ((ladder.tiltSens ?? 1) + 1) % TILT_SENS.length;
   Store.save(ladder); refreshMenu();
@@ -5887,6 +6232,34 @@ $("rulesBtn").addEventListener("click", () => {
     const row = document.createElement("div");
     const a = document.createElement("span"); a.textContent = nm;
     const b2 = document.createElement("span"); b2.textContent = why;
+    b2.style.opacity = ".6"; b2.style.textAlign = "right"; b2.style.maxWidth = "62%";
+    row.appendChild(a); row.appendChild(b2); box.appendChild(row);
+  }
+  // ★ RACE CRAFT. Things the game never tells you and never prompts, but which reward you
+  // for knowing them — the design pillar Kevin and I settled on. NAMED but NOT EXPLAINED,
+  // deliberately: an Easter egg nobody finds is wasted work, but one you are handed is not
+  // an Easter egg. This tells you there is something to find and leaves the finding to you.
+  const craftHead = document.createElement("div");
+  craftHead.className = "secthead";
+  craftHead.style.cssText = "margin-top:18px";
+  craftHead.textContent = "Race craft";
+  box.appendChild(craftHead);
+  const intro = document.createElement("p");
+  intro.className = "sub";
+  intro.textContent = "Things the race never asks you to do. Riders who know them go faster.";
+  box.appendChild(intro);
+  const craft = [
+    ["The neutral car", "It punches a hole in the air, and it does not wait."],
+    ["Through and off", "A break that shares the wind stays away. One that does not, does not."],
+    ["The musette", "There is more in the bag than there is in your hand."],
+    ["Third wheel", "The first rider to the front is rarely the first across the line."],
+    ["The right side", "In a crosswind the shelter is not behind the rider ahead."],
+    ["Travel light", "A full stomach climbs badly. Eat early, not at the foot."]
+  ];
+  for (const [nm, hint] of craft) {
+    const row = document.createElement("div");
+    const a = document.createElement("span"); a.textContent = nm;
+    const b2 = document.createElement("span"); b2.textContent = hint;
     b2.style.opacity = ".6"; b2.style.textAlign = "right"; b2.style.maxWidth = "62%";
     row.appendChild(a); row.appendChild(b2); box.appendChild(row);
   }
@@ -6463,6 +6836,7 @@ function showDrillBrief(i) {
   show("drillBrief");
 }
 function startDrill(i) {
+  ghost = null;
   const d = DRILLS[i];
   drill = { i, tip: d.tip, name: d.name };
   tut = null; tutFinished = false;
@@ -6850,7 +7224,10 @@ function renderDrills() {
 }
 
 // ---- practice ----
-let pracStage = 0, pracDiv = 4, pracRoute = null;
+let pracStage = 0, pracDiv = 4, pracRoute = null, ghost = null;
+// A named benchmark per road. Deliberately a TIME rather than a rider, so nothing has to be
+// invented about who set it — it is simply the mark to beat.
+const GHOST_MARK = { alpe: 236, galibier: 291, madeleine: 279 };
 function renderPractice() {
   const sBox = $("pStages"); sBox.innerHTML = ""; sBox.className = "chips";
   Sim.STAGES.forEach((st, i) => {
@@ -6891,6 +7268,15 @@ function startPractice() {
   ladder.savedTour = null; Store.save(ladder);
   tour = { seed: (Date.now() ^ 0x5eed) >>> 0, stage: 0, gc: {}, leaders: {}, fatigue: {},
     schedule: [pracStage], practice: { div: pracDiv, route: pracRoute } };
+  // ★ GHOSTS, practice only and never in a race. The default is YOUR OWN best time on this
+  // road, which is more motivating than invented lore and turns practice into a personal
+  // time trial. The second is a fixed benchmark you probably cannot beat for a long while.
+  ghost = null;
+  if (pracRoute) {
+    const key = pracRoute + ":" + pracDiv;
+    const mine = (ladder.ghosts || {})[key];
+    ghost = { key, mine: mine || null, mark: GHOST_MARK[pracRoute] || null, t: 0, dist: 0 };
+  }
   showBriefing();
 }
 
