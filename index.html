@@ -290,7 +290,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 2</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 3</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -727,7 +727,10 @@ const PARTS = {
     { id: "slammed", name: "Slammed",       note: "Knifes the wind, murder on the back and the handling",extreme: true, unlockDiv: 4,  d: { windTax: -0.12, handling: -0.07, recover: -0.017 } }
   ],
   tires: [
-    { id: "slick",    name: "Race slick",      note: "Fast and light, but nothing in reserve when it gets loose", d: { windTax: -0.07, climbCost: -0.007, descend: -0.05, handling: -0.04 } },
+    // windTax -0.07 -> -0.09: crisper rotations (shorter front spells) shrank total wind
+    // exposure, which structurally devalued the aero tire until dominance read it dead
+    // on 3- and 6-seed runs alike. A deeper aero edge restores its terrain.
+    { id: "slick",    name: "Race slick",      note: "Fast and light, but nothing in reserve when it gets loose", d: { windTax: -0.09, climbCost: -0.007, descend: -0.05, handling: -0.04 } },
     { id: "allround", name: "All-round",       neutral: true, note: "Grip and speed in fair measure", d: {} },
     { id: "grip",     name: "Grippy tubeless", note: "Sticks to anything, drags a little on smooth tar",extreme: true, unlockDiv: 3,  d: { descend: +0.09, handling: +0.07, windTax: +0.05 } }
   ],
@@ -2050,15 +2053,28 @@ function updateGroups(race, dt) {
     // the yardstick: in a five-man break a rider legitimately waits four pulls' worth
     // between turns, and fixed thresholds sized for a trio flicked elbows at riders who
     // were doing nothing wrong. The CFG values are floors, not ceilings.
-    const cycle = rot.length * (CFG.turnLen + CFG.swingLen);
+    // The 3.5 is the MEASURED handover: a front change costs pull + swing + ~3.5s of
+    // drift-overlap and pass. Without it, a working trio's real ~30s cycle overran the
+    // theoretical 18.6s grace, queueing riders kept losing inTrain (and the train's
+    // recovery boost), and tired breaks split for no rotation-related reason.
+    const cycle = rot.length * (CFG.turnLen + CFG.swingLen + 3.5);
     const grace = Math.max(CFG.turnGrace, cycle);
     const warnAt = Math.max(CFG.suckWarn, cycle + 6);
     const giveAt = Math.max(CFG.suckGiveUp, cycle + 16);
+    // The single rider who will inherit the front while it swings off — the only one
+    // who gets the ride-through pace nudge.
+    let relieverUp = null;
+    if (front && front.swingOff > 0)
+      for (const o of rot) if (o !== front && !(o.swingOff > 0) && (!relieverUp || o.dist > relieverUp.dist)) relieverUp = o;
     let working = 0;
     for (const r of rot) {
       const onFront = r === front;
       if (r.flick > 0) r.flick = Math.max(0, r.flick - dt);
-      if (!(r.swingOff > 0)) r.swingT = 0;
+      // The swing hold's clock must not run while the rider is STILL ON THE FRONT: the
+      // turn timer re-arms swingOff every frame there, so swingT was fully spent before
+      // the drop-back even began, the stay-out hold expired on arrival, and the rider
+      // released mid-file and cut back in across the player. The budget starts at relief.
+      if (!(r.swingOff > 0) || onFront) r.swingT = 0;
       if (onFront) { r.turnT = (r.turnT || 0) + dt; r.sinceTurn = 0; }
       else { r.sinceTurn = (r.sinceTurn || 0) + dt; r.turnT = 0; }
       // A rider who has come through recently is part of the train.
@@ -2117,7 +2133,10 @@ function updateGroups(race, dt) {
           // swing releases and they steer back to the file: at 0.9 they cut in half a
           // bike behind the last wheel, mid-merge, and ran into it — in the drill, into
           // the player. 1.6 plus the release decay's drift starts the merge ~2.5+ back.
-          if (wasRotating && r.swingT < 4 && rear && r.dist > rear.dist - 1.6) r.swingOff = 1;
+          // 3s cap: the budget now starts at RELIEF (not at swing arming), so it no
+          // longer needs slack for time spent still on the front — and a fuller budget
+          // over-drifts the swinger into a strand when the slot ahead keeps receding.
+          if (wasRotating && r.swingT < 3 && rear && r.dist > rear.dist - 1.6) r.swingOff = 1;
           // ABOUT A METRE OUT, not to the verge. Swinging to the road edge parked riders in
           // the gutter and broke the group up; a real rotation is a narrow circle you could
           // cover with two bike widths.
@@ -2142,7 +2161,15 @@ function updateGroups(race, dt) {
           // wheel's pace even alongside it. This flag floors their target just above
           // the stalled front's speed (a target nudge, the layer that ripples nowhere).
           r.passBy = 0.6;
-        } else r.tx = -race.swingSide * 0.45;                 // the sheltered file
+        } else {
+          r.tx = -race.swingSide * 0.45;                      // the sheltered file
+          // ★★ THE RELIEVER RIDES THROUGH A SWINGING FRONT. The audit's relief-crawl:
+          // the next rider pace-matched the drifting front (0.3 m/s faster) so pulls
+          // stretched to 8-19s and one rider starved of turns. ONLY the next-in-line
+          // gets the nudge — giving it to the whole file surged every break at every
+          // handover and knocked four speed parts dead in dominance.
+          if (front && !front.you && front.swingOff > 0 && r === relieverUp) r.passBy = 0.6;
+        }
       }
     }
     race.lastBreakFront = front;
@@ -2155,12 +2182,18 @@ function updateGroups(race, dt) {
     const you2 = race.you;
     if (rot.indexOf(you2) >= 0) {
       const onFrontYou = front === you2;
-      if (onFrontYou && you2.turnT > CFG.turnLen && !race.turnDone) {
+      // No praise for a rider already easing out on the swing side: a coasting player
+      // can stay max-dist "front" for seconds while the mates dither, and the cue
+      // re-fired as if they had taken a pull they never took.
+      if (onFrontYou && you2.turnT > CFG.turnLen && !race.turnDone
+          && !(race.swingSide * you2.x > 0.7)) {
         race.turnDone = true;
         race.events.push({ t: "GOOD TURN \u00b7 EASE AND MOVE ASIDE", c: "green" });
       }
       if (!onFrontYou) {
-        race.turnDone = false;
+        // Re-arm only after the player has genuinely left the front \u2014 a mate nosing
+        // ahead for a frame was re-arming the cue mid-coast.
+        if (you2.sinceTurn > 2) race.turnDone = false;
         // \u2605\u2605 CALLED BY POSITION, NOT BY CLOCK. This fired a fixed few seconds after your
         // last turn, so a player seeded mid-file was called up the moment the FIRST rider
         // swung off \u2014 skipping everyone ahead of them in the line. Your turn is when the
@@ -2184,12 +2217,17 @@ function updateGroups(race, dt) {
     // Sitting on: warned once, then the group stops working.
     const you = race.you;
     if (rot.indexOf(you) >= 0) {
-      if (you.sinceTurn > warnAt && !race.suckWarned) {
+      // ★★ PUNISH REFUSAL, NOT WAITING. The flick and sit-up clock used to run on raw
+      // sinceTurn, so a rider waiting their turn in the queue — never once called — was
+      // elbow-flicked on schedule and the break sat up around a cooperator (9 of 10
+      // audit seeds). Both now also require a STANDING CALL the player is ignoring:
+      // turnCalled is true exactly while the player is next up and has been told so.
+      if (you.sinceTurn > warnAt && race.turnCalled && !race.suckWarned) {
         race.suckWarned = true;
         race.events.push({ t: "COME THROUGH", c: "spot" });
         if (front) front.flick = 1.4;                     // the elbow, drawn beside them
       }
-      race.breakSitUp = you.sinceTurn > giveAt;
+      race.breakSitUp = you.sinceTurn > giveAt && race.turnCalled;
     } else { race.suckWarned = false; race.breakSitUp = false; }
     // The train's reward, and its collapse.
     for (const r of rot) {
@@ -7609,7 +7647,11 @@ const DRILLS = [
           o.dist = r.you.dist + (i + 1) * 2.4;            // strung out in front of you
           o.x = clamp(r.you.x + (i % 2 ? 0.5 : -0.5), -2.5, 2.5);
           o.speed = r.you.speed;
-          o.plan = { k: "raid", at: 0.05, kick: 400 };
+          // at 0.99: they must never actually LAUNCH — the drill opened with both mates
+          // attacking off the gun (bursts at t=0.4), which pinned the front for 18s,
+          // collapsed the group to walking pace and elbow-flicked the player before
+          // their first call. They are pinned by hold(); cooperating is their whole job.
+          o.plan = { k: "raid", at: 0.99, kick: 400 };
         } else {
           o.dist = r.you.dist - 260;                       // the bunch, a long way back
         }
