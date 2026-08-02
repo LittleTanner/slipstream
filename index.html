@@ -184,17 +184,38 @@
   .segmented button:last-child{border-right:0}
   .segmented button[aria-pressed="true"]{background:var(--ink);color:var(--paper);opacity:1}
   #tcSkip{margin-top:7px}
-  #tutPrompt{position:fixed;left:0;right:0;bottom:118px;z-index:30;display:flex;
+  /* 118px put this exactly on top of the THROW / HOP button, which draws at the same height.
+     Raised clear of it so a lesson never covers the control it is teaching. */
+  /* Was 118px (on the action button), then 196px (on the RIDER, who sits about a third up
+     from the bottom). Anchored near the TOP instead, under the profile strip, where nothing
+     else lives. */
+  #tutPrompt{position:fixed;left:0;right:0;top:152px;z-index:30;display:flex;
     align-items:center;justify-content:center;gap:10px;pointer-events:none}
   #tutPrompt.hide{display:none}
+  #tutPrompt{padding:0 10px}
   #tutPrompt span{background:var(--you);color:#fff;padding:9px 14px;border-radius:10px;
+    max-width:calc(100vw - 96px);white-space:normal;text-align:center;line-height:1.25;
     font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
   #tutPrompt b{background:var(--ink);color:#fff;padding:9px 11px;border-radius:10px;font-size:12px}
   /* clear of the pads and the road: the old bar sat straight over the controls */
   #drillDone{position:fixed;top:10px;right:12px;z-index:36;padding:9px 13px;border-radius:10px;
     border:1.5px solid rgba(46,49,47,.22);background:rgba(244,242,236,.9);font:inherit;font-size:11px;
     font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);cursor:pointer}
-  #tutQuit{position:fixed;top:10px;right:12px;z-index:36;padding:9px 13px;border-radius:10px;
+  /* Two escapes, matching where a thumb expects them: LEFT gets you out of the tutorial,
+     RIGHT moves past a step you cannot or do not want to complete. Nobody should ever be
+     stuck on a lesson they have already understood. */
+  #tutNext{position:fixed;top:10px;right:12px;z-index:36;padding:9px 13px;border-radius:10px;
+    border:1.5px solid rgba(46,49,47,.22);background:rgba(244,242,236,.9);font:inherit;font-size:11px;
+    font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);cursor:pointer}
+  #tutNext.hide{display:none}
+  /* .go is display:block at higher specificity than .hide — the trap that has now bitten
+     four times. Any new .go button needs its own hide rule. */
+  #tcLong{position:absolute;top:12px;right:14px;width:30px;height:30px;border-radius:15px;
+    border:1.5px solid rgba(46,49,47,.28);background:transparent;font:inherit;font-size:14px;
+    font-weight:700;font-style:italic;color:rgba(46,49,47,.6);cursor:pointer;line-height:1;padding:0}
+  #tcLong.hide{display:none}
+  .tcInner{position:relative}
+  #tutQuit{position:fixed;top:10px;left:12px;z-index:36;padding:9px 13px;border-radius:10px;
     border:1.5px solid rgba(46,49,47,.22);background:rgba(244,242,236,.9);font:inherit;font-size:11px;
     font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);cursor:pointer}
   .prev b{color:var(--you)}
@@ -218,7 +239,7 @@
   <button class="go ghost" id="buildBtn">Build your rider</button>
   <button class="go ghost hide" id="grandBtn">The Grand Tour</button>
   <button class="go ghost" id="routesBtn">Routes</button>
-  <button class="go ghost" id="pracBtn">Practice</button>
+  <button class="go ghost" id="pracBtn">Training</button>
   <div class="foot" id="mSteer"></div>
   <div class="foot">Hold a side to steer · alternate L and R to pedal · hold both to soft pedal</div>
 </div></div>
@@ -226,26 +247,28 @@
 <div id="tutCard" class="hide">
   <div class="tcInner">
     <div class="tcGrip"></div>
+    <button id="tcLong" class="hide" aria-label="More detail">i</button>
     <div class="tcStep" id="tcStep"></div>
     <h3 id="tcTitle"></h3>
     <p id="tcBody"></p>
     <button class="go" id="tcGo">Let me try</button>
-    <button class="go ghost hide" id="tcMore">Learn more</button>
+    <button class="go ghost hide" id="tcMore">More skills</button>
     <button class="go ghost hide" id="tcRules">The rules</button>
     <button class="go ghost" id="tcSkip">Skip the tutorial</button>
   </div>
 </div>
 <div id="tutPrompt" class="hide"><span id="tpText"></span><b id="tpCount"></b></div>
-<button id="tutQuit" class="hide">Skip</button>
+<button id="tutQuit" class="hide">Skip tutorial</button>
+<button id="tutNext" class="hide">Skip step</button>
 <button id="drillDone" class="hide">Done</button>
 <button id="pauseBtn" class="hide">II</button>
 <div id="pauseCard" class="hide"><div class="tcInner">
   <div class="tcGrip"></div>
-  <div class="tcStep">Paused</div>
-  <h3 id="pTitle">Stage paused</h3>
+  <div class="tcStep">Nature break</div>
+  <h3 id="pTitle">Nature break</h3>
   <p id="pBody"></p>
   <button class="go" id="pResume">Back on</button>
-  <button class="go ghost" id="pQuit">Leave the race</button>
+  <button class="go ghost" id="pQuit">Save and step off</button>
   <button class="go ghost" id="pAbandon">Abandon the tour</button>
   <p id="pFoot" class="sub"></p>
 </div></div>
@@ -262,16 +285,24 @@
   <button class="go ghost" id="unitBtn">Km</button>
   <div class="secthead">Help</div>
   <button class="go ghost" id="howBtn">How to play</button>
-  <button class="go ghost" id="dataBtnMenu">Riding data</button>
+  <button class="go ghost" id="dataBtnMenu">Palmarès</button>
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
+  <button class="go ghost" id="glossBtn">Cycling words</button>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
   <button class="navback" id="dataBack" aria-label="Back">&#8592;</button>
-  <h2>Riding data</h2>
+  <h2>Palmarès</h2>
   <p class="sub" id="dataSub"></p>
   <div id="dataBody"></div>
+</div></div>
+
+<div class="screen hide" id="gloss"><div class="inner">
+  <button class="navback" id="glossBack" aria-label="Back">&#8592;</button>
+  <h2>Cycling words</h2>
+  <p class="sub">The sport has its own language and this game uses it. Here is what it all means.</p>
+  <div id="glossList"></div>
 </div></div>
 
 <div class="screen hide" id="pick"><div class="inner">
@@ -334,7 +365,7 @@
 
 <div class="screen hide" id="practice"><div class="inner">
   <button class="navback" id="pBack" aria-label="Back">&#8592;</button>
-  <div class="eyebrow">Practice</div>
+  <div class="eyebrow">Training</div>
   <h2>Pick a stage</h2>
   <p class="sub">Any parcours, any division. Nothing is won or lost: no prize money, no ladder, no fatigue carried.</p>
   <button class="go ghost" id="drillBtn">Drills · one technique at a time</button>
@@ -370,7 +401,7 @@
     <div class="meters" id="bMeters"></div>
     <div class="prev" id="bPrev"></div>
   </div>
-  <div class="secthead">Start from a preset</div>
+  <div class="secthead">Start from a stock bike</div>
   <div class="segmented" id="bPresets"></div>
   <div class="secthead">Tune each part</div>
   <div class="segmented" id="bSlots"></div>
@@ -405,7 +436,7 @@
   <div class="board" id="rPts"></div>
   <div class="secthead">King of the Mountains</div>
   <div class="board" id="rKom"></div>
-  <button class="go ghost" id="dataBtnRes">Riding data</button>
+  <button class="go ghost" id="dataBtnRes">Palmarès</button>
   <button class="go" id="nextBtn">Next stage</button>
   <div class="foot" id="rFoot"></div>
 </div></div>
@@ -425,7 +456,8 @@ const CFG = {
   brakeFull: 1.5,                     // seconds of holding the pads to reach full braking
   carDraft: 13,                       // metres behind the pace car that its slipstream reaches
   carRecover: 4.2,                    // how much faster legs come back while you are in the car's hole
-  musetteWin: 0.34,                   // how close to the middle of the feed zone the grab must be
+  musetteHand: 26,                    // metres of hand-up line at Div 8...
+  musetteHandMin: 9,                  // ...shrinking to this at Div 1
   musetteFill: 78,                    // food the bag holds, released to you slowly
   musetteRate: 1.55,                  // food per second it feeds you (about a minute to empty)
   turnLen: 4.0,                       // seconds a rider spends on the front before swinging off
@@ -455,7 +487,9 @@ const CFG = {
   // You may change your line in a sprint. You may not change it INTO someone. The
   // offence needs all three: you are off your line, you are moving toward them, and
   // they are close enough to be affected.
-  lineTol: 1.45, lineNear: 1.75,
+  lineTol: 0.95, lineNear: 1.75,      // the corridor: about a bike wide, not three
+  lineSafe: 0.45,                     // green: dead on your line
+  lineWarn: 0.72,                     // amber: drifting, but still legal
   // The team car: how fast it paces you, how long it will stay with you, and how far
   // off the back you must be before the sticky bottle is worth offering.
   // A long steady pull rather than a slingshot, and you have to stay in its draft:
@@ -981,7 +1015,14 @@ function buildStage(seed, spec0, D) {
   const gRaw = m => grades[clamp(Math.round(m / STEP), 0, n - 1)] || 0;
 
   const primes = [];
-  for (const c of climbs) primes.push({ d: c.e + 12, kind: "kom", pts: [6, 4, 2, 1], crossed: [] });
+  // ★ ON A SUMMIT FINISH THE KOM AND THE FINISH ARE THE SAME LINE, as they are in the sport.
+  // The +12m offset put the summit prime PAST the finish, so on a summit-finish stage you
+  // could never reach it: the mountain points for the hardest climb of the day were
+  // unclaimable. Clamped to the finish, and merged into it when they coincide.
+  for (const c of climbs) {
+    const at = Math.min(c.e + 12, spec.len);
+    primes.push({ d: at, kind: "kom", pts: [6, 4, 2, 1], crossed: [], atFinish: at >= spec.len - 1 });
+  }
   const flats = [];
   for (let m = 330; m < spec.len - 300; m += 20) if (Math.abs(gRaw(m)) < 0.22) flats.push(m);
   const aims = spec.sprints >= 3 ? [0.26, 0.5, 0.74] : spec.sprints === 2 ? [0.34, 0.7] : [0.42];
@@ -1260,6 +1301,14 @@ function buildStage(seed, spec0, D) {
   // A TIME TRIAL is 900 m flat out: there is no feed zone, nothing to pick up and no
   // bottle to get rid of. Cleared AFTER generation rather than skipped during it, so the
   // course PRNG is untouched and every other stage generates exactly as before.
+  // THE HAND-UP. A soigneur stands at ONE SPOT in the feed zone, not along all of it, so
+  // taking a musette is a moment you ride to rather than a button you press anywhere. It
+  // gets shorter up the ladder: forgiving at Division 8, demanding at Division 1.
+  for (const f of feeds) {
+    const len = CFG.musetteHand - (CFG.musetteHand - CFG.musetteHandMin) * D.t;
+    f.hand = f.s + (f.e - f.s) * 0.42;
+    f.handE = Math.min(f.e, f.hand + len);
+  }
   if (spec.tt) { items.length = 0; feeds.length = 0; litters.length = 0; }
   return { spec, len: spec.len, grades, elev, eMin, eMax, baseElev, climbs,
     primes, feeds, items, winds, scenery, narrows, rounds, surfaces, hazards, litters,
@@ -1288,7 +1337,51 @@ function gradeAt(c, m) {
   const i = m / STEP, i0 = clamp(Math.floor(i), 0, c.grades.length - 1), i1 = clamp(i0 + 1, 0, c.grades.length - 1);
   return lerp(c.grades[i0], c.grades[i1], clamp(i - i0, 0, 1));
 }
+// ★ CLIMB CATEGORY, the way races rate them: essentially LENGTH x GRADIENT, since a long
+// shallow drag and a short wall can be equally hard. Real categorisation is roughly
+// (metres climbed) with the gradient weighted, so a 5 km climb at 5% is a cat 3 and Alpe
+// d'Huez is beyond category. Returns "4" | "3" | "2" | "1" | "HC", or null if it is not
+// worth rating — a rise nobody would put a sign on.
+function climbCat(c, cl) {
+  // ★ A NAMED ROUTE IS RATED ON ITS REAL FIGURES, not on the game's compressed geometry.
+  // Alpe d'Huez is hors categorie in life and must read HC here, so a route uses the
+  // catalogue's km and grade and the REAL thresholds (metres of ascent, weighted by
+  // steepness). Generated climbs keep the calibrated scale below, because a sim "climb"
+  // spans a whole mountain section rather than one pass and real thresholds rate almost
+  // all of them HC.
+  if (cl.route && ROUTE_BY_ID[cl.route]) {
+    const r = ROUTE_BY_ID[cl.route];
+    const gain = r.km * 1000 * (r.grade / 100);
+    const s = gain * (1 + r.grade / 14);
+    return s >= 1500 ? "HC" : s >= 900 ? "1" : s >= 500 ? "2" : s >= 250 ? "3" : "4";
+  }
+  const km = (cl.e - cl.s) * CFG.scaleM / 1000;
+  let g = 0, n = 0;
+  for (let m = cl.s; m < cl.e; m += 8) { g += gradeAt(c, m); n++; }
+  const pct = n ? (g / n) * CFG.gradePct : 0;
+  if (km < 0.6 || pct < 3) return null;
+  // Difficulty in metres of ascent, then weighted again by steepness: a 10% climb hurts
+  // more than twice as much as a 5% one of the same height.
+  const score = km * 1000 * (pct / 100) * (1 + pct / 14);
+  // CALIBRATED TO WHAT THIS GAME ACTUALLY PRODUCES, not to real-world metres. A sim "climb"
+  // spans a whole mountain section rather than one named pass, so real thresholds rated
+  // 197 of 201 climbs as HC — useless. These sit on the measured distribution (20/40/60/80
+  // percentiles), so the rating separates the day's hardest climb from its lesser ones,
+  // which is the job the sign on the road actually does.
+  if (score >= 6400) return "HC";
+  if (score >= 4200) return "1";
+  if (score >= 3100) return "2";
+  if (score >= 2600) return "3";
+  return "4";
+}
 // Metres above sea level, as opposed to metres above the start line.
+// Real metres of ascent for a named road, straight from the catalogue.
+function routeGain(c) {
+  const cl = (c.climbs || []).find(x => x.route);
+  if (!cl || !ROUTE_BY_ID[cl.route]) return 0;
+  const r = ROUTE_BY_ID[cl.route];
+  return Math.round(r.km * 1000 * (r.grade / 100));
+}
 function altAt(c, m) { return (c.baseElev || 0) + (elevAt(c, m) - c.eMin) * CFG.altM; }
 function elevAt(c, m) {
   const i = m / STEP, i0 = clamp(Math.floor(i), 0, c.elev.length - 1), i1 = clamp(i0 + 1, 0, c.elev.length - 1);
@@ -1583,6 +1676,11 @@ function createRace(opts) {
   const nSharp = Math.round(D.t * 5);   // Div 1 fields the parcours specialists almost to a rider
   const byFit = FIELD.map((f, k) => k).sort((a, b) => (FIELD[b].type === parcoursArch ? 1 : 0) - (FIELD[a].type === parcoursArch ? 1 : 0));
   const sharp = new Set(byFit.slice(0, nSharp));
+  // ★ ABANDONMENT. A three-week race loses riders, so `opts.out` names those who have
+  // already gone home. They are skipped entirely rather than being ridden as ghosts, and
+  // their PRNG draws still happen so the course and the remaining field are unchanged —
+  // dropping a rider must not reshuffle everyone else's build.
+  const gone = new Set(opts.out || []);
   FIELD.forEach((f, k) => {
     // whoever owned the chosen colour inherits the one the player gave up
     const cf = f.c === kit ? Object.assign({}, f, { c: YOU.c }) : f;
@@ -1593,7 +1691,7 @@ function createRace(opts) {
     r.plan = pickPlan(k + 1, R);
     r.strength += D.strength;
     r.speed = rollIn;
-    riders.push(r);
+    if (!gone.has(r.name)) riders.push(r);       // draws already made; only the rider is dropped
   });
   for (const r of riders) { r.tx = r.x; r.txS = r.x; r.prev = r.dist; }
   const ss = riders.map(r => r.strength).sort((a, b) => a - b);
@@ -1710,12 +1808,33 @@ function impact(race, r, bite, why) {
 
 // Can you hop right now, and which way? Up onto the island if you are alongside its
 // kerb; down off it if you are on it. Returns the edge you would be jumping.
+// ★ HOP A POTHOLE — but ONLY when you are actually going to hit it. Kevin: "we need to make
+// sure it's only showing if they are going to hit it. If they aren't I don't want it showing
+// a hop button." So this asks the SAME question the collision test asks (`|hz.x - r.x| >
+// hz.r + 0.5`), just projected up the road, rather than "is there a hole nearby". A button
+// that appears for holes you would miss is noise, and worse, teaches you to ignore it.
+function holeTarget(C, r) {
+  if (r.onIsl) return null;                         // already committed to an island hop
+  let best = null;
+  for (const hz of (C.hazards || [])) {
+    if (hz.hit.has(r)) continue;
+    const lead = hz.d - r.dist;
+    if (lead < 0.5 || lead > 22) continue;          // behind you, or too far to be timing yet
+    // Where you will BE when you reach it, not where you are now: drifting across at
+    // 2 m/s for two seconds is four metres, which is the difference between hit and miss.
+    const eta = lead / Math.max(4, r.speed);
+    const willX = r.x + (r.vx || 0) * eta;
+    if (Math.abs(hz.x - willX) > hz.r + 0.5) continue;
+    if (!best || lead < best.lead) best = { dir: "hole", edge: hz.x, hz, lead, headOn: true };
+  }
+  return best;
+}
 function hopTarget(C, r) {
   // Judge the kerb against the island AT ITS WIDEST, which is what you will actually
   // meet. Measuring it against a narrow slice further up the road put the kerb in a
   // different place every metre, so the button appeared and vanished on the approach.
-  const rb = (C.rounds || []).find(x => r.dist > x.s - 45 && r.dist < x.e + 4);
-  if (!rb) return null;
+  const rb = (C.rounds || []).find(x => r.dist > x.s - 26 && r.dist < x.e + 4);
+  if (!rb) return holeTarget(C, r);          // no island here: a hole in your line still wants a hop
   const wide = islandAt(C, (rb.s + rb.e) / 2);
   if (!wide) return null;
   if (r.onIsl) {
@@ -1728,8 +1847,11 @@ function hopTarget(C, r) {
   // Offered when you are beside a kerb OR on a line straight into the island. Riding
   // dead at it you are metres from either edge, so gating on kerb distance alone
   // meant the button only blinked as the collision shoved you sideways.
+  // TIGHTER. 2.1m offered the hop when you were a clear bike-width away from the kerb and
+  // never going to touch it, which is the "why is this showing?" Kevin hit. You must now be
+  // genuinely alongside it, or on a line into it.
   const headOn = r.x > wide.lo - 0.3 && r.x < wide.hi + 0.3;
-  if (!headOn && Math.abs(r.x - kerb) > 2.1) return null;
+  if (!headOn && Math.abs(r.x - kerb) > 1.15) return null;
   // How far up the road the island actually starts. That is the thing you are timing.
   // Scanned a long way ahead: a roundabout island is eight metres long, so a short
   // scan meant the button appeared for a fraction of a second and was gone.
@@ -2257,7 +2379,8 @@ function stepRider(race, r, dt) {
         // as when going over the top: a tight kerb-distance term made it impossible
         // to score well. Generous, and it tops out anywhere sensible.
         const offQ = clamp(1 - Math.max(0, d - 1.3) / 2.4, 0, 1);
-        r.hopQ = t.dir === "off" ? offQ
+        r.hopQ = t.dir === "hole" ? time
+          : t.dir === "off" ? offQ
           : t.headOn ? time
           : t.lead > 0.2 ? clamp(near * 0.3 + time * 0.7, 0, 1)
           : clamp(near * 0.85 + 0.15, 0, 1);
@@ -2265,12 +2388,22 @@ function stepRider(race, r, dt) {
         r.hop = CFG.hopAir;
         r.hopDir = t.dir;
         r.hopEdge = t.edge;
+        r.hopHz = t.hz || null;
+        // Cleared AT THE MOMENT OF THE HOP, not on landing. The hazard test runs in a
+        // different pass from this one, so waiting until you land let the hole fire first
+        // and you took the hit despite being in the air over it.
+        if (t.dir === "hole" && t.hz) {
+          t.hz.hit.add(r);
+          if (r.you) race.events.push({ t: "CLEARED THE HOLE", c: "you" });
+        }
         r.speed *= 1 - CFG.hopCost;
       }
     }
     if (wasAir > 0 && r.hop <= 0) {                        // landing
       if (r.hopQ > 0.30) {
-        if (r.hopDir === "on") {
+        if (r.hopDir === "hole") {
+          // Already cleared at take-off (see above); nothing to do on landing.
+        } else if (r.hopDir === "on") {
           r.onIsl = true;
           // Only slide onto the island if you came at it from the side. Going over
           // the top you are already above it, and being flicked across to the kerb
@@ -2713,6 +2846,11 @@ function stepRider(race, r, dt) {
   if (r.bump > 0.05) r.log.bumps += dt;
   r.flat = Math.max(0, r.flat - dt);
   r.down = Math.max(0, r.down - dt);
+  // ★ DOWN MEANS STOPPED. A rider showing the X still crept along at 5% speed, which reads
+  // as "slightly slowed" rather than "off the bike" — and it hid the real cost, because the
+  // bunch never actually rode past you. You now stop dead and start again when you are up,
+  // so WHERE it happens decides how much it costs.
+  if (r.down > 0) { r.speed = 0; r.vx = 0; }
   if (r.tow > 0) {
     r.tow = Math.max(0, r.tow - dt);
     if (r.dist >= towTarget(race, r)) {                     // delivered
@@ -2763,6 +2901,7 @@ function stepRider(race, r, dt) {
   }
   for (const hz of C.hazards) {
     if (hz.hit.has(r)) continue;
+    if (r.hop > 0) continue;      // in the air: a hole cannot touch you, which is the point
     if (Math.abs(hz.d - r.dist) > 1.6 || Math.abs(hz.x - r.x) > hz.r + 0.5) continue;
     hz.hit.add(r);
     r.log.edge += r.speed * 0.16 * dt;
@@ -3170,7 +3309,7 @@ return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
-  createRace, snapshot, restore, step, tick, preRoll, settle, ROUTES, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
+  createRace, snapshot, restore, step, tick, preRoll, settle, ROUTES, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
   danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
   surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
@@ -3466,6 +3605,32 @@ const reqLeft = () => reqNeeded(ladder.div).filter(k => !reqDone(k));
 // that is an honour in cycling rather than a joke — riders have chased it deliberately.
 // Scoped to 21-stage races and the Grand Tour, where surviving the whole thing is a real
 // achievement, so it can never be farmed on a short tour.
+// ★ WHO GOES HOME. A grand tour loses about a fifth of its field, so a 21-stage race here
+// loses two of eight — 75% finish, which is what Kevin asked for and close to the real
+// figure. Only ever on LONG races: a three-day tour losing riders would be silly.
+// Deterministic from the tour seed and the stage, so a resumed tour loses the same riders.
+// The PLAYER never abandons this way — leaving is their decision and their button.
+function attrition() {
+  if (!tour || !tour.grand && tour.schedule.length < 21) return null;
+  const n = tour.schedule.length;
+  tour.out = tour.out || [];
+  const target = Math.max(0, Math.round((race.riders.length + tour.out.length - 1) * 0.25));
+  if (tour.out.length >= target) return null;
+  // Spread across the middle and back end: nobody quits on stage 1, and the mountains
+  // are where a race sheds people.
+  const t = tour.stage / (n - 1);
+  if (t < 0.25) return null;
+  const roll = ((tour.seed >>> (tour.stage % 12)) % 1000) / 1000;
+  if (roll > 0.34) return null;
+  // The rider going home is the one having the worst time of it: last on GC of those left.
+  const left = race.riders.filter(r => !r.you && tour.out.indexOf(r.name) < 0);
+  if (left.length <= 3) return null;              // never strip the race to nothing
+  let worst = null;
+  for (const r of left) if (!worst || (tour.gc[r.name] || {}).time > (tour.gc[worst.name] || {}).time) worst = r;
+  if (!worst) return null;
+  tour.out.push(worst.name);
+  return worst.name;
+}
 function awardLanterne(place) {
   const long = tour.grand || tour.schedule.length >= 21;
   if (!long || place !== 8) return;
@@ -3602,6 +3767,7 @@ function startStage() {
         playerStats: raceStats(dailyBuild, null, true) })
     : Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
+        out: tour.out || [],
         route: stageRoute(tour.stage),
         fatigue: tour.fatigue, playerStats: bStats });
   // ROLL-OUT. Road stages neutralise behind the car for a few seconds: you can move up or
@@ -3634,7 +3800,8 @@ function musetteZone() {
   if (!race || race.over) return null;
   const you = race.you;
   for (const f of (race.course.feeds || [])) {
-    if (you.dist > f.s - 8 && you.dist < f.e) {
+    // Offered on the APPROACH to the hand-up and through it, so you see it coming.
+    if (f.hand !== undefined && you.dist > f.hand - 40 && you.dist < f.handE) {
       if (you.musetteTook === f.s) return null;      // one bag per zone, not one per stage
       return f;
     }
@@ -3642,9 +3809,12 @@ function musetteZone() {
   return null;
 }
 // How good the grab is: 1 in the middle of the zone, falling away toward the ends.
+// Judged against the HAND-UP LINE, not the whole zone: full anywhere along it, filling on
+// the approach so the gauge rises as you close on the soigneur.
 function musetteQuality(f) {
-  const you = race.you, t = (you.dist - f.s) / Math.max(1, f.e - f.s);
-  return clamp(1 - Math.abs(t - 0.5) / Sim.CFG.musetteWin, 0, 1);
+  const d = race.you.dist;
+  if (d >= f.hand && d <= f.handE) return 1;
+  return clamp(1 - (f.hand - d) / 40, 0, 1);
 }
 function btnR() {
   const h = Math.max(56, Math.min(74, H * 0.088));
@@ -4227,23 +4397,31 @@ function drawRoad() {
         ctx.stroke();
       }
       ctx.restore();
-      label("SHORT", lx2, ly2 - pxM * 0.34, 10.5, 700, "rgba(46,49,47,.72)", "center", 1.6);
+      label("INSIDE", lx2, ly2 - pxM * 0.34, 10.5, 700, "rgba(46,49,47,.72)", "center", 1.6);
     }
   }
   // Your line through a sprint, so you can see exactly what you are held to.
   if (you.sprintLine !== null) {
+    // ★ THREE BANDS, ABOUT A BIKE WIDE. One flat corridor 2.9m across told you nothing until
+    // you were already outside it. GREEN dead on your line, AMBER drifting but still legal,
+    // RED past the limit — so you can see the wiggle room you have before it costs you.
     const tol = Sim.CFG.lineTol, off = Math.abs(you.x - you.sprintLine);
-    ctx.save();
-    ctx.fillStyle = off > tol ? "rgba(213,94,0,.10)" : "rgba(46,49,47,.055)";
     const top = Math.max(dBot, you.dist - 38), bot = Math.min(dTop, you.dist + 2);
-    ctx.beginPath();
-    for (let i = 0; i <= 8; i++) { const d = lerp(top, bot, i / 8);
-      const px = sx(d, you.sprintLine - tol), py = sy(d);
-      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
-    for (let i = 8; i >= 0; i--) { const d = lerp(top, bot, i / 8);
-      ctx.lineTo(sx(d, you.sprintLine + tol), sy(d)); }
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = off > tol ? "rgba(213,94,0,.55)" : "rgba(46,49,47,.20)";
+    const band = (half, fill) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      for (let i = 0; i <= 8; i++) { const d = lerp(top, bot, i / 8);
+        const px = sx(d, you.sprintLine - half), py = sy(d);
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      for (let i = 8; i >= 0; i--) { const d = lerp(top, bot, i / 8);
+        ctx.lineTo(sx(d, you.sprintLine + half), sy(d)); }
+      ctx.closePath(); ctx.fill();
+    };
+    ctx.save();
+    band(tol, "rgba(213,94,0,.13)");                       // red shoulder, out to the limit
+    band(Sim.CFG.lineWarn, "rgba(230,159,0,.15)");         // amber
+    band(Sim.CFG.lineSafe, "rgba(0,158,115,.17)");         // green
+    ctx.strokeStyle = off > tol ? "rgba(213,94,0,.65)" : "rgba(46,49,47,.22)";
     ctx.lineWidth = 1.5; ctx.setLineDash([7, 6]);
     for (const sgn of [-1, 1]) {
       ctx.beginPath();
@@ -4275,6 +4453,15 @@ function drawRoad() {
       label("BOTTLE DROP", sx(l.s, l.side * 2.4), sy(l.s) - 6, 10, 700, PAL.water, "center", 1.5);
   }
   for (const f of c.feeds) {
+    if (f.hand !== undefined && f.handE > dBot && f.hand < dTop) {
+      // THE HAND-UP LINE, marked on the road like a bottle drop so it is a place, not a rule.
+      ctx.save();
+      ctx.fillStyle = "rgba(0,158,115,.30)";
+      const ya = sy(Math.min(f.handE, dTop)), yb = sy(Math.max(f.hand, dBot));
+      const ea = Sim.edgeAt(c, f.hand) * pxM;
+      ctx.fillRect(W / 2 - ea, ya, ea * 2, Math.max(2, yb - ya));
+      ctx.restore();
+    }
     if (f.e < dBot || f.s > dTop) continue;
     const a = Math.max(f.s, Math.floor(dBot / 1.1) * 1.1), b = Math.min(f.e, dTop + 1.1);
     const st = Math.max(4, Math.ceil((b - a) / 1.1));
@@ -5131,7 +5318,7 @@ function drawHud(dt) {
     ctx.strokeStyle = col; ctx.lineWidth = fill > 0.72 ? 3.5 : 2;
     roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.stroke();
     ctx.restore();
-    label(hopT.dir === "on" ? "HOP UP" : "HOP DOWN",
+    label(hopT.dir === "hole" ? "HOP THE HOLE" : hopT.dir === "on" ? "HOP UP" : "HOP DOWN",
       W / 2, b.thY + b.thH / 2 + 6, 15, 700, PAL.ink, "center", 2.2);
   }
   const tl = Sim.throwLine(race.course, you);
@@ -5215,6 +5402,66 @@ function drawGhost() {
   label(ghost.mine ? "YOUR BEST" : "THE MARK", gx, gy - 8, 8.5, 700,
     "rgba(46,49,47,.55)", "center", 1.2);
 }
+// ★ THE WHEEL CHANGE. A puncture already stops you and already brings the car; this is the
+// picture of it. The car pulls alongside while you are stopped and a mechanic is out — it
+// occupies time you are ALREADY losing and adds none, because a puncture is punishment
+// enough without a cutscene on top.
+function drawWheelChange() {
+  if (!race || !race.you || race.you.flat <= 0) return;
+  const you = race.you, y = sy(you.dist);
+  if (y < -60 || y > H + 60) return;
+  const side = you.x > 0 ? -1 : 1;
+  const cx = sx(you.dist - 1.2, you.x + side * 2.1);
+  const w = riderR * 2.0, h = riderR * 3.2;
+  ctx.save();
+  ctx.fillStyle = "rgba(46,49,47,.16)";
+  roundRect(cx - w / 2 + 2, y - h / 2 + 3, w, h, 5); ctx.fill();
+  ctx.fillStyle = PAL.you;                                  // your own team's car, in your colour
+  roundRect(cx - w / 2, y - h / 2, w, h, 5); ctx.fill();
+  ctx.fillStyle = "rgba(244,242,236,.9)";
+  roundRect(cx - w * 0.34, y - h * 0.16, w * 0.68, h * 0.3, 2); ctx.fill();
+  const mx = sx(you.dist - 0.4, you.x + side * 0.95);       // the mechanic at your wheel
+  ctx.fillStyle = "rgba(46,49,47,.75)";
+  ctx.beginPath(); ctx.arc(mx, y + riderR * 0.2, riderR * 0.42, 0, 7); ctx.fill();
+  ctx.restore();
+  label("WHEEL CHANGE", cx, y - h * 0.62, 8.5, 700, PAL.you, "center", 1.2);
+}
+// ★ THE INFORMATION MOTO. When YOU are in the breakaway, a motorbike rides just ahead of
+// you with the gap chalked on its board — which is how a rider up the road actually learns
+// what they have. It only appears when you are IN the move, so it is a reward for being
+// there rather than scenery.
+// THE BOARD ALWAYS SHOWS THE TIME, radio or not (Kevin's call, and his reasoning is better
+// than mine: the RACE RADIO sells CONSTANT gap information, whereas the moto is a glance
+// you get a few times. Seeing it occasionally does not undercut owning it permanently.)
+function drawMoto() {
+  if (!race || race.over || race.neutral) return;
+  const brk = race.breakaway || [];
+  if (brk.indexOf(race.you) < 0) return;          // only when you are up the road
+  if (race.breakGap < 6) return;
+  const you = race.you;
+  const d = you.dist + 11;
+  const y = sy(d);
+  if (y < -60 || y > H + 60) return;
+  const x = sx(d, you.x + (you.x > 0 ? -1.9 : 1.9));
+  const w = riderR * 1.05, h = riderR * 2.0;
+  ctx.save();
+  ctx.fillStyle = "rgba(46,49,47,.14)";
+  roundRect(x - w / 2 + 2, y - h / 2 + 3, w, h, 4); ctx.fill();
+  ctx.fillStyle = "#3A3D3A";
+  roundRect(x - w / 2, y - h / 2, w, h, 4); ctx.fill();
+  ctx.restore();
+  // the board on the back of the moto, which is the real thing a breakaway reads
+  const t = Math.round(race.breakGap / Math.max(4, race.pelotonPace || Sim.CFG.base));
+  const s = t < 60 ? t + "s" : Math.floor(t / 60) + "m" + (t % 60 < 10 ? "0" : "") + (t % 60);
+  const bw = textW(s, 9.5, 700, 1.2) + 14;
+  ctx.save();
+  ctx.fillStyle = "rgba(244,242,236,.94)";
+  roundRect(x - bw / 2, y - h / 2 - 16, bw, 14, 3); ctx.fill();
+  ctx.strokeStyle = "rgba(46,49,47,.35)"; ctx.lineWidth = 1;
+  roundRect(x - bw / 2, y - h / 2 - 16, bw, 14, 3); ctx.stroke();
+  ctx.restore();
+  label(s, x, y - h / 2 - 5.5, 9.5, 700, PAL.ink, "center", 1.2);
+}
 function drawPacer(dt) {
   if (!race || !race.pacer || race.pacer.gone) return;
   const p = race.pacer;
@@ -5279,10 +5526,30 @@ function tutInTarget(r) {
 function tutCalm(race) {
   race.course.winds = [{ d: -1e6, dir: 0, str: 0 }, { d: 1e9, dir: 0, str: 0 }];
 }
+// Flattens the road, straightens it, and clears the furniture. Used by any lesson where the
+// terrain is not the thing being taught.
+function tutStraight(race) {
+  const c = race.course;
+  for (let i = 0; i < c.grades.length; i++) c.grades[i] = 0;
+  for (let i = 0; i < c.elev.length; i++) c.elev[i] = 0;
+  c.eMin = 0; c.eMax = 40;
+  c.bend = { a: 0, f: 1, p: 0 };
+  c.swAmp = 0;
+  c.rounds = []; c.narrows = []; c.hazards = []; c.surfaces = [];
+}
 function tutClear(race) {
   tutCalm(race);
   for (const o of race.riders) if (!o.you) o.dist = race.you.dist - 500;
   tutNoPrimes(race);
+  tutBareRoad(race);
+}
+// EVERYTHING THE LESSON IS NOT ABOUT, REMOVED. A feed zone during the "get on a wheel" step
+// put a TAKE THE MUSETTE button on screen and gels on the road, so the lesson was teaching
+// two things and asking for one. Steps that ARE about food put their own items back.
+function tutBareRoad(race) {
+  const c = race.course;
+  c.items = []; c.feeds = []; c.litters = [];
+  c.rounds = []; c.narrows = []; c.hazards = []; c.surfaces = [];
 }
 // Sprint and summit banners during a lesson about something else are just noise.
 function tutNoPrimes(race) {
@@ -5291,6 +5558,7 @@ function tutNoPrimes(race) {
 function tutWheel(race, gap) {
   tutCalm(race);
   tutNoPrimes(race);
+  tutBareRoad(race);
   const o = race.riders[1];
   o.dist = race.you.dist + (gap || 6); o.x = race.you.x; o.speed = race.you.speed;
   for (const q of race.riders) if (!q.you && q !== o) q.dist = race.you.dist - 500;
@@ -5298,28 +5566,37 @@ function tutWheel(race, gap) {
 }
 const TUTORIAL = [
   { t: "Your three bars", demo: "bars", info: 1, setup: tutClear,
+    s: "LEGS comes back on its own. FOOD and FLUID only come back off the road.",
     b: "LEGS is your effort. Spend it and it comes back on its own. FOOD and FLUID do not. Food burns all race and only food picked up off the road refills it. You sweat fluid out, faster when you are boxed in among other riders, and only bottles bring it back. Run either one dry and your legs stop returning." },
-  { t: "Pedal", demo: "pedal", setup: tutClear,
+  { t: "Pedal", demo: "pedal", setup: r => { tutClear(r); tutStraight(r); },
+    s: "Tap the two pads at the bottom. Left, right, left, right. Faster is harder.",
     b: "Your legs are the two pads at the bottom. Swap sides every stroke: left, right, left, right. Either side can start. The faster you alternate cleanly the harder you ride, up to about four a second. The pads themselves turn from red to green as your rhythm gets there. Tapping the same side twice is a missed pedal.",
     p: "Turn the pads green and hold it", need: 120, timed: 1, get: () => tutCadence },
   { t: "Steer", demo: "steer",
-    setup: r => { tutClear(r); const y = r.you; y.x = 0; y.tx = 0; y.txS = 0; y.vx = 0; },
+    // A STRAIGHT, FLAT, EMPTY ROAD. Learning to steer while the road bends, drops away or
+    // funnels into a median means fighting three things at once and understanding none of
+    // them. Everything except the one lesson is removed.
+    setup: r => { tutClear(r); tutStraight(r); const y = r.you; y.x = 0; y.tx = 0; y.txS = 0; y.vx = 0; },
+    s: () => (Tilt.on && Tilt.ok)
+      ? "Tilt the phone left and right."
+      : "Hold the left or right half of the screen.",
     b: () => (Tilt.on && Tilt.ok)
       ? "TILT the phone to steer: lean it right to go right, left to go left. Holding a side of the screen still works too, so use whichever suits the moment. Ride to the right edge first, then all the way back to the left."
       : "Hold anywhere on the RIGHT half of the screen to move right, the LEFT half to move left. Let go and you hold your line. Ride to the right edge first, then all the way back to the left.",
     p: "Right edge first, then the left", need: 2, get: () => tutLeft + tutRight },
   { t: "Get on a wheel", demo: "draft",
-    setup: r => { const o = tutWheel(r, 6); o.x = r.you.x + 2.4; },
+    setup: r => { tutStraight(r); const o = tutWheel(r, 6); o.x = r.you.x + 2.4; },
     hold: r => {
       const o = r.riders[1];
       o.speed = r.you.speed * 1.002; o.eff = "tempo";
       // they keep changing sides, so you have to track them rather than park once
       o.x = Math.tanh(Math.sin(performance.now() / 1000 * 0.85) * 1.6) * 1.5;
     },
+    s: "Sit in the circle behind him. The wind stops. You can take your hands off.",
     b: "Behind every rider is a cone of shelter. Sit anywhere inside it, from just off their wheel to several bike lengths back, and the wind stops fighting you. Get it right and you do not need to pedal at all. Steer into the circle, take your hands off the pads, and stay with him as he moves across the road.",
     p: "In the circle, hands off, 3 seconds", need: 180, timed: 1, get: () => Math.round(tutDraft) },
   { t: "__coreEnd", demo: "coreEnd", info: 1, setup: tutClear, b: "" },
-  { t: "Wind from the side", demo: "wind",
+  { t: "In the crosswind", demo: "wind",
     b: "Out in the wind your legs drain; in the shelter they come back. But when the wind blows across the road the shelter moves with it. It is no longer straight behind the rider ahead, it sits off to one side. Watch the cone lean, and follow it across.",
     setup: r => {
       const o = tutWheel(r, 6);
@@ -5345,6 +5622,25 @@ const TUTORIAL = [
     },
     b: "Food and fluid never come back on their own. They sit on the road through the feed zones: gels and bars for fuel, bottles for fluid. Steer over them to take them. Miss them and you will run empty long before the finish.",
     p: "Collect three", need: 3, get: () => tutFed },
+  { t: "The musette", demo: "musette",
+    s: "In the feed zone a soigneur holds out a bag. Take it as you pass.",
+    b: "A musette is a cloth bag of food handed up in the feed zone. There is a marked hand-up on the road: hit the button as you cross it and you take the bag, which fills your pockets and feeds you steadily for the next minute or so. Because you eat it gradually it never overloads your stomach the way swallowing gels does. Miss it and you simply get nothing, so it costs you only the chance.",
+    setup: r => {
+      tutStraight(r);
+      tutCalm(r);
+      tutNoPrimes(r);
+      r.course.items = []; r.course.litters = [];
+      r.course.rounds = []; r.course.narrows = []; r.course.hazards = [];
+      for (const o of r.riders) if (!o.you) o.dist = r.you.dist - 500;
+      // Three feed zones in a row, so a miss is not the end of the lesson.
+      r.course.feeds = [];
+      for (let k = 0; k < 3; k++) {
+        const s0 = r.you.dist + 90 + k * 260;
+        r.course.feeds.push({ s: s0, e: s0 + 120, hand: s0 + 50, handE: s0 + 76, side: 1 });
+      }
+      r.you.fuel = 30;
+    },
+    p: "Take a musette", need: 1, get: () => tutMus },
   { t: "Your gut", demo: "gut",
     setup: r => {
       tutClear(r);
@@ -5373,20 +5669,32 @@ const TUTORIAL = [
       tutWheel(r, 0);
       const o = r.riders[1];
       o.dist = r.you.dist; o.x = r.you.x + 1.35;         // level with you, so you see who wins
-      r.course.primes = [
-        { d: r.you.dist + 60, kind: "sprint", pts: [5, 3, 2, 1], crossed: [] },
-        { d: r.you.dist + 190, kind: "sprint", pts: [5, 3, 2, 1], crossed: [] },
-        { d: r.you.dist + 9000, kind: "finish", pts: [12], crossed: [] }
-      ];
+      // A LINE EVERY 10 m, over and over. Two lines 130 m apart meant a long freewheel
+      // between attempts, and the whole point of practising a throw is repetition.
+      // LINE AFTER LINE, 80 m APART. 10 m was far too close — the throw button never had room
+      // to disappear and come back, so a miss left you inside a cluster with nothing to aim
+      // at. 80 m is one clean approach each: button gone, button back, throw.
+      tutStraight(r);
+      const ps = [];
+      for (let k = 1; k <= 40; k++)
+        ps.push({ d: r.you.dist + 90 + k * 80, kind: "sprint", pts: [5, 3, 2, 1], crossed: [] });
+      ps.push({ d: r.you.dist + 90000, kind: "finish", pts: [12], crossed: [] });
+      r.course.primes = ps;
     },
     hold: r => {
+      // GLUED ALONGSIDE. Matching speed alone was not enough: sprinting or drifting across
+      // shook him off, and the lesson is "who takes the line", which needs someone there to
+      // take it from. His DISTANCE is pinned to yours, not merely his speed.
       const o = r.riders[1];
       o.speed = r.you.speed; o.eff = "tempo";
-      o.x = r.you.x + 1.35;                              // stays alongside
+      o.dist = r.you.dist; o.prev = r.you.prev;
+      const side = r.you.x > 1.6 ? -1 : 1;               // swap sides if you crowd the edge
+      o.x = r.you.x + side * 1.35;
     },
     b: "At a sprint line, a summit, or the finish, a THROW button appears above the pads. Hit it about two metres out and you shove the bike most of a length forward, which wins close finishes. Too early and you are freewheeling before the line. The button fills as the moment arrives and turns green when the timing is right. There is a rider alongside you and two lines coming up: throw well and you take them.",
-    p: "Throw at both lines", need: 2, get: () => tutThrew },
+    p: "Throw at three lines", need: 3, get: () => tutThrew },
   { t: "Leaning", demo: "lean",
+    s: "Lean to steer HARDER. It nearly doubles how fast you can cross the road.",
     setup: r => {
       tutClear(r);
       const y = r.you; y.x = 0; y.tx = 0; y.txS = 0; y.vx = 0;
@@ -5403,9 +5711,11 @@ const TUTORIAL = [
   { t: "The jump", demo: "jump",
     setup: r => tutWheel(r, 5),
     hold: r => { const o = r.riders[1]; o.speed = r.you.speed * 0.999; o.eff = "tempo"; },
-    b: "Three quick strokes in under a second, swapping sides each time, fires a jump: a burst of hard acceleration. Either side can start it. It spends the charge you build while sitting quietly on a wheel, so save it for when it counts.",
-    p: "Three quick strokes", need: 3, get: () => tutJumps }
+    s: "Three quick PEDAL strokes, alternating left-right-left, fires a jump.",
+    b: "Three quick PEDAL strokes on the pads in under a second, alternating left, right, left, fires a jump: a burst of hard acceleration. It is the same pedalling you already do, just three fast clean strokes in a row. Either side can start it. It spends the charge you build while sitting quietly on a wheel, so save it for when it counts.",
+    p: "Three quick pedal strokes: left, right, left", need: 3, get: () => tutJumps }
 ];
+let tutMus = 0;
 let tutDraft = 0, tutRest = 0, tutJumps = 0, tutWind = 0, tutLeft = 0, tutRight = 0, tutCadence = 0, tutFed = 0, tutGut = 0,
   tutThrew = 0, tutLean = 0, tutWaiting = false;
 function armCard(ms) {                         // buttons dead briefly on appearing
@@ -5423,6 +5733,8 @@ function showTutCard() {
     $("tutCard").classList.remove("hide");
     $("tutPrompt").classList.add("hide");
     $("tutQuit").classList.add("hide");
+    $("tutNext").classList.add("hide");
+  $("tutNext").classList.add("hide");
     $("tcGo").textContent = "Race now";
     $("tcMore").classList.remove("hide");
     $("tcRules").classList.remove("hide");   // penalties have no step of their own; this is the one
@@ -5432,12 +5744,23 @@ function showTutCard() {
   }
   $("tcMore").classList.add("hide");
   $("tcRules").classList.add("hide");
+  // SHORT BY DEFAULT. Kevin watched his parents play and they did not read the tutorial at
+  // all, then were lost the moment it said "let me try". A wall of text is not a tutorial
+  // for anyone who will not read it, so the core steps now carry a ONE-LINE version and the
+  // full explanation is opt-in. The doing is what teaches; the words are a caption.
+  const detail = !!ladder.tutDetail;
   const coreN = TUTORIAL.findIndex(x => x.demo === "coreEnd");
   $("tcStep").textContent = tut.i < coreN
     ? "Step " + (tut.i + 1) + " of " + coreN
     : "More · " + (tut.i - coreN) + " of " + (TUTORIAL.length - coreN - 1);
   $("tcTitle").textContent = st.t;
-  $("tcBody").textContent = typeof st.b === "function" ? st.b() : st.b;
+  const short = typeof st.s === "function" ? st.s() : st.s;
+  const full = typeof st.b === "function" ? st.b() : st.b;
+  $("tcBody").textContent = (!detail && short) ? short : full;
+  // The long version is one tap away, on the step itself, for anyone who wants it.
+  const more = $("tcLong");
+  more.classList.toggle("hide", detail || !short);
+  more.onclick = () => { $("tcBody").textContent = full; more.classList.add("hide"); };
   $("tcGo").textContent = st.info ? "Continue" : "Let me try";
   $("tcSkip").classList.remove("hide");
   armCard(750);
@@ -5464,6 +5787,8 @@ function tutAdvance() {                      // read-only cards hand straight ov
   showTutCard();                             // no hide first, so the road never flashes
 }
 function endTutorial() {
+  // Straight to the race you were trying to start. Dropping you back on the menu after a
+  // tutorial you entered from "Start tour" makes you find your way back to where you were.
   const goRace = tutFrom === "start";
   tut = null; race = null; tour = null; phase = "menu"; tutFinished = false;
   ladder.savedTour = null;
@@ -5471,10 +5796,13 @@ function endTutorial() {
   $("tutCard").classList.add("hide");
   $("tutPrompt").classList.add("hide");
   $("tutQuit").classList.add("hide");
+  $("tutNext").classList.add("hide");
   $("pauseBtn").classList.add("hide");
   $("tcGo").textContent = "Let me try";
-  // they asked to race, so take them racing rather than back to the menu
-  if (goRace) { newTour(); showBriefing(); return; }
+  // They tapped START TOUR and got the tutorial, so finish them where Start tour goes:
+  // the race picker, then the build screen with the tour profile on it. This used to call
+  // newTour() with no length, which silently bypassed the picker and drew a 3-day race.
+  if (goRace) { refreshMenu(); renderPick(); show("pick"); return; }
   refreshMenu(); showProfile(null); show("menu");
 }
 function startTutorial(from) {
@@ -5501,14 +5829,107 @@ function startTutStep() {
   $("tpCount").style.display = "";
   $("tutPrompt").classList.remove("hide");
   $("tutQuit").classList.remove("hide");
+  $("tutNext").classList.remove("hide");
 }
 // Highlight the actual control the lesson is about, over the live game, so nobody
 // has to map a diagram onto the real thing.
+// ★ A HAND THAT SHOWS YOU. Kevin watched his parents skip the words entirely and then be
+// lost at "let me try" — so the lesson has to DEMONSTRATE, not just describe and highlight.
+// A ghost thumbprint performs the actual gesture, in time, on the actual control, for as
+// long as the step is running. Read it, see it, do it: the seeing was the missing third.
+function ghostTap(x, y, press, r) {
+  const rr = r || 26;
+  ctx.save();
+  // the expanding ring is the "tap" landing
+  if (press > 0.02) {
+    const g = 1 - press;
+    ctx.strokeStyle = "rgba(204,0,102," + (0.45 * press).toFixed(3) + ")";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, rr * (1 + 0.9 * g), 0, 7); ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(204,0,102," + (0.14 + 0.26 * press).toFixed(3) + ")";
+  ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill();
+  ctx.strokeStyle = "rgba(204,0,102,.75)"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.stroke();
+  ctx.restore();
+}
+function drawTutDemo(st, b, t) {
+  if (st.demo === "pedal") {
+    // Slower than race pace ON PURPOSE. At 3.2/s the two prints looked like one flicker and
+    // read as "mash both", which is exactly the missed-pedal mistake. At 1.6/s you can see
+    // it is LEFT, then RIGHT, then LEFT — the alternation is the lesson, not the speed.
+    const rate = 1.6, ph = (t * rate) % 2;
+    const onLeft = ph < 1, press = 1 - Math.abs((ph % 1) - 0.15) / 0.85;
+    const cy = b.y + b.h / 2;
+    ghostTap(b.easeX + b.w / 2, cy, onLeft ? Math.max(0, press) : 0, 30);
+    ghostTap(b.atkX + b.w / 2, cy, onLeft ? 0 : Math.max(0, press), 30);
+    // Name the side as it lands, so the alternation is stated as well as shown.
+    label(onLeft ? "LEFT" : "RIGHT", onLeft ? b.easeX + b.w / 2 : b.atkX + b.w / 2,
+      cy - 46, 11, 700, "rgba(204,0,102,.85)", "center", 1.5);
+    return;
+  }
+  if (st.demo === "steer") {
+    // A thumb that PRESSES AND HOLDS on the side you must hold, with an arrow showing which
+    // way the bike then goes. A drifting print looked like "swipe", which is not the input.
+    const goRight = !tutRight;
+    const cy = (topBar + 8 + b.y - 30) / 2;
+    const x = goRight ? W * 0.75 : W * 0.25;
+    ghostTap(x, cy, 0.75, 34);
+    label("HOLD", x, cy - 50, 11, 700, "rgba(204,0,102,.85)", "center", 1.5);
+    ctx.save();                                   // the arrow: hold here, go that way
+    const dir = goRight ? 1 : -1, ax = x + dir * 54, ay = cy;
+    ctx.strokeStyle = "rgba(204,0,102,.75)"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x + dir * 40, ay); ctx.lineTo(ax + dir * 22, ay); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ax + dir * 22, ay); ctx.lineTo(ax + dir * 10, ay - 9);
+    ctx.moveTo(ax + dir * 22, ay); ctx.lineTo(ax + dir * 10, ay + 9);
+    ctx.stroke(); ctx.restore();
+    return;
+  }
+  if (st.demo === "wind") {
+    // The crosswind lesson is "follow the shelter ACROSS the road", so it needs the steering
+    // hand, not the hands-off one. It was showing the draft demo, which taught the opposite.
+    const cy = (topBar + 8 + b.y - 30) / 2;
+    const sweep = 0.5 + 0.5 * Math.sin(t * 1.1);
+    ghostTap(W * (0.30 + 0.40 * sweep), cy, 0.55 + 0.45 * Math.sin(t * 3), 30);
+    return;
+  }
+  if (st.demo === "draft") {
+    // Hands OFF is the lesson here, so the hand lifts away from the pads and fades.
+    const ph = (t * 0.6) % 1;
+    const cy = b.y + b.h / 2 - ph * 70;
+    ctx.save(); ctx.globalAlpha = 1 - ph;
+    ghostTap(b.atkX + b.w / 2, cy, 0.2, 26);
+    ctx.restore();
+    return;
+  }
+  if (st.demo === "jump") {
+    // ON THE PADS, ALTERNATING. Kevin: "three quick taps for jump is a little confusing."
+    // It is not a screen tap at all — it is three of the pedal strokes you already know,
+    // just fast and clean in a row, so the demo has to happen on the pads and swap sides.
+    const cy = b.y + b.h / 2, cyc = 2.2, ph = (t % cyc) / cyc;
+    const on = ph < 0.62 ? Math.floor(ph / 0.207) : -1;      // three strokes, then a pause
+    const press = on >= 0 ? 1 - ((ph / 0.207) % 1) : 0;
+    if (on >= 0) {
+      const left = on % 2 === 0;
+      ghostTap(left ? b.easeX + b.w / 2 : b.atkX + b.w / 2, cy, press, 30);
+      label(left ? "LEFT" : "RIGHT", left ? b.easeX + b.w / 2 : b.atkX + b.w / 2,
+        cy - 46, 11, 700, "rgba(204,0,102,.85)", "center", 1.5);
+    }
+    label("\u00d73 FAST", W / 2, cy - 78, 10.5, 700, "rgba(204,0,102,.7)", "center", 1.4);
+    return;
+  }
+  if (st.demo === "musette" || st.demo === "throwIt") {
+    const ph = (t * 1.6) % 1;
+    ghostTap(W / 2, b.thY + b.thH / 2, ph < 0.35 ? 1 - ph / 0.35 : 0, 28);
+  }
+}
 function drawTutHint() {
   if (!tut || !race) return;
   const st = TUTORIAL[tut.i]; if (!st) return;
   if (!tutWaiting && !st.info) return;       // info cards highlight while you read
   const b = btnR(), t = performance.now() / 1000;
+  if (tutWaiting) drawTutDemo(st, b, t);
   const pulse = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3.4));
   const ring = (x, y, w, h, a) => {
     ctx.save(); ctx.strokeStyle = "rgba(204,0,102," + a + ")";
@@ -5615,6 +6036,7 @@ function tutTick(dt) {
   }
   if (st.demo === "lean" && you.hardTurn) tutLean += dt * 60;
   if (st.demo === "throwIt" && you.threw) tutThrew = 1;
+  if (st.demo === "musette" && you.musette > 0) tutMus = 1;
   if (st.demo === "feed") {
     tutFed = race.course.items.filter(it => it.taken.has(you)).length;
   }
@@ -5646,6 +6068,8 @@ function tutTick(dt) {
     setTimeout(() => {
       $("tutPrompt").classList.add("hide");
       $("tutQuit").classList.add("hide");
+    $("tutNext").classList.add("hide");
+  $("tutNext").classList.add("hide");
       $("tpText").style.background = "";
     }, 1800);
     setTimeout(() => {
@@ -5680,7 +6104,7 @@ function setPaused(v) {
   ];
   if (v) {
     const pick = REASONS[Math.floor(Math.random() * REASONS.length)];
-    $("pTitle").textContent = tut ? "Stage paused" : pick[0];
+    $("pTitle").textContent = tut ? "Nature break" : pick[0];
     $("pBody").textContent = tut ? "The lesson is on hold." : pick[1];
     $("pFoot").textContent = t > 1
       ? "Leaving now loses this stage. Your division and prize money are untouched."
@@ -5760,7 +6184,7 @@ function frame(now) {
       const best = ghost.mine || ghost.mark;
       if (best) ghost.dist = race.course.len * clamp(ghost.t / best, 0, 1);
     }
-    drawRoad(); drawItems(); drawGhost(); drawRiders(); drawHud(dt);
+    drawRoad(); drawItems(); drawGhost(); drawMoto(); drawRiders(); drawWheelChange(); drawHud(dt);
     drawPacer(dt);
     if (phase === "count") drawCountdown();
     drawTutHint();
@@ -5772,7 +6196,7 @@ function frame(now) {
 // ---------------------------------------------------------------- screens
 const $ = id => document.getElementById(id);
 const show = id => {
-  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest"])
+  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest", "gloss"])
     $(s).classList.toggle("hide", s !== id);
   $("drillDone").classList.add("hide");       // never leaves it stranded over a screen
 };
@@ -5824,6 +6248,17 @@ function drawMiniProfile(canvas, course) {
     g.fillText(M.alt(hiA), x, Math.max(9, y - 5));
     g.textAlign = "left";
   }
+  // The sign at the foot of the climb, exactly as a road book shows it.
+  for (const cl of (course.climbs || [])) {
+    const cat = Sim.climbCat(course, cl);
+    if (!cat) continue;
+    const x = w * (cl.e / course.len), y = py(cl.e);
+    g.fillStyle = cat === "HC" ? "rgba(204,0,102,.85)" : "rgba(46,49,47,.55)";
+    g.font = '700 8px "Space Grotesk", system-ui, sans-serif';
+    g.textAlign = "center";
+    g.fillText(cat, Math.max(8, Math.min(w - 8, x)), Math.max(8, y - 4));
+    g.textAlign = "left";
+  }
   for (const f of course.feeds) {
     g.fillStyle = "rgba(230,159,0,.4)";
     g.fillRect(w * (f.s / course.len), h - 12, w * ((f.e - f.s) / course.len), 5);
@@ -5845,7 +6280,7 @@ function stageLabel(i) {
 function specAt(i) { return STAGES[tour.schedule[i]]; }
 function finishPractice(order, you) {
   $("pauseBtn").classList.add("hide");
-  $("rEyebrow").textContent = "Practice · Division " + tour.practice.div;
+  $("rEyebrow").textContent = "Training · Division " + tour.practice.div;
   $("rVerdict").textContent = you.out ? "You crashed out"
     : you.place === 1 ? "You win" : you.place + "th of " + order.length;
   $("rJerseys").innerHTML = ""; $("rEarn").innerHTML = "";
@@ -5903,6 +6338,7 @@ function showBriefing() {
         playerType, kit: ladder.kit, gc: {}, leaders: {}, div: tour.daily.div })
     : Sim.createRace({ seed: tour.seed + tour.stage * 1013, stageIndex: tour.schedule[tour.stage],
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
+        out: tour.out || [],
         route: stageRoute(tour.stage),
         fatigue: tour.fatigue, playerStats: Sim.buildStats(committedBuild || Sim.neutralBuild()) });
   const c = preview.course;
@@ -5911,19 +6347,38 @@ function showBriefing() {
   for (let m = 6; m < c.len; m += 6) { const e = Sim.elevAt(c, m); if (e > prevE) up += e - prevE; prevE = e; }
   const dims = M.long(c.len) + " · " + M.climb(up);
   $("bEyebrow").textContent = tour.practice
-    ? "Practice · Division " + tour.practice.div + " · " + spec.sub + " · " + dims
+    ? "Training · Division " + tour.practice.div + " · " + spec.sub + " · " + dims
     : tour.daily
     ? "Daily challenge #" + tour.daily.n + " · " + spec.sub + " · " + dims
     : "Division " + ladder.div + " · " + stageLabel() + " · " + spec.sub + " · " + dims;
   $("bTitle").textContent = spec.type === "flat" ? "One for the sprinters"
     : spec.type === "hills" ? "A day for the brave" : "The mountains decide it";
   const notes = [];
+  // ★ THE CLIMBS OF THE DAY, RATED. Races put a sign at the foot of every classified climb,
+  // and "two cat 1s and an HC" tells a cycling fan more about a stage than any amount of
+  // prose. Listed hardest first, because that is the one that decides the day.
+  const rated = (c.climbs || [])
+    .map(cl => ({ cl, cat: Sim.climbCat(c, cl) }))
+    .filter(x => x.cat)
+    .sort((a, b) => (["HC", "1", "2", "3", "4"].indexOf(a.cat)) - (["HC", "1", "2", "3", "4"].indexOf(b.cat)));
+  if (rated.length) {
+    const counts = {};
+    for (const r of rated) counts[r.cat] = (counts[r.cat] || 0) + 1;
+    const parts = [];
+    for (const k of ["HC", "1", "2", "3", "4"]) {
+      if (!counts[k]) continue;
+      const nm = k === "HC" ? "hors categorie" : "category " + k;
+      parts.push(counts[k] > 1 ? counts[k] + " " + nm + "s" : (k === "HC" ? "an " : "a ") + nm);
+    }
+    notes.push("Classified climbs: " + parts.join(", ") + ".");
+  }
   // NAME THE ROAD. A pack you bought should announce itself before you ride it, and the
   // figures come from the catalogue rather than being measured off the terrain, so they
   // read as the climb's real, exact numbers.
   const rt = c.spec && c.spec.route ? Sim.ROUTES.filter(x => x.id === c.spec.route)[0] : null;
-  if (rt) notes.push(rt.name + ", " + M.long(rt.km * 1000 / Sim.CFG.scaleM) + " at "
-    + rt.grade.toFixed(1) + "%, topping out at " + M.alt(rt.top) + ". " + rt.note);
+  if (rt) notes.push(rt.name + " \u00b7 " + Sim.climbCat(c, rcl) + " \u00b7 "
+    + M.long(rt.km * 1000 / Sim.CFG.scaleM) + " at " + rt.grade.toFixed(1) + "%, "
+    + Sim.routeGain(c) + " m of climbing, topping out at " + M.alt(rt.top) + ". " + rt.note);
   const ns = c.primes.filter(p => p.kind === "sprint").length;
   const nk = c.primes.filter(p => p.kind === "kom").length;
   notes.push(ns + " sprint line" + (ns === 1 ? "" : "s") + ", " + nk + " summit" + (nk === 1 ? "" : "s")
@@ -6024,6 +6479,10 @@ function finishStage() {
   if (e.sprint) parts.push(["Sprint primes", e.sprint]);
   if (e.kom) parts.push(["Summit primes", e.kom]);
   if (e.stage) parts.push([(oneDay ? "Race" : "Stage") + " placing", e.stage]);
+  // Someone goes home. Rolled at the END of a stage so this screen can report it, and so
+  // the rider is simply absent from tomorrow rather than vanishing mid-race.
+  const quit = lastStage ? null : attrition();
+  if (quit) parts.push([quit + " abandons", null]);
   if (lastStage) {
     const tp = Math.round((Sim.CFG.purse.tour[gcPlace - 1] || 0) * race.payScale);
     if (tp) parts.push([oneDay ? "Overall" : "Tour overall", tp]);
@@ -6036,7 +6495,9 @@ function finishStage() {
   for (const [nm, v] of parts.concat([["Prize money total", Math.max(0, ladder.money + earned - fines)]])) {
     const row = document.createElement("div");
     const a = document.createElement("span"); a.textContent = nm;
-    const b2 = document.createElement("span"); b2.textContent = v;
+    // A null value means the row is a NOTE, not money — "PICO abandons" should not carry a
+    // stray 0 beside it.
+    const b2 = document.createElement("span"); b2.textContent = v === null ? "" : v;
     row.appendChild(a); row.appendChild(b2); eb.appendChild(row);
   }
   ladder.money = Math.max(0, ladder.money + earned - fines);
@@ -6265,6 +6726,101 @@ $("rulesBtn").addEventListener("click", () => {
   }
   show("rules");
 });
+// A GLOSSARY, in our own words. The game deliberately uses real cycling language — musette,
+// peloton, lanterne rouge, hors categorie — and language you cannot look up is a wall for a
+// newcomer. Grouped by what a player is DOING when they meet the word, not alphabetically.
+const GLOSSARY = [
+  ["The race", [
+    ["Peloton", "The main bunch. Also called the pack or the field."],
+    ["Breakaway", "A rider or small group that has escaped the bunch and is riding clear."],
+    ["Stage race", "A race run over several days. The winner is whoever has the lowest total time."],
+    ["Grand tour", "One of the three-week races. Long, brutal, and the ones everyone remembers."],
+    ["General classification (GC)", "The overall standings on total time. The rider on top wears yellow."],
+    ["Queen stage", "The hardest day of a race, almost always in the high mountains."],
+    ["Neutral zone", "The rolled-out start behind the lead car, before the flag drops and racing begins."],
+    ["Time cut", "Finish too far behind the winner and you are out of the race entirely."],
+    ["Lanterne rouge", "The rider in last place overall. French for red lantern, after the light on the back of a train."],
+    ["Abandon", "To quit a race before the end."]
+  ]],
+  ["Riding in a bunch", [
+    ["Draft, slipstream", "The pocket of still air behind another rider. Sitting in it saves you a great deal of effort."],
+    ["Sitting in", "Riding in the shelter without doing any work at the front."],
+    ["Wheelsucker", "A rider who sits in and never takes a turn. Not a compliment."],
+    ["Paceline", "A line of riders taking turns at the front so everyone shares the wind."],
+    ["Through and off", "The rotation itself: come to the front, do your turn, pull aside, drop back."],
+    ["Pull, take a turn", "To ride at the front, in the wind, for everyone behind you."],
+    ["Swing off", "To pull aside when your turn at the front is done."],
+    ["Echelon", "In a crosswind, riders fan out diagonally because the shelter sits off to one side, not behind."],
+    ["Off the back", "Dropped. Unable to hold the pace of the group."],
+    ["Bridge", "To cross the gap from one group up to another."],
+    ["Autobus, grupetto", "The group of dropped riders at the back of a mountain stage, working together to beat the time cut."]
+  ]],
+  ["Efforts", [
+    ["Attack", "A sudden hard acceleration to get away from other riders."],
+    ["Jump", "A short, sharp burst of acceleration."],
+    ["Tempo", "A steady hard pace. Below all-out, above easy."],
+    ["Soft-pedal", "To turn the pedals without really pushing."],
+    ["Cadence", "How fast you are pedalling."],
+    ["Blow up", "To go too deep and suddenly be unable to hold the pace at all."],
+    ["Bonk", "To run out of fuel. Caused by not eating enough, and it ends your day."],
+    ["Full tuck", "The lowest, most aerodynamic position, used on fast descents."]
+  ]],
+  ["Sprinting and finishing", [
+    ["Bunch sprint", "The mass dash for the line when the race is still together."],
+    ["Lead-out", "A teammate riding flat out to deliver a sprinter into position before peeling off."],
+    ["Throw the bike", "Shoving the bike forward at the line to win by centimetres."],
+    ["Hold your line", "Sprinting straight. Swerving into a rider beside you is an offence."],
+    ["Relegated", "Demoted in the results as a punishment, usually for an irregular sprint."],
+    ["Flamme rouge", "The red flag marking one kilometre to go."],
+    ["Prime", "A prize awarded partway through a race rather than at the finish. Said preem."],
+    ["Intermediate sprint", "A sprint line mid-stage awarding points toward the green jersey."]
+  ]],
+  ["Climbing and descending", [
+    ["King of the Mountains", "The climbing competition. Its leader wears the polka dot jersey."],
+    ["Hors categorie", "Beyond category. A climb too hard to be rated on the normal scale."],
+    ["Summit finish", "A stage that ends at the top of a climb, where the gaps are usually biggest."],
+    ["Switchback, hairpin", "A very tight turn where a road doubles back on itself to climb or drop."],
+    ["Apex", "The tightest point of a corner, and the shortest way through it."],
+    ["False flat", "A road that looks flat but is quietly climbing, which is why you feel slow."],
+    ["Wall", "A climb steep enough to look vertical from the bottom."]
+  ]],
+  ["Food, kit and trouble", [
+    ["Feed zone", "The stretch of road where riders are handed food and drink."],
+    ["Musette", "The cloth shoulder bag of food handed up in the feed zone. You grab it at speed and empty it into your pockets."],
+    ["Soigneur", "The team staff member who hands up the musette, and looks after riders generally."],
+    ["Bidon", "A water bottle."],
+    ["Sticky bottle", "Holding a bottle from the team car a little too long so it tows you. Everybody knows. It is a penalty."],
+    ["Team car", "The car following the race with your director, mechanic and spares."],
+    ["Bunny hop", "Lifting both wheels off the ground to clear something like a pothole or a kerb."],
+    ["Mechanical", "Any problem with the bike."],
+    ["Puncture, flat", "A punctured tire."],
+    ["Road furniture", "The medians, islands and barriers built into roads. Dangerous in a bunch."]
+  ]],
+  ["Riders", [
+    ["Sprinter", "A rider built for a short, explosive dash to the line."],
+    ["Climber", "A rider built for going uphill fast. Usually light."],
+    ["Rouleur", "A strong all-rounder who can hold a hard pace for hours."],
+    ["Puncheur", "A specialist on short, steep climbs and punchy finishes."],
+    ["Domestique", "A rider who works for a teammate rather than for their own result."],
+    ["Kit", "Your jersey and shorts."]
+  ]]
+];
+function renderGlossary() {
+  const box = $("glossList"); box.innerHTML = "";
+  for (const pair of GLOSSARY) {
+    const h = document.createElement("div");
+    h.className = "secthead"; h.style.marginTop = "16px"; h.textContent = pair[0];
+    box.appendChild(h);
+    for (const row of pair[1]) {
+      const d = document.createElement("div"); d.className = "rule";
+      const b = document.createElement("b"); b.textContent = row[0];
+      const s = document.createElement("span"); s.textContent = row[1];
+      d.appendChild(b); d.appendChild(s); box.appendChild(d);
+    }
+  }
+}
+$("glossBtn").addEventListener("click", () => { renderGlossary(); show("gloss"); });
+$("glossBack").addEventListener("click", () => show("settings"));
 $("rulesBack").addEventListener("click", () => {
   if (rulesFrom === "tutorial") {            // straight back into the tutorial card, mid-race
     rulesFrom = "settings";
@@ -6323,6 +6879,17 @@ $("bBackBtn").addEventListener("click", () => {
 });
 $("tcSkip").addEventListener("click", endTutorial);
 $("tutQuit").addEventListener("click", endTutorial);
+$("tutNext").addEventListener("click", () => {
+  // Move past a step without completing it. The lesson is over the moment you understand
+  // it, and forcing a demonstration of that understanding is how a tutorial loses people.
+  tutWaiting = false;
+  $("tutPrompt").classList.add("hide");
+  $("tutQuit").classList.add("hide");
+  $("tutNext").classList.add("hide");
+  $("tutNext").classList.add("hide");
+  // tutAdvance() increments on its own, so incrementing here too skipped TWO steps.
+  tutAdvance();
+});
 $("tcMore").addEventListener("click", () => { tut.i++; showTutCard(); });
 $("tcGo").addEventListener("click", () => {
   if (tutFinished) { endTutorial(); return; }
@@ -7126,7 +7693,7 @@ function renderData() {
     const e = document.createElement("div"); e.className = "empty";
     e.innerHTML =
       '<div class="ic"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="13"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="9"/><line x1="21" y1="20" x2="3" y2="20"/></svg></div>'
-      + '<h3>No races on record yet</h3>'
+      + '<h3>Nothing in your palmarès yet</h3>'
       + '<p>Ride a stage and every race is logged here: where you sat in the wind, the speed you gave away in corners, when you ran low, and the winner\u2019s numbers next to yours.</p>'
       + '<div class="cats"><span>Where you ride</span><span>Speed given away</span><span>Running low</span><span>Misfortune</span></div>';
     box.appendChild(e);
