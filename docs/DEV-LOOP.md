@@ -5,9 +5,11 @@ the single thing that would be lost by porting to Swift early.
 
 ## Architecture (load-bearing)
 
-- ONE file: `slipstream.html`, with an IDENTICAL copy at `index.html` for GitHub Pages.
-  **Shipping means copying to BOTH, then re-verifying the golden against the shipped file,
-  not the working copy.**
+- ONE file: `index.html`, which is also the GitHub Pages entry point. **Shipping means
+  committing it, then re-extracting and re-verifying the golden against the committed
+  file, not an edited working copy.** (There used to be a twin `slipstream.html`; the
+  repo has retired it. If any old note says "copy to both files", this is the one file
+  it means now.)
 - `const Sim = (function () {...})();` at the top: pure, deterministic, ZERO DOM
   references. The view is a second IIFE below it.
 - Determinism is load-bearing: seeded mulberry32 plus a fixed 1/120s timestep. The golden
@@ -18,18 +20,19 @@ the single thing that would be lost by porting to Swift early.
 
 ## The loop
 
-1. Copy the shipped file to a scratch copy. Always start from what shipped.
+1. Start from what shipped: a clean checkout of `index.html`. Git is the scratch copy —
+   `git diff` shows the change, `git checkout -- index.html` gets you back.
 2. Extract the sim: find the first line starting `const Sim = (function`, then the first
    line after it whose trimmed content is `})();`. Write that slice plus
-   `module.exports = Sim;`. **Re-extract after every sim edit.**
-3. `node slipstream-verify.js` — 1590 checks against the golden.
-4. `node slipstream-golden-gen.js` — regenerate after ANY sim change (physics, parts,
+   `module.exports = Sim;` to `tools/sim.js`. **Re-extract after every sim edit.**
+3. `node tools/verify.js` — 1590 checks against the golden.
+4. `node tools/golden-gen.js` — regenerate after ANY sim change (physics, parts,
    rivals, course). Update its `G.note` to say what changed. Takes several minutes, so
    give it a generous timeout.
-5. `node slipstream-dominance.js` — parts balance. Goal: 0 dominant, 0 dead. It is
+5. `node tools/dominance.js` — parts balance. Goal: 0 dominant, 0 dead. It is
    body-aware, because parts are only a ~35% tune on top of a rider's body.
-6. `python3 slipstream-loadcheck.py` — headless page-error check.
-7. Ship to both files, re-extract from the SHIPPED file, verify again.
+6. `python3 tools/loadcheck.py` — headless page-error check.
+7. Ship: commit `index.html`, re-extract from the COMMITTED file, verify again.
 
 ## Sanity sweep — run BEFORE blessing a regenerated golden
 
