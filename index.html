@@ -290,7 +290,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 1</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 2</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -1618,7 +1618,7 @@ function makeRider(cfg, i, isYou, typeKey, R, extra) {
     stats: Object.assign({}, BASE_STATS, isYou ? a.stats : devStats(a.stats, cfg.D), extra || {}),
     dist: -(i * 2.2) - (isYou ? 4 : 0), prev: 0,
     x: clamp(((i % 5) - 2) * 1.5 + (Math.floor(i / 5) ? 0.7 : 0), -3.4, 3.4),
-    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0, musette: 0, swingOff: 0, swingT: 0,
+    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0, musette: 0, swingOff: 0, swingT: 0, passBy: 0,
     energy: 100, fuel: 100, fluid: 100,
     cracked: false, bonk: false, dry: false, absorb: 0, jump: 1, burst: 0, effV: undefined, launch: false, launched: false, prevEff: "tempo", bump: 0,
     eff: "tempo", q: 0, wheel: null, inPeloton: true, stumble: 0, spin: 0,
@@ -2113,7 +2113,11 @@ function updateGroups(race, dt) {
           // four-to-six seconds a real drop-back takes. The time cap is the "just
           // latch on" instinct: if the slot keeps receding (the wheel you are chasing
           // is itself drifting), stop hunting the perfect gap and tuck in where you are.
-          if (wasRotating && r.swingT < 4 && rear && r.dist > rear.dist - 0.9) r.swingOff = 1;
+          // The margin must put the rider CLEAR OF CONTACT RANGE (HIT_LON) before the
+          // swing releases and they steer back to the file: at 0.9 they cut in half a
+          // bike behind the last wheel, mid-merge, and ran into it — in the drill, into
+          // the player. 1.6 plus the release decay's drift starts the merge ~2.5+ back.
+          if (wasRotating && r.swingT < 4 && rear && r.dist > rear.dist - 1.6) r.swingOff = 1;
           // ABOUT A METRE OUT, not to the verge. Swinging to the road edge parked riders in
           // the gutter and broke the group up; a real rotation is a narrow circle you could
           // cover with two bike widths.
@@ -2122,7 +2126,23 @@ function updateGroups(race, dt) {
           r.grab = null;
         }
       } else if (!r.you && rot.indexOf(r) >= 0) {
-        r.tx = -race.swingSide * 0.45;                        // the sheltered file
+        // ★★ NOBODY WAITS FOREVER BEHIND A SOFT-PEDALLING FRONT. If the player finishes
+        // a turn and slows without moving aside, the riders behind were walled in by the
+        // no-riding-through-a-wheel rule and the whole train stalled at the player's
+        // pace, forever. Real riders come around within seconds; now so do these, on the
+        // player's roomier side. Steering aside is still the clean, taught exit — being
+        // passed like this just costs the tidy rotation, not the whole break.
+        const stalled = front && front.you && front.turnT > CFG.turnLen + 1.2
+          && r.dist > front.dist - 8 && r.dist <= front.dist;
+        if (stalled) {
+          const lane = edgeAt(race.course, r.dist) - 0.2;
+          const side = front.x > 0 ? -1 : 1;
+          r.tx = clamp(front.x + side * 1.6, -lane, lane);
+          // The lane change alone is not a pass: an easing follower matches the slow
+          // wheel's pace even alongside it. This flag floors their target just above
+          // the stalled front's speed (a target nudge, the layer that ripples nowhere).
+          r.passBy = 0.6;
+        } else r.tx = -race.swingSide * 0.45;                 // the sheltered file
       }
     }
     race.lastBreakFront = front;
@@ -2584,6 +2604,7 @@ function stepRider(race, r, dt) {
     }
   }
   r.bump = Math.max(0, r.bump - dt);
+  if (r.passBy > 0) r.passBy = Math.max(0, r.passBy - dt);
   if (!r.you) {
     r.atkCool = Math.max(0, r.atkCool - dt);
     if (r.attackFor > 0) r.attackFor = Math.max(0, r.attackFor - dt);
@@ -2665,6 +2686,9 @@ function stepRider(race, r, dt) {
     if (!r.you && bf && bf !== r && race.rotating)
       tgt = Math.max(Math.min(tgt, bf.speed * (1 - CFG.swingCut * r.swingOff)), tgt * 0.88);
   }
+  // Coming around a front who finished their turn and slowed without moving aside:
+  // ride just above their pace so the pass actually happens.
+  if (r.passBy > 0 && race.breakFront) tgt = Math.max(tgt, race.breakFront.speed + 1.2);
   if (r.carTow > 0) tgt += CFG.base * 0.26 * r.carTow;
   const down0 = Math.max(0, -g);
   if (down0 > 0.012) {
@@ -7600,9 +7624,12 @@ const DRILLS = [
       mates.forEach((o, i) => {
         const want = y.dist + (o.dist > y.dist ? 2.2 + i * 2.2 : -(2.2 + i * 2.2));
         if (Math.abs(o.dist - want) > 9) { o.dist = want; o.prev = want; }
-        // A swinging rider needs room to actually drift back past you; the tight clamp
-        // was pinning them alongside so they could never reach the back of the train.
-        o.speed = clamp(o.speed, y.speed * (o.swingOff > 0 ? 0.90 : 0.94), y.speed * 1.06);
+        // A swinging rider needs room to actually drift back past you, and a rider
+        // coming through needs room to actually pass — the tight clamp pinned both to
+        // your pace, which is why easing off the front left you stuck there: nobody
+        // was ALLOWED to be faster than you. The ±9 snap still keeps the drill glued.
+        o.speed = clamp(o.speed, y.speed * (o.swingOff > 0 ? 0.90 : 0.94),
+                        y.speed * (o.passBy > 0 ? 1.25 : 1.06));
       });
       for (const o of r.riders.filter(o => !o.you).slice(2)) {
         if (o.dist > y.dist - 140) { o.dist = y.dist - 200; o.prev = o.dist; o.speed = y.speed * 0.9; }

@@ -41,6 +41,9 @@ G.note = 'Slipstream golden master. Regenerated ' + new Date().toISOString().sli
   + 'now swings off and holds the swing until clear of the back of the train, rejoining on the '
   + 'last wheel instead of barging back mid-file (working rotations on flat road only, never '
   + 'around an attack), a stuck-swing decay bug is fixed, and the patience thresholds (grace, '
-  + 'elbow flick, sit-up) scale with the size of the rotation. Dominance: 0 dominant, 0 dead.';
+  + 'elbow flick, sit-up) scale with the size of the rotation. Also: a swing-off clears full '
+  + 'contact range before rejoining (no more riding into the last wheel), and riders come '
+  + 'around a player who finishes a turn and slows without moving aside (passBy), so easing '
+  + 'on the front can never stall the whole train. Dominance: 0 dominant, 0 dead.';
 fs.writeFileSync(GOLDEN_PATH, JSON.stringify(G, null, 0));
 console.log('regenerated', G.cases.length, 'cases,', G.schedules.length, 'schedules');
