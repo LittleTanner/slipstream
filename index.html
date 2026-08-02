@@ -456,11 +456,16 @@ const CFG = {
   brakeFull: 1.5,                     // seconds of holding the pads to reach full braking
   carDraft: 13,                       // metres behind the pace car that its slipstream reaches
   carRecover: 4.2,                    // how much faster legs come back while you are in the car's hole
+  musetteReach: 1.5,                  // how far off the hand-up line you may be (1.5 rider widths)
   musetteHand: 26,                    // metres of hand-up line at Div 8...
   musetteHandMin: 9,                  // ...shrinking to this at Div 1
   musetteFill: 78,                    // food the bag holds, released to you slowly
   musetteRate: 1.55,                  // food per second it feeds you (about a minute to empty)
-  turnLen: 4.0,                       // seconds a rider spends on the front before swinging off
+  turnLen: 2.5,                       // seconds on the front before swinging off — SHORT, so the
+                                      // group is constantly rotating rather than taking long digs
+  turnCall: 4,                        // ...and you are asked to come through this soon after your turn
+  swingLen: 2.2,                      // how long the swing-off lasts
+  swingCut: 0.09,                     // how much of their pace a swinging rider gives up
   turnGrace: 14,                      // how long after your turn you still count as working
   suckWarn: 22,                       // seconds glued on before they flick an elbow at you
   suckGiveUp: 34,                     // ...and how long before the group stops working for you
@@ -703,7 +708,7 @@ const PARTS = {
     { id: "carbon", name: "Carbon", note: "Feathery and stiff uphill, punishing when it turns rough",extreme: true, unlockDiv: 7,  d: { climbCost: -0.066, resilience: -0.025 } }
   ],
   wheels: [
-    { id: "box",  name: "Box section", note: "Light and sure-footed, but no shelter from the wind", d: { handling: +0.15, descend: +0.14, windTax: +0.015 } },
+    { id: "box",  name: "Box section", note: "Light and sure-footed, but no shelter from the wind", d: { handling: +0.16, descend: +0.14, windTax: 0 } },
     { id: "mid",  name: "Mid depth",   neutral: true, note: "A bit of everything, nothing to fear", d: { windTax: -0.03 } },
     { id: "disc", name: "Deep / disc", note: "Slippery in a straight line, a handful when it blows across",extreme: true, unlockDiv: 6,  d: { windTax: -0.13, draft: +0.07, handling: -0.13, descend: -0.05 } }
   ],
@@ -1609,7 +1614,7 @@ function makeRider(cfg, i, isYou, typeKey, R, extra) {
     stats: Object.assign({}, BASE_STATS, isYou ? a.stats : devStats(a.stats, cfg.D), extra || {}),
     dist: -(i * 2.2) - (isYou ? 4 : 0), prev: 0,
     x: clamp(((i % 5) - 2) * 1.5 + (Math.floor(i / 5) ? 0.7 : 0), -3.4, 3.4),
-    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0, musette: 0,
+    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0, musette: 0, swingOff: 0,
     energy: 100, fuel: 100, fluid: 100,
     cracked: false, bonk: false, dry: false, absorb: 0, jump: 1, burst: 0, effV: undefined, launch: false, launched: false, prevEff: "tempo", bump: 0,
     eff: "tempo", q: 0, wheel: null, inPeloton: true, stumble: 0, spin: 0,
@@ -2028,6 +2033,8 @@ function updateGroups(race, dt) {
   // offence. The consequence is simply that the shelter evaporates and everyone gets caught.
   const rot = brk.length >= 2 ? brk.slice() : null;
   race.rotating = false;
+  // Which way this group rotates. Fixed for the race so it is learnable rather than random.
+  if (race.swingSide === undefined) race.swingSide = (race.seed & 1) ? 1 : -1;
   if (rot) {
     let front = null;
     for (const r of rot) if (!front || r.dist > front.dist) front = r;
@@ -2041,15 +2048,54 @@ function updateGroups(race, dt) {
       // A rider who has come through recently is part of the train.
       r.inTrain = r.sinceTurn < CFG.turnGrace;
       if (r.inTrain) working++;
-      // The AI simply rides its turn and swings off; only the player can freeload.
-      // Swing off only in a break big enough to have a rotation at all, and only from a
-      // steady effort — overriding an attacking rider rewrote break racing wholesale and
-      // knocked three parts out of contention.
-      // Deliberately NO effort override on the AI: making front riders swing off changed break
-      // racing enough to knock three parts out of contention. The rotation is now expressed
-      // through RECOVERY and the sit-up consequence only, which leaves the balance alone.
+      // ★★ THE AI ACTUALLY SWINGS OFF NOW, and this is the fix that made the whole mechanic
+      // real. Before, nothing rotated: the front rider stayed on the front forever, so the
+      // player could never come through and "through and off" existed only as a recovery
+      // bonus nobody could see. My first attempt flipped `r.eff = "ease"`, which rewrote
+      // break racing wholesale and knocked THREE PARTS DEAD in dominance. This does it with
+      // a SPEED NUDGE instead — a short, decaying cut to their target — which slows them
+      // enough to drift back without touching effort, energy drain, or any AI decision.
+      // ★★ A REAL CIRCLE, NOT JUST A SLOWDOWN. The swing-off only cut SPEED, so riders
+      // shuffled forward and back in a single file and there was no visible rotation to
+      // read or slot into. A rotation is LATERAL: pull, steer aside, drift back on the
+      // outside, tuck in at the rear. `swingSide` is the same for everyone in the group,
+      // exactly as a real paceline rotates one way.
+      if (!r.you && onFront && r.turnT > CFG.turnLen) r.swingOff = 1;
+      if (r.swingOff > 0) {
+        r.swingOff = Math.max(0, r.swingOff - dt / CFG.swingLen);
+        if (!r.you) {
+          // ABOUT A METRE OUT, not to the verge. Swinging to the road edge parked riders in
+          // the gutter and broke the group up; a real rotation is a narrow circle you could
+          // cover with two bike widths.
+          const lane = Math.min(1.15, edgeAt(race.course, r.dist) - 0.9);
+          r.tx = race.swingSide * lane;
+          r.grab = null;
+        }
+      } else if (!r.you && rot.indexOf(r) >= 0) {
+        r.tx = -race.swingSide * 0.45;                        // the sheltered file
+      }
     }
     race.rotating = working >= 2;
+    // ★★ TELL THE PLAYER WHAT TO DO AND WHEN. Kevin: "I'm not sure when I'm supposed to pull
+    // and when or how to drop off." The rotation was entirely unsignposted — the only prompt
+    // was the wheel-suck telling-off at 22 seconds, which is a punishment, not an
+    // instruction. Two cues now bracket a turn: one asking you to come through, one telling
+    // you when you have done enough and HOW to get out of it.
+    const you2 = race.you;
+    if (rot.indexOf(you2) >= 0) {
+      const onFrontYou = front === you2;
+      if (onFrontYou && you2.turnT > CFG.turnLen && !race.turnDone) {
+        race.turnDone = true;
+        race.events.push({ t: "GOOD TURN \u00b7 EASE AND MOVE ASIDE", c: "green" });
+      }
+      if (!onFrontYou) {
+        race.turnDone = false;
+        if (you2.sinceTurn > CFG.turnCall && !race.turnCalled) {
+          race.turnCalled = true;
+          race.events.push({ t: "YOUR TURN \u00b7 COME THROUGH", c: "you" });
+        }
+      } else race.turnCalled = false;
+    }
     // Sitting on: warned once, then the group stops working.
     const you = race.you;
     if (rot.indexOf(you) >= 0) {
@@ -2170,6 +2216,15 @@ function aiThink(race, r, dt) {
   // the peloton only works when it has something to be afraid of.
   // sharper divisions notice sooner.
   const ai = race.D.ai;
+  // ★ GO WITH THE PLAYER. Nothing made a rival jump on YOUR wheel when you attacked — they
+  // raided on their own schedule and otherwise only chased a break that was already big, so
+  // getting company was pure coincidence. Now a rider near the front, with legs, and sharp
+  // enough to read it, follows a genuine dig. Sharper divisions react more often and sooner,
+  // so at Division 8 you often go alone and at Division 1 you rarely do.
+  const yr = race.you;
+  if (r.inPeloton && !yr.inPeloton && yr.eff === "attack" && yr.dist > r.dist
+    && yr.dist - r.dist < 26 && r.energy > 40 && togo > 260
+    && r.sharp > 0.30 + 0.45 * (1 - ai)) want = "attack";
   if (r.inPeloton && race.chase > 0.35 - 0.16 * ai && r.energy > 45 && race.breakGap > 20) want = "attack";
   if (r.inPeloton && race.chase < 0.12 && want === "attack" && togo > 320 && p.k !== "raid" && g < 0.25) want = "tempo";
 
@@ -2523,6 +2578,7 @@ function stepRider(race, r, dt) {
   // The car's slipstream is a REAL tow, not just shelter. A wheel's draft is worth about 6%
   // of your speed, which is nowhere near enough to launch anything; sitting in the hole a
   // car punches slings you properly, and that is the whole point of the trick.
+  if (r.swingOff > 0) tgt *= 1 - CFG.swingCut * r.swingOff;   // pulling aside after a turn
   if (r.carTow > 0) tgt += CFG.base * 0.26 * r.carTow;
   const down0 = Math.max(0, -g);
   if (down0 > 0.012) {
@@ -3814,7 +3870,17 @@ function musetteZone() {
 function musetteQuality(f) {
   const d = race.you.dist;
   if (d >= f.hand && d <= f.handE) return 1;
-  return clamp(1 - (f.hand - d) / 40, 0, 1);
+  return clamp(1 - (f.hand - d) / 40, 0, 1);       // a steady rise over the last 40 m
+}
+// ★ YOU MUST BE ON THE LINE, not merely near it. The grab used to succeed anywhere the
+// button showed, which made the hand-up decorative — the whole point is riding to the
+// soigneur. Also requires being on their SIDE of the road, which is what the line marks.
+function musetteOnLine(f) {
+  const you = race.you;
+  if (you.dist < f.hand || you.dist > f.handE) return false;
+  const ea = Sim.edgeAt(race.course, you.dist);
+  const lane = (f.side || 1) * (ea - 0.75);
+  return Math.abs(you.x - lane) <= Sim.CFG.musetteReach;
 }
 function btnR() {
   const h = Math.max(56, Math.min(74, H * 0.088));
@@ -3933,7 +3999,7 @@ function readInput(dt) {
     btn.musetteHit = false;
     const f = musetteZone();
     if (f) {
-      const q = musetteQuality(f);
+      const q = musetteOnLine(f) ? 1 : 0;
       race.you.musetteTook = f.s;
       if (q > 0.25) {
         race.you.musette = Sim.CFG.musetteFill * (0.55 + 0.45 * q);
@@ -4456,10 +4522,16 @@ function drawRoad() {
     if (f.hand !== undefined && f.handE > dBot && f.hand < dTop) {
       // THE HAND-UP LINE, marked on the road like a bottle drop so it is a place, not a rule.
       ctx.save();
-      ctx.fillStyle = "rgba(0,158,115,.30)";
+      // A THIN LINE on the soigneur's side, not a band across the road — you ride TO a
+      // person standing at the verge, you do not cross a zone.
       const ya = sy(Math.min(f.handE, dTop)), yb = sy(Math.max(f.hand, dBot));
-      const ea = Sim.edgeAt(c, f.hand) * pxM;
-      ctx.fillRect(W / 2 - ea, ya, ea * 2, Math.max(2, yb - ya));
+      const ea = Sim.edgeAt(c, f.hand);
+      const sd = (f.side || 1);
+      const x0 = sx(f.hand, sd * (ea - 0.75)), x1 = sx(f.handE, sd * (ea - 0.75));
+      ctx.strokeStyle = "rgba(0,158,115,.55)";
+      ctx.lineWidth = Math.max(3, pxM * (Sim.CFG.musetteReach * 0.5));   // 1.5 rider widths
+      ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x0, yb); ctx.lineTo(x1, ya); ctx.stroke();
       ctx.restore();
     }
     if (f.e < dBot || f.s > dTop) continue;
@@ -5302,11 +5374,15 @@ function drawHud(dt) {
     const near = clamp(1 - Math.abs(d - Sim.CFG.hopGap) / 1.3, 0, 1);
     const time = clamp(1 - Math.abs(hopT.lead - Sim.CFG.hopLead) / 4.5, 0, 1);
     const offQ = clamp(1 - Math.max(0, d - 1.3) / 2.4, 0, 1);
-    const fill = hopT.dir === "off" ? offQ
+    // Same treatment: a steady rise over the approach, and green wherever the hop scores.
+    const raw = hopT.dir === "off" ? offQ
       : hopT.headOn ? time
       : hopT.lead > 0.2 ? clamp(near * 0.3 + time * 0.7, 0, 1)
       : clamp(near * 0.85 + 0.15, 0, 1);
-    const col = fill > 0.72 ? PAL.green : fill > 0.42 ? PAL.fuel : PAL.spot;
+    const lead = hopT.lead === undefined ? 0 : hopT.lead, hp = Sim.CFG.hopLead;
+    const fill = hopT.dir === "off" ? raw
+      : lead > hp ? clamp(1 - (lead - hp) / 12, 0, 1) : clamp(1 - (hp - lead) / 4.5, 0, 1);
+    const col = raw > 0.42 ? PAL.green : fill > 0.5 ? PAL.fuel : PAL.spot;
     ctx.save();
     ctx.fillStyle = "rgba(46,49,47,.06)";
     roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.fill();
@@ -5327,9 +5403,15 @@ function drawHud(dt) {
     // THE SAME FILLING GAUGE AS THE HOP. A button that only changed colour meant reading the
     // shade and guessing when it would turn green; a level that RISES toward the moment shows
     // the timing arriving, so you can meet it instead of reacting to it.
-    const away = tl.d - you.dist;
-    const ready = clamp(1 - Math.abs(away - Sim.CFG.throwPeak) / 4.2, 0, 1);
-    const col = ready > 0.72 ? PAL.green : ready > 0.42 ? PAL.fuel : PAL.spot;
+    // ★ A STEADY RISE AND A GREEN WINDOW YOU CAN AIM AT. This was a symmetric tent, so the
+    // bar crawled up, spiked, and flashed green for a moment — green occupied only the top
+    // 28% of it. Now it fills LINEARLY over the last 14 m of the approach, which is
+    // predictable, and turns green across the whole band where a throw actually scores.
+    const away = tl.d - you.dist, pk = Sim.CFG.throwPeak, win = 4.2;
+    const ready = away > pk ? clamp(1 - (away - pk) / 14, 0, 1)
+      : clamp(1 - (pk - away) / win, 0, 1);
+    const good = Math.abs(away - pk) <= win * 0.62;
+    const col = good ? PAL.green : ready > 0.5 ? PAL.fuel : PAL.spot;
     ctx.save();
     ctx.fillStyle = "rgba(46,49,47,.06)";
     roundRect(b.thX, b.thY, b.thW, b.thH, 14); ctx.fill();
@@ -5381,7 +5463,7 @@ function drawHud(dt) {
 // Speed is sold by the CAMERA and nothing else. Verge streaks and an edge vignette were
 // tried and cut: the streaks read as a rendering fault and the vignette was decoration on
 // top of a game whose whole look is flat and clean.
-let camFast = 0;
+let camFast = 0, motoT = 0, carUp = 0;
 // ★ THE GHOST. A translucent marker riding the road at a reference pace, labelled so there
 // is no mystery about what it is — Kevin's call, and the right one: an unexplained rider on
 // the road would read as a bug. Practice only, no collision, no draft, no effect on anything.
@@ -5406,12 +5488,19 @@ function drawGhost() {
 // picture of it. The car pulls alongside while you are stopped and a mechanic is out — it
 // occupies time you are ALREADY losing and adds none, because a puncture is punishment
 // enough without a cutscene on top.
-function drawWheelChange() {
-  if (!race || !race.you || race.you.flat <= 0) return;
-  const you = race.you, y = sy(you.dist);
-  if (y < -60 || y > H + 60) return;
+function drawWheelChange(dt) {
+  if (!race || !race.you || race.you.flat <= 0) { carUp = 0; return; }
+  const you = race.you;
+  // ★ IT DRIVES UP FROM BEHIND. Appearing beside you fully formed reads as a glitch; a car
+  // that comes up the road is the thing you actually see when you puncture. It closes over
+  // about a second and a half and then sits alongside for the change.
+  carUp = Math.min(1, carUp + dt / 1.5);
+  const ease = 1 - (1 - carUp) * (1 - carUp);
+  const back = 26 * (1 - ease);                    // starts 26 m down the road
+  const y = sy(you.dist - 1.2 - back);
+  if (y < -60 || y > H + 90) return;
   const side = you.x > 0 ? -1 : 1;
-  const cx = sx(you.dist - 1.2, you.x + side * 2.1);
+  const cx = sx(you.dist - 1.2 - back, you.x + side * 2.1);
   const w = riderR * 2.0, h = riderR * 3.2;
   ctx.save();
   ctx.fillStyle = "rgba(46,49,47,.16)";
@@ -5420,47 +5509,68 @@ function drawWheelChange() {
   roundRect(cx - w / 2, y - h / 2, w, h, 5); ctx.fill();
   ctx.fillStyle = "rgba(244,242,236,.9)";
   roundRect(cx - w * 0.34, y - h * 0.16, w * 0.68, h * 0.3, 2); ctx.fill();
-  const mx = sx(you.dist - 0.4, you.x + side * 0.95);       // the mechanic at your wheel
-  ctx.fillStyle = "rgba(46,49,47,.75)";
-  ctx.beginPath(); ctx.arc(mx, y + riderR * 0.2, riderR * 0.42, 0, 7); ctx.fill();
   ctx.restore();
-  label("WHEEL CHANGE", cx, y - h * 0.62, 8.5, 700, PAL.you, "center", 1.2);
+  // The mechanic only gets out once the car has actually arrived.
+  if (ease > 0.92) {
+    const mx = sx(you.dist - 0.4, you.x + side * 0.95);
+    ctx.save();
+    ctx.fillStyle = "rgba(46,49,47,.75)";
+    ctx.beginPath(); ctx.arc(mx, sy(you.dist - 0.4) + riderR * 0.2, riderR * 0.42, 0, 7); ctx.fill();
+    ctx.restore();
+    label("WHEEL CHANGE", cx, y - h * 0.62, 8.5, 700, PAL.you, "center", 1.2);
+  }
 }
-// ★ THE INFORMATION MOTO. When YOU are in the breakaway, a motorbike rides just ahead of
-// you with the gap chalked on its board — which is how a rider up the road actually learns
-// what they have. It only appears when you are IN the move, so it is a reward for being
-// there rather than scenery.
-// THE BOARD ALWAYS SHOWS THE TIME, radio or not (Kevin's call, and his reasoning is better
-// than mine: the RACE RADIO sells CONSTANT gap information, whereas the moto is a glance
-// you get a few times. Seeing it occasionally does not undercut owning it permanently.)
+// ★ THE INFORMATION MOTO. A motorbike carrying a commissaire and a board, riding just ahead
+// of a breakaway. It only appears once the move is REAL: you are in it, the gap is worth
+// something, and the bunch is out of sight behind — which is exactly when a rider stops
+// being able to judge the gap for themselves and needs telling.
 function drawMoto() {
   if (!race || race.over || race.neutral) return;
+  // A LESSON SHOWS ONLY WHAT THE LESSON IS ABOUT. A motorbike appearing in a drill about
+  // something else is exactly the feed-zone-in-the-draft-step mistake again.
+  if (tut || drill) return;
   const brk = race.breakaway || [];
-  if (brk.indexOf(race.you) < 0) return;          // only when you are up the road
-  if (race.breakGap < 6) return;
+  if (brk.indexOf(race.you) < 0) return;                    // only when YOU are up the road
   const you = race.you;
-  const d = you.dist + 11;
-  const y = sy(d);
+  // A gap worth reporting: seven seconds AND far enough back that the bunch is off screen.
+  const secs = race.breakGap / Math.max(4, race.pelotonPace || Sim.CFG.base);
+  const outOfSight = race.breakGap > (H / pxM) * 0.75;
+  if (secs < 7 || !outOfSight) { motoT = 0; return; }
+  // And only once the move has settled — a moto does not come up to a five-second dig.
+  motoT += 1 / 60;
+  if (motoT < 4) return;
+  const d = you.dist + 11, y = sy(d);
   if (y < -60 || y > H + 60) return;
   const x = sx(d, you.x + (you.x > 0 ? -1.9 : 1.9));
-  const w = riderR * 1.05, h = riderR * 2.0;
+  const r = riderR;
   ctx.save();
   ctx.fillStyle = "rgba(46,49,47,.14)";
-  roundRect(x - w / 2 + 2, y - h / 2 + 3, w, h, 4); ctx.fill();
-  ctx.fillStyle = "#3A3D3A";
-  roundRect(x - w / 2, y - h / 2, w, h, 4); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x + 2, y + r * 0.9, r * 0.7, r * 0.3, 0, 0, 7); ctx.fill();
+  // TWO WHEELS, a frame between them, and a rider on top — so it reads as a motorbike
+  // rather than the small dark box it was, which nobody could identify.
+  ctx.strokeStyle = "#2E312F"; ctx.lineWidth = Math.max(2, r * 0.16);
+  ctx.beginPath(); ctx.arc(x, y - r * 0.72, r * 0.30, 0, 7); ctx.stroke();   // front wheel
+  ctx.beginPath(); ctx.arc(x, y + r * 0.72, r * 0.30, 0, 7); ctx.stroke();   // rear wheel
+  ctx.beginPath(); ctx.moveTo(x, y - r * 0.72); ctx.lineTo(x, y + r * 0.72); ctx.stroke();
+  ctx.fillStyle = "#3A3D3A";                                                  // the rider
+  ctx.beginPath(); ctx.ellipse(x, y, r * 0.34, r * 0.52, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "rgba(46,49,47,.85)";
+  ctx.beginPath(); ctx.arc(x, y - r * 0.30, r * 0.22, 0, 7); ctx.fill();      // helmet
   ctx.restore();
-  // the board on the back of the moto, which is the real thing a breakaway reads
-  const t = Math.round(race.breakGap / Math.max(4, race.pelotonPace || Sim.CFG.base));
+  // the board, and what it is
+  const t = Math.round(secs);
   const s = t < 60 ? t + "s" : Math.floor(t / 60) + "m" + (t % 60 < 10 ? "0" : "") + (t % 60);
-  const bw = textW(s, 9.5, 700, 1.2) + 14;
+  const bw = textW(s, 10, 700, 1.2) + 16;
   ctx.save();
-  ctx.fillStyle = "rgba(244,242,236,.94)";
-  roundRect(x - bw / 2, y - h / 2 - 16, bw, 14, 3); ctx.fill();
-  ctx.strokeStyle = "rgba(46,49,47,.35)"; ctx.lineWidth = 1;
-  roundRect(x - bw / 2, y - h / 2 - 16, bw, 14, 3); ctx.stroke();
+  ctx.fillStyle = "rgba(244,242,236,.95)";
+  roundRect(x - bw / 2, y - r * 1.9, bw, 15, 3); ctx.fill();
+  ctx.strokeStyle = "rgba(46,49,47,.4)"; ctx.lineWidth = 1;
+  roundRect(x - bw / 2, y - r * 1.9, bw, 15, 3); ctx.stroke();
   ctx.restore();
-  label(s, x, y - h / 2 - 5.5, 9.5, 700, PAL.ink, "center", 1.2);
+  label(s, x, y - r * 1.9 + 11, 10, 700, PAL.ink, "center", 1.2);
+  // "YOUR LEAD" was vague — a moto board shows a GAP, and naming it that way also matches
+  // the language the rest of the game already uses for the same number.
+  label("TIME GAP", x, y - r * 2.35, 8, 700, "rgba(46,49,47,.6)", "center", 1.3);
 }
 function drawPacer(dt) {
   if (!race || !race.pacer || race.pacer.gone) return;
@@ -5715,9 +5825,9 @@ const TUTORIAL = [
     b: "Three quick PEDAL strokes on the pads in under a second, alternating left, right, left, fires a jump: a burst of hard acceleration. It is the same pedalling you already do, just three fast clean strokes in a row. Either side can start it. It spends the charge you build while sitting quietly on a wheel, so save it for when it counts.",
     p: "Three quick pedal strokes: left, right, left", need: 3, get: () => tutJumps }
 ];
-let tutMus = 0;
+let tutMus = 0, drillTurns = 0, drillWasFront = false;
 let tutDraft = 0, tutRest = 0, tutJumps = 0, tutWind = 0, tutLeft = 0, tutRight = 0, tutCadence = 0, tutFed = 0, tutGut = 0,
-  tutThrew = 0, tutLean = 0, tutWaiting = false;
+  tutThrew = 0, tutLean = 0, tutWaiting = false; drillTurns = 0; drillWasFront = false;
 function armCard(ms) {                         // buttons dead briefly on appearing
   $("tcGo").disabled = true; $("tcSkip").disabled = true;
   setTimeout(() => { $("tcGo").disabled = false; $("tcSkip").disabled = false; }, ms || 700);
@@ -6037,6 +6147,10 @@ function tutTick(dt) {
   if (st.demo === "lean" && you.hardTurn) tutLean += dt * 60;
   if (st.demo === "throwIt" && you.threw) tutThrew = 1;
   if (st.demo === "musette" && you.musette > 0) tutMus = 1;
+  // A "turn" is coming to the front and staying there long enough to be doing the work.
+  if (race.breakFront === you && (you.turnT || 0) > 1.6) {
+    if (!drillWasFront) { drillWasFront = true; drillTurns++; }
+  } else if (race.breakFront !== you) drillWasFront = false;
   if (st.demo === "feed") {
     tutFed = race.course.items.filter(it => it.taken.has(you)).length;
   }
@@ -6184,7 +6298,7 @@ function frame(now) {
       const best = ghost.mine || ghost.mark;
       if (best) ghost.dist = race.course.len * clamp(ghost.t / best, 0, 1);
     }
-    drawRoad(); drawItems(); drawGhost(); drawMoto(); drawRiders(); drawWheelChange(); drawHud(dt);
+    drawRoad(); drawItems(); drawGhost(); drawMoto(); drawRiders(); drawWheelChange(dt); drawHud(dt);
     drawPacer(dt);
     if (phase === "count") drawCountdown();
     drawTutHint();
@@ -7261,11 +7375,15 @@ const DRILLS = [
       const y = r.you, o = r.riders[1];
       // they surge and ease, so a gap is always opening in front of you
       o.eff = "tempo";
+      // ★ THEY SURGE AND THEN EASE. This was `1.05 + 0.10*sin`, i.e. ALWAYS between 1.05x and
+      // 1.15x your speed — so the rider was permanently faster and the gap only ever grew,
+      // which is exactly what Kevin hit. Centred on your pace instead, they open a gap, sit
+      // up, and let you close it: jump, settle in the shelter, rebuild, jump again.
       const t = y.dist * 0.011;
-      o.speed = y.speed * (1.05 + 0.10 * Math.sin(t));
+      o.speed = y.speed * (0.98 + 0.12 * Math.sin(t));
       o.x = y.x;
       if (o.dist < y.dist) { o.dist = y.dist + 9; o.speed = y.speed; }   // passed: reset ahead
-      if (o.dist - y.dist > 26) o.dist = y.dist + 26;                    // never out of reach
+      if (o.dist - y.dist > 18) o.dist = y.dist + 18;                    // never out of reach
     } },
   { id: "throw", name: "The bike throw", tip: "Timing the lunge for the line.", tips: ["A THROW button appears above the pads as you approach a line.", "Hit it about two metres out. The button FILLS as you close on the line and turns green when the timing is right.", "Too early and you are freewheeling before the line. There is a rider level with you: see who takes it."],
     stage: 3, setup: r => {
@@ -7360,6 +7478,49 @@ const DRILLS = [
       for (let i = 0; i < 24; i++)
         r.course.winds.push({ d: i * 140 - 200, dir: Math.sin(i * 0.9), str: 0.55 + 0.45 * Math.sin(i * 0.5) });
     } },
+  { id: "train", name: "Through and off", tip: "Sharing the wind in a breakaway.",
+    tips: ["You and two others are clear. A break only stays away if everybody shares the wind.",
+      "COME THROUGH: when you are told it is your turn, steer alongside the rider in front and pedal harder until you are past them.",
+      "SWING OFF: after about four seconds on the front you will be told you have done enough. Steer to one side and soft-pedal, and the others come by.",
+      "Sit on and never come through and they flick an elbow at you. Ignore that and they stop working, and the bunch swallows you."],
+    stage: 0, setup: r => {
+      // FOUR CLEAR OF THE BUNCH, which is the only place a rotation exists. The peloton is
+      // pushed well back so the break survives long enough to actually practise in.
+      tutCalm(r);
+      tutNoPrimes(r);
+      tutStraight(r);
+      r.course.items = []; r.course.feeds = []; r.course.litters = [];
+      const others = r.riders.filter(o => !o.you);
+      others.forEach((o, i) => {
+        if (i < 2) {
+          // TWO companions, not three. With three, the break and the bunch were both four
+          // riders and the group logic read the BREAK as the peloton — so the game did not
+          // think you were up the road at all.
+          o.dist = r.you.dist + (i + 1) * 2.4;            // strung out in front of you
+          o.x = clamp(r.you.x + (i % 2 ? 0.5 : -0.5), -2.5, 2.5);
+          o.speed = r.you.speed;
+          o.plan = { k: "raid", at: 0.05, kick: 400 };
+        } else {
+          o.dist = r.you.dist - 260;                       // the bunch, a long way back
+        }
+      });
+    },
+    hold: r => {
+      // The break is HELD TOGETHER and the bunch is held back, because a drill you can be
+      // dropped from in ten seconds teaches nothing. Companions ride away on their own
+      // otherwise — they are raiders — so their distance is pinned to a short line around
+      // you, leaving the ROTATION as the only thing that varies.
+      const y = r.you, mates = r.riders.filter(o => !o.you).slice(0, 2);
+      mates.forEach((o, i) => {
+        const want = y.dist + (o.dist > y.dist ? 2.2 + i * 2.2 : -(2.2 + i * 2.2));
+        if (Math.abs(o.dist - want) > 9) { o.dist = want; o.prev = want; }
+        o.speed = clamp(o.speed, y.speed * 0.94, y.speed * 1.06);
+      });
+      for (const o of r.riders.filter(o => !o.you).slice(2)) {
+        if (o.dist > y.dist - 140) { o.dist = y.dist - 200; o.prev = o.dist; o.speed = y.speed * 0.9; }
+      }
+    },
+  },
   { id: "sprint", name: "Holding your line", tip: "Sprinting without getting relegated.", tips: ["Approaching a line, the corridor you are held to is drawn on the road.", "You may change your line. You may not change it into a rider close enough to be affected.", "Do that while contesting the places and you lose the points, the money, and take a fine."],
     stage: 3, setup: r => {
       tutWheel(r, 0);
