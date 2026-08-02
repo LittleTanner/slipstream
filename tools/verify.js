@@ -36,4 +36,4 @@ for(const sc of G.schedules){
   eq(S.tourSchedule(sc.seed,sc.len), sc.stages, 'schedule '+sc.seed);
 }
 console.log(fails.length? 'FAIL ('+fails.length+' of '+checks+')' : 'PASS — all '+checks+' checks');
-if(fails.length) console.log(fails.slice(0,8).join('\n'));
+if(fails.length){ console.log(fails.slice(0,8).join('\n')); process.exitCode = 1; }

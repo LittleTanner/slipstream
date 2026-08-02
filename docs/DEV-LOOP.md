@@ -22,10 +22,13 @@ the single thing that would be lost by porting to Swift early.
 
 1. Start from what shipped: a clean checkout of `index.html`. Git is the scratch copy —
    `git diff` shows the change, `git checkout -- index.html` gets you back.
-2. Extract the sim: find the first line starting `const Sim = (function`, then the first
-   line after it whose trimmed content is `})();`. Write that slice plus
-   `module.exports = Sim;` to `tools/sim.js`. **Re-extract after every sim edit.**
-3. `node tools/verify.js` — 1590 checks against the golden.
+2. Extract the sim: `node tools/extract.js`. It finds the first line starting
+   `const Sim = (function`, then the first line after it whose trimmed content is
+   `})();`, and writes that slice plus `module.exports = Sim;` to `tools/sim.js`.
+   **Re-extract after every sim edit.**
+3. `node tools/verify.js` — 1590 checks against the golden. Exits nonzero on failure.
+   CI (`.github/workflows/verify.yml`) runs the same extract + verify on every PR and
+   push to main, so a broken golden cannot merge quietly.
 4. `node tools/golden-gen.js` — regenerate after ANY sim change (physics, parts,
    rivals, course). Update its `G.note` to say what changed. Takes several minutes, so
    give it a generous timeout.
