@@ -37,8 +37,10 @@ for (const sc of G.schedules) {
   sc.stages = S.tourSchedule(sc.seed, sc.len);
 }
 G.note = 'Slipstream golden master. Regenerated ' + new Date().toISOString().slice(0, 10)
-  + ' after ELEVATION: every course now sits at a real altitude (own PRNG, so course generation '
-  + 'is untouched), and THIN AIR above 1200m costs RECOVERY and WATER — never raw power, which '
-  + 'would only duplicate climbing ability. Bites on mountain stages only.';
+  + ' after ROTATION: pulls lengthened to 4s (2.5 stranded the swinging rider), a relieved front '
+  + 'now swings off and holds the swing until clear of the back of the train, rejoining on the '
+  + 'last wheel instead of barging back mid-file (working rotations on flat road only, never '
+  + 'around an attack), a stuck-swing decay bug is fixed, and the patience thresholds (grace, '
+  + 'elbow flick, sit-up) scale with the size of the rotation. Dominance: 0 dominant, 0 dead.';
 fs.writeFileSync(GOLDEN_PATH, JSON.stringify(G, null, 0));
 console.log('regenerated', G.cases.length, 'cases,', G.schedules.length, 'schedules');
