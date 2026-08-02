@@ -31,7 +31,6 @@ Run from the repo root, after extracting `tools/sim.js`:
 - `node tools/golden-gen.js` — regenerate the golden after a deliberate physics or
   tuning change. Update its `G.note`. Takes several minutes.
 - `node tools/dominance.js` — parts balance check. Goal: 0 dominant, 0 dead parts.
-  Run after anything touching AI behavior, effort, or drafting. Requires
-  `tools/parts.js`.
+  Run after anything touching AI behavior, effort, or drafting. Takes a few minutes.
 - `python3 tools/loadcheck.py` — headless page-error check of `index.html`
   (requires Playwright).
