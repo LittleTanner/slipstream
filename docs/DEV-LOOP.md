@@ -35,7 +35,9 @@ the single thing that would be lost by porting to Swift early.
 5. `node tools/dominance.js` — parts balance. Goal: 0 dominant, 0 dead. It is
    body-aware, because parts are only a ~35% tune on top of a rider's body.
 6. `python3 tools/loadcheck.py` — headless page-error check.
-7. Ship: commit `index.html`, re-extract from the COMMITTED file, verify again.
+7. Ship: commit `index.html`, re-extract from the COMMITTED file, verify again. Bump the
+   build number at the bottom of Settings (`verLine`) with every shipped change, so what
+   is deployed is checkable against what was pushed.
 
 ## Sanity sweep — run BEFORE blessing a regenerated golden
 
