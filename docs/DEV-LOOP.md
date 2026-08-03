@@ -126,6 +126,14 @@ branching and parts balance. A target-speed nudge ripples nowhere.
 - **Anything the physics or AI reacts to cannot live in the render loop.** The pace car's
   position was updated only by the renderer, so its slipstream could never fire headlessly
   and the AI had nothing to chase.
+- **A vehicle needs a life cycle, not a visibility test.** Both the moto and the team car
+  shipped as "draw a sprite while a condition holds", and both read as glitches: the moto
+  teleported across the road, and the team car vanished after the wheel change while a
+  second one appeared up the road. Cars and bikes now hold a phase (arrive, hold, leave)
+  and pin their side once. **Watch the phase, not the pixels:** a one-frame blip is
+  invisible to a screenshot, so `smoke.py` patches the phase onto `window` and asserts the
+  sequence — which is exactly how the tow hand-off bug was caught (the sim clears `towX`
+  and starts the tow in that order, so a `towX`-gated test drops out for a single frame).
 - **Adding a stage flag means adding it to the spec REBUILD in `buildStage`**, which
   rebuilds field by field rather than copying. `spec.tt` and `spec.route` were both
   silently dropped this way.

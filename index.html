@@ -311,7 +311,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 8</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 9</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -4217,6 +4217,7 @@ function startStage() {
   moto = { phase: 0, t: 0, side: 1, visits: 0, coolUntil: 0, ahead: 0, v: 0, eligT: 0 };
   musLane = { zone: -1, ok: false };
   chanceHold = false; wheelTap = null; $("chanceCard").classList.add("hide");
+  teamCar = { phase: 0, dOff: -26, x: 0, side: 1, alpha: 1, anchorX: 0 };
   paused = false; $("pauseCard").classList.add("hide");
   $("pauseBtn").classList.toggle("hide", dailyRun);
   if (tour && tour.daily) {                  // the attempt is spent the moment you roll out
@@ -5219,56 +5220,20 @@ function drawRiders() {
     }
     if (bh > 6) label(String(r.num), x, y + bh * 0.55, Math.min(bw * 0.78, bh * 1.6), 700,
       "rgba(255,255,255,.92)", "center", 0);
-    if (r.tow > 0 && r.towX !== undefined) {           // the team car, up the road
-      // Drawn where the CAR is, not where you are. Pinned to your own position it
-      // looked like you were driving it, and there was no wheel to hold.
+    // A RIVAL'S team car. Yours is drawn by drawTeamCar, which owns the whole
+    // arrive-change-pull-tow-leave life cycle rather than popping a car into the road.
+    if (!r.you && r.tow > 0 && r.towX !== undefined) {
       const cd = r.dist + Sim.CFG.towGap;
       const cx3 = sx(cd, r.towX), cy2 = sy(cd);
-      const cw = riderR * 1.9, ch = riderR * 3.2;
-      // its draft, so you can see where the shelter actually is
-      const off3 = Math.abs(r.x - r.towX);
-      const good = clamp(1 - off3 / Sim.CFG.towShelter, 0, 1);
+      const good = clamp(1 - Math.abs(r.x - r.towX) / Sim.CFG.towShelter, 0, 1);
+      const bx = r.dist - 1.5;
+      const lx3 = sx(bx, r.towX - Sim.CFG.towShelter), rx3 = sx(bx, r.towX + Sim.CFG.towShelter);
       ctx.save();
       ctx.fillStyle = draftColour(good, 0.10 + 0.32 * good);
-      ctx.beginPath();
-      ctx.moveTo(cx3, cy2);
-      ctx.lineTo(sx(r.dist - 1.5, r.towX - Sim.CFG.towShelter), sy(r.dist - 1.5));
-      ctx.lineTo(sx(r.dist - 1.5, r.towX + Sim.CFG.towShelter), sy(r.dist - 1.5));
+      ctx.beginPath(); ctx.moveTo(cx3, cy2); ctx.lineTo(lx3, sy(bx)); ctx.lineTo(rx3, sy(bx));
       ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = draftColour(good, 0.55); ctx.lineWidth = Math.max(1.5, pxM * 0.05);
-      ctx.beginPath();
-      ctx.moveTo(sx(r.dist - 1.5, r.towX - Sim.CFG.towShelter), sy(r.dist - 1.5));
-      ctx.lineTo(cx3, cy2);
-      ctx.lineTo(sx(r.dist - 1.5, r.towX + Sim.CFG.towShelter), sy(r.dist - 1.5));
-      ctx.stroke();
       ctx.restore();
-      const x = cx3;
-      ctx.save();
-      ctx.fillStyle = "rgba(46,49,47,.14)";              // shadow
-      roundRect(x - cw + riderR * 0.2, cy2 - ch / 2 + riderR * 0.3, cw * 2, ch, riderR * 0.5);
-      ctx.fill();
-      ctx.fillStyle = "#2E312F";                         // body
-      roundRect(x - cw, cy2 - ch / 2, cw * 2, ch, riderR * 0.5);
-      ctx.fill();
-      ctx.strokeStyle = PAL.water; ctx.lineWidth = Math.max(2.5, riderR * 0.16); ctx.stroke();
-      ctx.fillStyle = "rgba(244,242,236,.75)";           // windscreen
-      roundRect(x - cw * 0.62, cy2 - ch * 0.34, cw * 1.24, ch * 0.30, riderR * 0.22);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(244,242,236,.85)";         // bikes on the roof
-      ctx.lineWidth = Math.max(1.6, riderR * 0.10);
-      for (const k of [-0.35, 0, 0.35]) {
-        ctx.beginPath();
-        ctx.moveTo(x - cw * 0.8, cy2 + ch * k * 0.5);
-        ctx.lineTo(x + cw * 0.8, cy2 + ch * k * 0.5);
-        ctx.stroke();
-      }
-      ctx.fillStyle = PAL.spot;                          // lights
-      for (const k of [-1, 1]) {
-        ctx.beginPath();
-        ctx.ellipse(x + k * cw * 0.66, cy2 - ch * 0.44, riderR * 0.20, riderR * 0.14, 0, 0, 7);
-        ctx.fill();
-      }
-      ctx.restore();
+      drawCar(cx3, cy2, riderR * 2.0, riderR * 3.2, { body: "#2E312F", wheels: true, stripe: r.c });
     }
     if (r.hop > 0) {                                   // airborne: a shadow under you
       ctx.save();
@@ -5894,7 +5859,7 @@ function drawHud(dt) {
 // Speed is sold by the CAMERA and nothing else. Verge streaks and an edge vignette were
 // tried and cut: the streaks read as a rendering fault and the vignette was decoration on
 // top of a game whose whole look is flat and clean.
-let camFast = 0, carUp = 0;
+let camFast = 0;
 // The information moto is a VISIT, not a readout: phase 0 off, 1 riding down from up
 // the road, 2 holding ahead showing the board, 3 accelerating away out of sight.
 let moto = { phase: 0, t: 0, side: 1, visits: 0, coolUntil: 0, ahead: 0, v: 0, eligT: 0 };
@@ -5922,36 +5887,134 @@ function drawGhost() {
 // picture of it. The car pulls alongside while you are stopped and a mechanic is out — it
 // occupies time you are ALREADY losing and adds none, because a puncture is punishment
 // enough without a cutscene on top.
-function drawWheelChange(dt) {
-  if (!race || !race.you || race.you.flat <= 0) { carUp = 0; return; }
-  const you = race.you;
-  // ★ IT DRIVES UP FROM BEHIND. Appearing beside you fully formed reads as a glitch; a car
-  // that comes up the road is the thing you actually see when you puncture. It closes over
-  // about a second and a half and then sits alongside for the change.
-  carUp = Math.min(1, carUp + dt / 1.5);
-  const ease = 1 - (1 - carUp) * (1 - carUp);
-  const back = 26 * (1 - ease);                    // starts 26 m down the road
-  const y = sy(you.dist - 1.2 - back);
-  if (y < -60 || y > H + 90) return;
-  const side = you.x > 0 ? -1 : 1;
-  const cx = sx(you.dist - 1.2 - back, you.x + side * 2.1);
-  const w = riderR * 2.0, h = riderR * 3.2;
+// ★ ONE CAR, DRAWN IN ONE PLACE. The pace car, the team car, the tow car and the convoy
+// were four separate copies of "charcoal box, pale roof", and none of them quite read as
+// a vehicle. A car now has headlights at the nose, tail lights at the tail, a windscreen
+// band and wing mirrors, plus either a roof BOARD (race officials) or SPARE WHEELS (a
+// team or service car) — one shape, so they can never drift apart again.
+// Cars face UP the screen, because greater dist is further up the road: the pale lights
+// belong at the top edge and the red ones at the bottom. Still deliberately flat —
+// rectangles and two ellipses, no gradients, no bevels, nothing to model.
+function drawCar(cx, cy, w, h, o) {
+  o = o || {};
+  const body = o.body || "#3A3D3A";
+  const rr = Math.max(3, w * 0.24);
+  const lw = w * 0.22, lh = Math.max(1.4, h * 0.035);
   ctx.save();
-  ctx.fillStyle = "rgba(46,49,47,.16)";
-  roundRect(cx - w / 2 + 2, y - h / 2 + 3, w, h, 5); ctx.fill();
-  ctx.fillStyle = PAL.you;                                  // your own team's car, in your colour
-  roundRect(cx - w / 2, y - h / 2, w, h, 5); ctx.fill();
-  ctx.fillStyle = "rgba(244,242,236,.9)";
-  roundRect(cx - w * 0.34, y - h * 0.16, w * 0.68, h * 0.3, 2); ctx.fill();
+  if (o.alpha !== undefined) ctx.globalAlpha = clamp(o.alpha, 0, 1);
+  ctx.fillStyle = "rgba(46,49,47,.16)";                        // shadow
+  roundRect(cx - w / 2 + 2, cy - h / 2 + 3, w, h, rr); ctx.fill();
+  const mw = Math.max(1.6, w * 0.11), mh = Math.max(1.8, h * 0.045);
+  ctx.fillStyle = body;                                        // wing mirrors
+  roundRect(cx - w / 2 - mw * 0.75, cy - h * 0.27, mw, mh, 1); ctx.fill();
+  roundRect(cx + w / 2 - mw * 0.25, cy - h * 0.27, mw, mh, 1); ctx.fill();
+  ctx.fillStyle = body;                                        // body
+  roundRect(cx - w / 2, cy - h / 2, w, h, rr); ctx.fill();
+  if (o.stripe) {                                              // a livery band, if asked
+    ctx.fillStyle = o.stripe;
+    ctx.fillRect(cx - w / 2, cy - h * 0.31, w, Math.max(1.6, h * 0.045));
+  }
+  ctx.fillStyle = "rgba(246,231,176,.95)";                     // headlights
+  roundRect(cx - w * 0.36, cy - h * 0.46, lw, lh, 1); ctx.fill();
+  roundRect(cx + w * 0.36 - lw, cy - h * 0.46, lw, lh, 1); ctx.fill();
+  ctx.fillStyle = "rgba(35,39,42,.5)";                         // windscreen
+  roundRect(cx - w * 0.34, cy - h * 0.22, w * 0.68, h * 0.13, 2); ctx.fill();
+  ctx.fillStyle = o.roof || "rgba(244,242,236,.88)";           // roof
+  roundRect(cx - w * 0.34, cy - h * 0.05, w * 0.68, h * 0.28, 2); ctx.fill();
+  if (o.wheels) {                                              // spares: a team car
+    ctx.fillStyle = "rgba(35,39,42,.72)";
+    const wr = Math.max(1.5, w * 0.13);
+    for (const k of [-1, 1]) {
+      ctx.beginPath(); ctx.ellipse(cx + k * w * 0.15, cy + h * 0.09, wr, wr, 0, 0, 7); ctx.fill();
+    }
+  }
+  ctx.fillStyle = "rgba(140,31,20,.92)";                       // tail lights
+  roundRect(cx - w * 0.36, cy + h * 0.42, lw, lh, 1); ctx.fill();
+  roundRect(cx + w * 0.36 - lw, cy + h * 0.42, lw, lh, 1); ctx.fill();
   ctx.restore();
-  // The mechanic only gets out once the car has actually arrived.
-  if (ease > 0.92) {
-    const mx = sx(you.dist - 0.4, you.x + side * 0.95);
+}
+// ★ ONE CAR, ONE JOB, START TO FINISH. The car that came alongside for your wheel used to
+// VANISH the moment the change finished, and a different car appeared 5.5 m up the road to
+// pace you back. It is one vehicle now: it drives up from behind, sits alongside for the
+// change, pulls through in front of you, tows you back to the bunch, then drops away down
+// the convoy when its job is done. A car coming for a crash or a bottle (no wheel to
+// change) still arrives from BEHIND rather than materialising in front of you.
+// phase 0 absent · 1 arriving · 2 alongside · 3 pulling through · 4 towing · 5 peeling off
+let teamCar = { phase: 0, dOff: -26, x: 0, side: 1, alpha: 1, anchorX: 0 };
+function drawTeamCar(dt) {
+  if (!race || !race.you) { teamCar.phase = 0; return; }
+  const you = race.you, G = Sim.CFG.towGap;
+  const flat = you.flat > 0 && !you.out;
+  // The car is committed the moment the sim starts the tow, NOT once towX exists. On
+  // the frame the wheel change ends, stepRider clears towX and starts the tow in that
+  // order, so a towX-gated test went false for exactly one frame — long enough for the
+  // car to peel off and then restart its run-up from 22 m back. The browser phase log
+  // caught it as a 2 → 5 → 3 blip; hence tx below, which falls back for that frame.
+  const towing = you.tow > 0 && !you.out;
+  const tx = you.towX === undefined ? you.x : you.towX;
+  if (flat) {
+    if (teamCar.phase === 0 || teamCar.phase === 5) {
+      teamCar.phase = 1; teamCar.dOff = -26; teamCar.alpha = 1;
+      // Pinned ONCE. Read live, it dragged the car across the road every time you
+      // steered during the change — the moto's teleport bug, already paid for once.
+      teamCar.side = you.x > 0 ? -1 : 1;
+      teamCar.anchorX = clamp(you.x + teamCar.side * 2.1, -3.4, 3.4);
+      teamCar.x = teamCar.anchorX;
+    }
+  } else if (towing) {
+    if (teamCar.phase === 0 || teamCar.phase === 5) {
+      teamCar.phase = 3; teamCar.dOff = -22; teamCar.x = you.x; teamCar.alpha = 1;
+    } else if (teamCar.phase === 1 || teamCar.phase === 2) teamCar.phase = 3;
+  } else if (teamCar.phase && teamCar.phase !== 5) teamCar.phase = 5;
+  if (!teamCar.phase) return;
+  const ease = (cur, want, rate) => cur + (want - cur) * Math.min(1, dt * rate);
+  if (teamCar.phase === 1) {
+    teamCar.dOff = ease(teamCar.dOff, -1.2, 2.4);
+    teamCar.x = ease(teamCar.x, teamCar.anchorX, 3.0);
+    if (teamCar.dOff > -3.0) teamCar.phase = 2;
+  } else if (teamCar.phase === 2) {
+    teamCar.dOff = ease(teamCar.dOff, -1.2, 2.4);
+  } else if (teamCar.phase === 3) {
+    teamCar.dOff = ease(teamCar.dOff, G, 1.5);
+    teamCar.x = ease(teamCar.x, tx, 2.2);
+    if (teamCar.dOff > G - 0.6) teamCar.phase = 4;
+  } else if (teamCar.phase === 4) {
+    // EXACTLY where the sim says it is: the shelter it pays is measured against towX,
+    // so a car drawn anywhere else would make the cone lie about where the draft is.
+    teamCar.dOff = G; teamCar.x = tx;
+  } else {
+    teamCar.dOff = ease(teamCar.dOff, -40, 1.1);
+    teamCar.alpha -= dt / 1.4;
+    if (teamCar.alpha <= 0) { teamCar.phase = 0; teamCar.alpha = 1; return; }
+  }
+  const cd = you.dist + teamCar.dOff, cy = sy(cd);
+  if (cy < -90 || cy > H + 110) return;
+  const cx = sx(cd, teamCar.x);
+  const w = riderR * 2.0, h = riderR * 3.2;
+  if (teamCar.phase === 4) {                       // the shelter, while it is real
+    const good = clamp(1 - Math.abs(you.x - tx) / Sim.CFG.towShelter, 0, 1);
+    const bx = you.dist - 1.5;
+    const lx = sx(bx, tx - Sim.CFG.towShelter), rx = sx(bx, tx + Sim.CFG.towShelter);
     ctx.save();
+    ctx.fillStyle = draftColour(good, 0.10 + 0.32 * good);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(lx, sy(bx)); ctx.lineTo(rx, sy(bx));
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = draftColour(good, 0.55); ctx.lineWidth = Math.max(1.5, pxM * 0.05);
+    ctx.beginPath(); ctx.moveTo(lx, sy(bx)); ctx.lineTo(cx, cy); ctx.lineTo(rx, sy(bx)); ctx.stroke();
+    ctx.restore();
+  }
+  drawCar(cx, cy, w, h, { body: PAL.you, wheels: true, alpha: teamCar.alpha });
+  // The mechanic is out only while the wheel is actually being changed.
+  if (teamCar.phase === 2 && flat) {
+    const mx = sx(you.dist - 0.4, teamCar.x - teamCar.side * 1.1);
+    ctx.save();
+    ctx.globalAlpha = clamp(teamCar.alpha, 0, 1);
     ctx.fillStyle = "rgba(46,49,47,.75)";
     ctx.beginPath(); ctx.arc(mx, sy(you.dist - 0.4) + riderR * 0.2, riderR * 0.42, 0, 7); ctx.fill();
     ctx.restore();
-    label("WHEEL CHANGE", cx, y - h * 0.62, 8.5, 700, PAL.you, "center", 1.2);
+    // BELOW the car, not above it: the car sits just behind you during the change, so a
+    // label above it lands on your own rider and reads as a caption on you.
+    label("WHEEL CHANGE", cx, cy + h * 0.68, 8.5, 700, PAL.you, "center", 1.2);
   }
 }
 // ★ THE INFORMATION MOTO. A motorbike carrying a commissaire and a board. It VISITS —
@@ -6068,14 +6131,8 @@ function drawConvoy() {
       ctx.fill();
       ctx.restore();
     }
-    ctx.save();
-    ctx.fillStyle = "rgba(46,49,47,.16)";
-    roundRect(cx - cw / 2 + 2, cy - ch / 2 + 3, cw, ch, 5); ctx.fill();
-    ctx.fillStyle = "#3A3D3A";
-    roundRect(cx - cw / 2, cy - ch / 2, cw, ch, 5); ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,.88)";
-    roundRect(cx - cw * 0.34, cy - ch * 0.16, cw * 0.68, ch * 0.3, 2); ctx.fill();
-    ctx.restore();
+    // Convoy cars are TEAM cars: spare wheels on the roof, not an official's board.
+    drawCar(cx, cy, cw, ch, { wheels: true });
   }
 }
 // The wheel-change overlay while the world waits, and the chase readout while it runs.
@@ -6144,17 +6201,11 @@ function drawPacer(dt) {
     ctx.moveTo(lx, by); ctx.lineTo(sx(tailD, p.x), ty); ctx.lineTo(rx2, by); ctx.stroke();
     ctx.restore();
   }
-  ctx.save();
-  ctx.fillStyle = "rgba(46,49,47,.16)";
-  roundRect(cx - cw / 2 + 2, cy - ch / 2 + 3, cw, ch, 5); ctx.fill();
   // A DARK CAR WITH WHITE MARKINGS. Yellow collided with the food amber, so a car sitting in
   // the road read as something to ride over and pick up; white was near-invisible against the
   // paper. Charcoal belongs to no resource, and reads instantly as a vehicle on a pale road.
-  ctx.fillStyle = "#3A3D3A";
-  roundRect(cx - cw / 2, cy - ch / 2, cw, ch, 5); ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,.88)";                    // roof board
-  roundRect(cx - cw * 0.34, cy - ch * 0.16, cw * 0.68, ch * 0.3, 2); ctx.fill();
-  ctx.restore();
+  // The BOARD on the roof rather than spare wheels: this one belongs to the race, not a team.
+  drawCar(cx, cy, cw, ch, { roof: "rgba(255,255,255,.88)" });
   if (race.neutral) label("NEUTRAL", cx, cy - ch * 0.72, 9, 700, "#3A3D3A", "center", 1.3);
 }
 function drawCountdown() {
@@ -6882,7 +6933,7 @@ function frame(now) {
       const best = ghost.mine || ghost.mark;
       if (best) ghost.dist = race.course.len * clamp(ghost.t / best, 0, 1);
     }
-    drawRoad(); drawItems(); drawGhost(); drawMoto(); drawConvoy(); drawRiders(); drawWheelChange(dt); drawHud(dt);
+    drawRoad(); drawItems(); drawGhost(); drawMoto(); drawConvoy(); drawTeamCar(dt); drawRiders(); drawHud(dt);
     drawPacer(dt);
     drawChanceOverlay();
     if (phase === "count") drawCountdown();
@@ -7355,6 +7406,7 @@ function resumeTour() {
     moto = { phase: 0, t: 0, side: 1, visits: 0, coolUntil: 0, ahead: 0, v: 0, eligT: 0 };
     musLane = { zone: -1, ok: false };
     chanceHold = false; wheelTap = null; $("chanceCard").classList.add("hide");
+    teamCar = { phase: 0, dOff: -26, x: 0, side: 1, alpha: 1, anchorX: 0 };
     flashes = []; paused = false; phase = "race"; Tilt.recentre();
     strokes = []; alt = []; lastSide = null; spinHint = 0;
     $("pauseCard").classList.add("hide"); $("pauseBtn").classList.remove("hide");
@@ -8243,6 +8295,7 @@ function startDrill(i) {
   race.you.num = ladder.bib || 1;
   musLane = { zone: -1, ok: false };   // the feed drill has real feeds; no stale latch
   chanceHold = false; wheelTap = null; $("chanceCard").classList.add("hide");
+  teamCar = { phase: 0, dOff: -26, x: 0, side: 1, alpha: 1, anchorX: 0 };
   tour = { seed: 90210, stage: 0, gc: {}, leaders: {}, fatigue: {}, schedule: [d.stage], drill: true };
   d.setup(race);
   flashes = []; phase = "race"; paused = false; Tilt.recentre();
@@ -8253,6 +8306,7 @@ function startDrill(i) {
 function endDrill() {
   drill = null; race = null; tour = null; phase = "menu";
   chanceHold = false; wheelTap = null; $("chanceCard").classList.add("hide");
+  teamCar = { phase: 0, dOff: -26, x: 0, side: 1, alpha: 1, anchorX: 0 };
   $("drillDone").classList.add("hide");
   refreshMenu(); showProfile(null); renderDrills(); show("drills");
 }
