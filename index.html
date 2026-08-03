@@ -313,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 10</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 11</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -3834,7 +3834,7 @@ let playerType = "rouleur";
 let committedBuild = null;
 let playerKit = "magenta";
 let dailyRun = false;
-let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, daily: null,
+let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio"], daily: null,
   owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0, packs: [], req: {} };
 
 // ---------------------------------------------------------------- tilt steering
@@ -5170,7 +5170,7 @@ function riderProfile(st) {
       + inv(st.fuelUse, 0.85, 1.15) + inv(st.sweatRate, 0.80, 1.15)) / 4
   ];
 }
-function drawRadar(canvas, stats, ghost) {
+function drawRadar(canvas, stats, ghost, body) {
   const d = Math.min(window.devicePixelRatio || 1, 2);
   const w = canvas.clientWidth || 320, h = 210;
   canvas.width = w * d; canvas.height = h * d;
@@ -5194,7 +5194,12 @@ function drawRadar(canvas, stats, ghost) {
     if (fill) { g.fillStyle = fill; g.fill(); }
     g.strokeStyle = stroke; g.lineWidth = 2; g.stroke(); g.restore();
   };
+  // ★ THE LAYERS, SEPARATELY. Drawing your bike+body against a bare neutral bike put the
+  // two contributions in one lump, so a career's growth was invisible inside a number the
+  // bike also moved. `body` draws the rider ALONE on a neutral bike: what is inside that
+  // ring you earned by racing, and the space out to the solid line is what the bike tunes.
   if (ghost) shape(ghost, null, "rgba(46,49,47,.42)", true);
+  if (body) shape(body, "rgba(0,158,115,.13)", "rgba(0,158,115,.85)", false);
   shape(riderProfile(stats), "rgba(204,0,102,.15)", PAL.you, false);
   g.save();
   g.font = '700 9px "Space Grotesk", system-ui, sans-serif';
@@ -5599,7 +5604,11 @@ function drawHud(dt) {
     const draining = pmPrevE != null && you.energy < pmPrevE - 0.0005;
     pmPrevE = you.energy;
     const redline = pmVal > 80 || (draining && you.energy < 42 && you.eff !== "ease");
-    const col = redline ? PAL.spot : pmVal > 60 ? PAL.fuel : PAL.water;
+    // NOT BLUE. PAL.water is the FLUID colour, so a blue POWER gauge sitting in the row
+    // beside LEGS / FOOD / FLUID read as a second fluid gauge. Same mistake as the yellow
+    // pace car that read as food (DECISIONS.md). Charcoal belongs to no resource; amber
+    // and orange stay, because those two carry meaning.
+    const col = redline ? PAL.spot : pmVal > 60 ? PAL.fuel : "#4A4E4B";
     gx += gstep;
     gauge(gx, gy, gw, gh, pmVal, col, "POWER");
     if (lvl >= 2) label(redline ? "REDLINE" : pmVal < 30 ? "EASY" : pmVal > 60 ? "HARD" : "STEADY",
@@ -7945,9 +7954,12 @@ function renderBuild() {
   const now = addBody(Sim.buildStats(buildDraft));
   const bodyOnly = addBody(Sim.buildStats(Sim.neutralBuild()));
   $("bArche").textContent = "Bike reads as a " + Sim.buildArchetype(buildDraft);
-  drawRadar($("bRadar"), now, riderProfile(bodyOnly));
+  // Same three rings as the menu, so GREEN always means "your body" wherever you see it.
+  // The build screen used to draw the body as the dashed ghost while the menu drew a bare
+  // neutral rider there, which taught two different visual languages for one idea.
+  drawRadar($("bRadar"), now, riderProfile(Sim.buildStats(Sim.neutralBuild())), riderProfile(bodyOnly));
   renderMeters(now, bodyOnly, false, $("bMeters"));
-  $("bPrev").textContent = "Solid line is you on this bike; the ghost is your body on a neutral bike, so the gap is what the bike tunes. Parts unlock as you climb divisions.";
+  $("bPrev").textContent = "Green is your body on a neutral bike, earned by racing. Solid is that body on THIS bike, so the space between them is what the bike tunes. The dashed line is a neo-pro. Parts unlock as you climb divisions.";
   renderTactics();
 }
 // Tactics are a layer on top of the build (a separate progression, kept on the ladder,
@@ -7958,6 +7970,25 @@ const TACTICS = [
 ];
 const WIN_STEPS = { radio: [1, 4, 8], powerMeter: [2, 6, 11] };   // career wins to reach lvl 1/2/3 (tunable)
 function tacticLevel(kind, wins) { return (WIN_STEPS[kind] || []).reduce((n, x) => n + (wins >= x ? 1 : 0), 0); }
+// ★ YOU CHOOSE YOUR RACE CRAFT. Both of these used to arrive on a win-count drip and you
+// simply had whatever your career had handed you, which Kevin called out as the thing
+// that made the build feel choiceless. Now FITTING decides whether you carry it at all and
+// the career decides how good it is, with a floor of level 1 so fitting is never a wasted
+// slot for a new rider. The limit is deliberately ONE while the pool is two, because
+// "fit 2 of 2" is not a decision; it rises as the pool grows.
+const FIT_TACTICS = 1;
+function fittedTactics() {
+  const f = (ladder.tactics || []).filter(k => TACTICS.some(t => t.key === k));
+  return f.slice(0, FIT_TACTICS);
+}
+function isFitted(key) { return fittedTactics().indexOf(key) >= 0; }
+function toggleTactic(key) {
+  const f = fittedTactics();
+  const at = f.indexOf(key);
+  if (at >= 0) f.splice(at, 1);
+  else { f.push(key); while (f.length > FIT_TACTICS) f.shift(); }   // oldest drops out
+  ladder.tactics = f; Store.save(ladder);
+}
 // The rider's body has FOUR identity dimensions that grow from how you race — climbing
 // from contesting mountains, sprinting from contesting flats, endurance from front
 // finishes, durability from surviving tours. Each is ~65% of a specialist's edge; the bike
@@ -8043,8 +8074,13 @@ function renderTactics() {
     }
     host.appendChild(row);
   }
+  const head = document.createElement("div"); head.className = "secthead";
+  head.textContent = daily ? "Race craft \u00b7 all fitted for the daily"
+    : "Race craft \u00b7 carry " + FIT_TACTICS + " of " + TACTICS.length;
+  host.appendChild(head);
   for (const t of TACTICS) {
-    const lvl = daily ? 3 : tacticLevel(t.key, ladder.wins || 0);
+    const on = daily || isFitted(t.key);
+    const lvl = daily ? 3 : on ? Math.max(1, tacticLevel(t.key, ladder.wins || 0)) : 0;
     const row = document.createElement("div"); row.className = "card";
     const top = document.createElement("div"); top.className = "top";
     const nb = document.createElement("b"); nb.textContent = t.name; top.appendChild(nb);
@@ -8052,10 +8088,22 @@ function renderTactics() {
     pips.textContent = "\u25cf\u25cf\u25cf".slice(0, lvl) + "\u25cb\u25cb\u25cb".slice(0, 3 - lvl);
     top.appendChild(pips); row.appendChild(top);
     const note = document.createElement("div"); note.className = "note"; note.textContent = t.note; row.appendChild(note);
-    if (!daily && lvl < 3) {
-      const hint = document.createElement("div"); hint.className = "fx";
-      hint.innerHTML = '<span class="lead">Next level at ' + WIN_STEPS[t.key][lvl] + ' career ' + (WIN_STEPS[t.key][lvl] === 1 ? 'win' : 'wins') + '</span>';
-      row.appendChild(hint);
+    if (!daily) {
+      // The career still improves what you carry, so the drip is a QUALITY curve now
+      // rather than the thing that decides whether you have it at all.
+      if (on && lvl < 3) {
+        const hint = document.createElement("div"); hint.className = "fx";
+        hint.innerHTML = '<span class="lead">Sharper at ' + WIN_STEPS[t.key][lvl] + ' career '
+          + (WIN_STEPS[t.key][lvl] === 1 ? 'win' : 'wins') + '</span>';
+        row.appendChild(hint);
+      }
+      const btns = document.createElement("div"); btns.className = "btns";
+      const b = document.createElement("button");
+      b.className = on ? "on" : "";           // the .card .btns button convention
+      b.textContent = on ? "Carrying" : "Carry this";
+      b.setAttribute("aria-pressed", String(on));
+      b.addEventListener("click", () => { toggleTactic(t.key); renderTactics(); showProfile(null); });
+      btns.appendChild(b); row.appendChild(btns);
     }
     host.appendChild(row);
   }
@@ -8067,8 +8115,14 @@ function raceStats(build, career, daily) {
   const body = daily ? bodyStats(FULL_CAREER, null) : bodyStats(career || {}, ladder.div);
   for (const k in body) s[k] = (s[k] === undefined ? 0 : s[k]) + body[k];
   const w = daily ? 99 : (ladder.wins || 0);
-  s.radio = daily ? 3 : tacticLevel("radio", w);
-  s.powerMeter = daily ? 3 : tacticLevel("powerMeter", w);
+  // Fitted decides IF, career decides HOW GOOD (floor 1, so fitting always buys you
+  // something). The daily still hands everyone the lot, which is what keeps the shared
+  // leaderboard fair and must stay true whatever the economy does.
+  for (const t of TACTICS) {
+    s[t.key] = daily ? 3
+      : isFitted(t.key) ? Math.max(1, tacticLevel(t.key, w))
+      : 0;
+  }
   return s;
 }
 $("buildBtn").addEventListener("click", () => openBuild("menu"));
@@ -8916,18 +8970,24 @@ function renderKits() {
   }
 }
 function showProfile(ghostKey) {
-  // The menu radar now shows your committed build (solid) against a neutral rider
-  // (dashed). Before you've built one, it shows neutral with a prompt.
+  // THREE RINGS, one per layer: the dashed neutral rider, the GREEN ring of your body
+  // alone on a neutral bike, and the solid magenta of body plus bike. Kevin could not see
+  // his career growth because it was folded into a single line the bike also moved; now
+  // the green ring IS the growth and the space beyond it is what the bike tunes.
   const neutral = Sim.buildStats(Sim.neutralBuild());
   const body = bodyStats(ladder.career || {}, ladder.div);
+  const bodyOnly = Object.assign({}, neutral);
+  for (const k in body) bodyOnly[k] = (bodyOnly[k] === undefined ? 0 : bodyOnly[k]) + body[k];
   const stats = Sim.buildStats(committedBuild || Sim.neutralBuild());
   for (const k in body) stats[k] = (stats[k] === undefined ? 0 : stats[k]) + body[k];
-  drawRadar($("mRadar"), stats, committedBuild ? riderProfile(neutral) : null);
+  drawRadar($("mRadar"), stats, committedBuild ? riderProfile(neutral) : null, riderProfile(bodyOnly));
   const lbl = $("mRiderLabel");
   if (lbl) {
     if (committedBuild) {
       const id = riderIdentity(ladder.career);
-      lbl.textContent = "Bike reads as a " + Sim.buildArchetype(committedBuild) + (id !== "Neo-pro" ? "  \u00b7  you ride as a " + id : "");
+      lbl.textContent = "Bike reads as a " + Sim.buildArchetype(committedBuild)
+        + (id !== "Neo-pro" ? "  \u00b7  you ride as a " + id : "")
+        + "  \u00b7  green is your body, magenta adds the bike";
     } else lbl.textContent = "No rider built yet \u2014 tap Build your rider";
   }
 }

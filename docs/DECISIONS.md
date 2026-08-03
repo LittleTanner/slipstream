@@ -67,6 +67,43 @@ instead of new markers. Treat "add a HUD overlay" as a losing move.
   gives every rider the same breather. Related: a rider revived on cracked legs is
   capped below bunch pace, so the whole convoy sails away and no chase exists at any
   spacing; the leg floor is load-bearing, not generosity.
+## The three layers: body, bike, tactics
+
+Decided 2026-08 after Kevin: "it feels like I only have one option per archetype", and
+"bike parts seem to be what changes the radar chart the most". Both were measurable. A
+single part swap moves the radar up to 0.48 on one axis, more than a WHOLE CAREER of body
+growth moves any axis, and on aero and handling the body contributes exactly nothing, so
+those two axes are pure bike. Also found: wheels, position and tires all trade aero
+against handling, so they are one decision made three times, which is what "one option per
+archetype" actually meant.
+
+- **Body TRAINING is pure positive on a points budget; body PHYSIQUE is pro/con.**
+  Training genuinely makes you better at something without making you worse elsewhere, so
+  a trade-off there is a lie; the budget does the balancing instead. A physique cannot be
+  light and powerful at once, so weight IS a trade-off. Making every single choice a
+  pro/con means you can never simply feel stronger, which is the point of a career.
+- **Bike parts stay trade-offs**, because a deep wheel genuinely is faster and genuinely
+  is worse in a crosswind. Physics, not game design.
+- **New bike parts must open a NEW axis in their slot.** A fourth point on a slot's
+  existing line is a finer version of a choice you were never making.
+- **Money buys breadth, never power. Unlocks and budget are earned by playing and can
+  never be bought.** Resolves the tension with "the ladder is never pay-to-skip": the
+  ceiling is identical for a free player, only adaptability and grind differ, and the
+  daily hands everyone a full career and full tactics regardless.
+- **Every layer keeps a free neutral option** (Balanced weight, All-round muscle, the
+  neutral part in each slot), so a rider who has bought nothing always has a complete,
+  legal, competitive setup.
+- **`engine` moves from the bike to the body.** Diesel legs are physiology, not equipment;
+  it only sat in the bike list because that is where the build system happened to live.
+- **Race craft is fitted, not drip-fed.** Race radio and power meter used to arrive
+  automatically on career wins, so you simply had whatever your record had handed you.
+  Fitting now decides whether you carry it, the career decides how good it is (floored at
+  level 1 so fitting always buys something), and the limit is deliberately ONE while the
+  pool is two, because "fit 2 of 2" is not a decision.
+- **Rejected: the old `UPGRADES` tier ladder** (3 strictly-better tiers per item, bought in
+  order). Strictly-better ladders make money equal strength, turn the game into a grind,
+  and put every purchase outside what the dominance harness can certify.
+
 - **A presence-percentage rule for the musette** ("in the lane 90% of the line").
   A hidden meter: failing a grab at 85% reads as a random denial. Same intent, readable
   rule instead: the hand-up sits at 0.60 of the zone, and the pass is LATCHED — be in
