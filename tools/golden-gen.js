@@ -37,17 +37,10 @@ for (const sc of G.schedules) {
   sc.stages = S.tourSchedule(sc.seed, sc.len);
 }
 G.note = 'Slipstream golden master. Regenerated ' + new Date().toISOString().slice(0, 10)
-  + ' after ROTATION: pulls lengthened to 4s (2.5 stranded the swinging rider), a relieved front '
-  + 'now swings off and holds the swing until clear of the back of the train, rejoining on the '
-  + 'last wheel instead of barging back mid-file (working rotations on flat road only, never '
-  + 'around an attack), a stuck-swing decay bug is fixed, and the patience thresholds (grace, '
-  + 'elbow flick, sit-up) scale with the size of the rotation. Audit round: the swing-hold '
-  + 'clock starts at RELIEF (it used to expire while still on the front, so swingers cut in '
-  + 'mid-file); the elbow flick and sit-up require a STANDING CALL being ignored (waiting '
-  + 'your turn is not refusal); the next-in-line rides through a swinging front (relief no '
-  + 'longer crawls); the grace cycle includes the measured ~3.5s handover; the drill mates '
-  + 'no longer launch attacks; and race slicks got windTax -0.09 because crisper rotations '
-  + 'shrank wind exposure and devalued aero until dominance read slick dead on 3- and '
-  + '6-seed runs alike. Dominance after: 0 dominant, 0 dead at 3 AND 6 seeds.';
+  + ' after ROTATION QUEUE: the player is only called through once they have been to the BACK '
+  + 'of the working file since their last pull (no more YOUR TURN seconds after pulling, while '
+  + 'still drifting down the train), with a since-turn waiver so parking mid-file cannot dodge '
+  + 'the queue; a drifting player is not counted as the reliever; and calls have an 8s cooldown. '
+  + 'Physics footprint is the reliever selection only. Dominance: 0 dominant, 0 dead.';
 fs.writeFileSync(GOLDEN_PATH, JSON.stringify(G, null, 0));
 console.log('regenerated', G.cases.length, 'cases,', G.schedules.length, 'schedules');
