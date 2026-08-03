@@ -37,10 +37,16 @@ for (const sc of G.schedules) {
   sc.stages = S.tourSchedule(sc.seed, sc.len);
 }
 G.note = 'Slipstream golden master. Regenerated ' + new Date().toISOString().slice(0, 10)
-  + ' after DROP-BACK PARITY: the player easing back after a pull now sheds speed relative to '
-  + 'the break front exactly like an AI swinger (9% below the front, only while returning and '
-  + 'only when soft-pedalling), because their own ease floor could be matched by a recovering '
-  + 'group and they could never reach the back. Also the rotation-queue change (called only '
-  + 'after being to the back), reliever selection, and call cooldown from the same round.';
+  + ' after the build-6 batch, four deliberate sim changes: ROTATION COHESION (the working '
+  + 'rotation is the cohesive chain at the head of the break, gaps > 10 m break it, so cues '
+  + 'and trainBoost stop for a rider functionally alone); FINISH ROLL-OUT (finished riders '
+  + 'coast past the line instead of parking on it, are excluded from the collision speed cap, '
+  + 'and race.over waits ~4 s after the player crosses); BOTTLE DROPS AFTER THE FIRST FEED '
+  + '(addLitter and its fallback reject candidates before any bottle could exist, which '
+  + 'shifts course PRNG on courses that previously drew an early-climb drop; the '
+  + 'after-last-feed guarantee also gained a relaxed second pass so it can no longer '
+  + 'silently give up when furniture blocks every strict candidate); MUSETTE HAND-UP '
+  + 'at 0.60 of the zone (was 0.42) so the bag is ridden to, not dived for. Litter events now '
+  + 'name the fine.';
 fs.writeFileSync(GOLDEN_PATH, JSON.stringify(G, null, 0));
 console.log('regenerated', G.cases.length, 'cases,', G.schedules.length, 'schedules');

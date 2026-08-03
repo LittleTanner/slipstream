@@ -43,6 +43,12 @@ instead of new markers. Treat "add a HUD overlay" as a losing move.
   (tapping IS pedalling, holding a side IS steering). The existing hop button is used.
 - **A button to auto-position you in a rotation.** It would remove the only skill the
   mechanic teaches. The problem was that the rotation was invisible, not that it was hard.
+- **A presence-percentage rule for the musette** ("in the lane 90% of the line").
+  A hidden meter: failing a grab at 85% reads as a random denial. Same intent, readable
+  rule instead: the hand-up sits at 0.60 of the zone, and the pass is LATCHED — be in
+  the soigneur's lane as you cross the start of the line and stay on it, or no bag.
+- **Bib 0.** Road racing has no bib 0, and the deviation bought nothing. The picker is
+  1-9: one digit is what fits a rider drawn at this scale (rivals wear 11-78).
 - **Making 4-6 rider breaks rotate** (decided 2026-08, option "leave it"). The group
   detector calls the largest group "the peloton", and in an 8-rider field a 4+ break IS
   the largest group, so through-and-off never engages for it. This deviates from real

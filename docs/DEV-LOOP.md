@@ -44,8 +44,9 @@ the single thing that would be lost by porting to Swift early.
    top of a rider's body. The 3-seed verdict flips on tiny changes: confirm a
    dead/dominant call at 6 seeds before acting on it.
 7. `python3 tools/loadcheck.py` — headless page-error check. For VIEW changes go
-   deeper: `python3 tools/browser/smoke.py` (~75s) drives every screen, every drill,
-   a full shrunk race and the pause card; `python3 tools/browser/career.py` (~2 min)
+   deeper: `python3 tools/browser/smoke.py` (~90s) drives every screen, every drill,
+   a daily-challenge start, a full shrunk race and the pause card;
+   `python3 tools/browser/career.py` (~2 min)
    checks division display, route-pack pricing, money and result recording against
    seeded saves. Run smoke before shipping any UI change; career when touching
    progression, money or save code.
