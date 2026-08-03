@@ -6311,6 +6311,7 @@ function startTutorial(from) {
   race = Sim.createRace({ seed: 24601, stageIndex: 3, playerType, kit: ladder.kit,
     gc: {}, leaders: {}, div: 8 });
   race.you.num = ladder.bib || 1;
+  musLane = { zone: -1, ok: false };   // the tutorial's musette step must not inherit a latch
   tour = { seed: 24601, stage: 0, gc: {}, leaders: {}, fatigue: {}, schedule: [3] };
   flashes = []; phase = "race"; Tilt.recentre();
   strokes = []; alt = []; lastSide = null; spinHint = 0;
