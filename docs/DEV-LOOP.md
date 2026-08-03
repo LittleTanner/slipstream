@@ -48,9 +48,10 @@ the single thing that would be lost by porting to Swift early.
 
 ## Sanity sweep — run BEFORE blessing a regenerated golden
 
-Loop every golden case and assert: no NaN times, no zero or negative times, everyone
-finishes, crash count sane, spread not absurd. A regenerated golden BAKES IN whatever it
-sees, so check the behaviour is right before regenerating, not after.
+`node tools/sanity.js` — loops every golden case under the CHANGED sim and asserts: no
+NaN times, no zero or negative times, everyone finishes, finisher spread sane (the one
+crashed-out +9999 sentinel, player only, is expected). A regenerated golden BAKES IN
+whatever it sees, so check the behaviour is right before regenerating, not after.
 
 ## When to run dominance
 
