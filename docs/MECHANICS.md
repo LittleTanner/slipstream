@@ -6,7 +6,7 @@ way to check you have not broken it.
 
 ## The three test tiers
 
-1. **`node tools/tests/run.js` — the mechanics suite (~25s).** One focused test per
+1. **`node tools/tests/run.js` — the mechanics suite (~45s).** One focused test per
    mechanic promise. A failure NAMES the mechanic that broke. Run it after every sim
    edit; it is the first thing to consult before the slower tiers.
 2. **`node tools/verify.js` — the golden master (1590 checks, ~1 min).** Catches ANY
@@ -27,10 +27,10 @@ behavior, effort, or drafting. Box-section wheels are the canary.
 |---|---|---|---|
 | Drafting (q) | Sitting on a wheel is cheaper than clean air; shelters compound in a pack, they do not shadow | `let through = 1, bq = 0` | `draft.test.js` |
 | Crosswind shelter | The shelter sits off to the LEEWARD side of the wheel, not behind it | `shelterOff` | `crosswind.test.js` |
-| Head/tail wind | Headwind holds you up, tailwind pushes, shelter blunts both | `TAILWIND PUSHES` | golden only |
-| Peloton mass shelter | Deep in the bunch is the cheapest place on the road; a lone leader does real work | `sheltered by the mass` | golden only |
-| Pace car slipstream | For seconds after the flag the car's hole can sling a rider clear; rivals race you for the bumper | `THE PACE CAR'S SLIPSTREAM` | golden only |
-| Team car tow | The car paces you back after a mechanical; drift out of its draft and it leaves you | `towSpeed` in CFG | golden only |
+| Head/tail wind | Headwind holds you up, tailwind pushes, shelter blunts both | `TAILWIND PUSHES` | `wind.test.js` |
+| Peloton mass shelter | Deep in the bunch is the cheapest place on the road; a lone leader does real work | `sheltered by the mass` | `mass-shelter.test.js` |
+| Pace car slipstream | For seconds after the flag the car's hole can sling a rider clear; rivals race you for the bumper | `THE PACE CAR'S SLIPSTREAM` | `pacecar.test.js` |
+| Team car tow | The car paces you back after a mechanical; drift out of its draft and it leaves you | `towSpeed` in CFG | `teamcar.test.js` |
 
 ## The rotation (through and off)
 
@@ -56,10 +56,10 @@ shelter all hang off the label). Decision pending.
 | Mechanic | Promise | Sim anchor | Test |
 |---|---|---|---|
 | Legs (energy) | Efforts drain, easing recovers, on any terrain, in or out of shelter | `LEGS ALWAYS COME BACK` | `recovery.test.js` |
-| Cracking / bonking | Empty legs cap your power hard; food debt caps it harder | `r.cracked`, `r.bonk` | golden only |
-| Food (fuel) and stomach (absorb) | Eating fills a stomach that feeds you slowly; a full stomach climbs badly | `THE MUSETTE` | golden only |
-| Fluids and sweat | Dry riders fade and cannot attack | `dryPen` | golden only |
-| Thin air | Above ~1200m altitude costs recovery and water, never raw power | `How thin the air is here` | golden only |
+| Cracking / bonking | Empty legs cap your power hard; food debt caps it harder | `r.cracked`, `r.bonk` | `bonk.test.js` |
+| Food (fuel) and stomach (absorb) | Eating fills a stomach that feeds you slowly; a full stomach climbs badly | `THE MUSETTE` | `stomach.test.js`, `feedzone.test.js` |
+| Fluids and sweat | Dry riders fade and cannot attack | `dryPen` | `hydration.test.js` |
+| Thin air | Above ~1200m altitude costs recovery and water, never raw power | `How thin the air is here` | `thin-air.test.js` |
 | Rider growth / divisions | Rivals get sharper and better-equipped by division; the player's ceiling does not scale | `race.D` | dominance (body-aware) |
 
 ## Terrain and handling
@@ -67,27 +67,27 @@ shelter all hang off the label). Decision pending.
 | Mechanic | Promise | Sim anchor | Test |
 |---|---|---|---|
 | Climbing | Gradient costs by climbCost; climbers break away on climbs; terrain selects the specialist | `climbMul` | `climb-selection.test.js` |
-| Descending | Gravity coasts you down at any effort; soft-pedal scrubs it progressively (one brake, not two) | `GRAVITY on a descent` | golden only |
-| Handling vs speed | Slower means MORE steering authority (deliberately inverted); braking is the answer to a corner | `hardTurn` | golden only |
-| Corners / switchbacks | Carrying too much speed into a bend costs speed and can crash you; AI brakes by sharpness | `Brake for the corner` | golden only |
-| Road furniture | Junctions, medians, roundabouts, narrows, surfaces, potholes; the hop clears holes and medians | `HOP A POTHOLE` | golden only |
-| Crashes | Impact severity scales with speed and lean; in top divisions a bad one ends your race (+9999 sentinel) | `function impact` | golden only (one sentinel case) |
-| Punctures | A flat is a STOP; the team car and sticky bottle bring you back | `A puncture is a stop` | golden only |
+| Descending | Gravity coasts you down at any effort; soft-pedal scrubs it progressively (one brake, not two) | `GRAVITY on a descent` | `descending.test.js` |
+| Handling vs speed | Slower means MORE steering authority (deliberately inverted); braking is the answer to a corner | `hardTurn` | `handling.test.js` |
+| Corners / switchbacks | Carrying too much speed into a bend costs speed and can crash you; AI brakes by sharpness | `Brake for the corner` | `cornering.test.js` |
+| Road furniture | Junctions, medians, roundabouts, narrows, surfaces, potholes; the hop clears holes and medians | `HOP A POTHOLE` | `road-furniture.test.js` (surfaces, narrows; the rest golden) |
+| Crashes | Impact severity scales with speed and lean; in top divisions a bad one ends your race (+9999 sentinel) | `function impact` | `crash.test.js` (+ the golden sentinel case) |
+| Punctures | A flat is a STOP; the team car and sticky bottle bring you back | `A puncture is a stop` | `puncture.test.js` |
 
 ## Racing furniture
 
 | Mechanic | Promise | Sim anchor | Test |
 |---|---|---|---|
-| Attacks | Committed events: windup, go, cooldown; no per-frame flicker; rivals follow a genuine dig near the front | `Attacks are now committed` | golden only |
-| Chase | The bunch chases a break it fears, harder late, sharper by division | `race.chase` | golden only |
-| Sprint lines | You may change your line, not into someone contesting; relegation costs points, money, a fine | `sprintLine` | golden only |
-| Bike throw | Timed right, most of a bike length; stretches you out after | `throwWindow` in CFG | golden only |
-| Primes | Sprint and KOM points on the road; summit finish = KOM and finish on one line | `nearestPrime` | golden only |
-| Feed zones | Food scattered along the road (deliberately not gating attacks); musettes hand up on a line; empties carried or littered | `musetteReach` in CFG | golden only |
-| Time trial | Start intervals, no-draft rule (yield when caught), time checks, cadence | `race.spec.tt` | golden only |
-| Abandonment | Three-week tours shrink the field to ~75%; quitting a tour costs it | `ABANDONMENT` | golden only |
-| Groups | Peloton = largest group; break = riders 10+ clear of its head; ties resolve to the front group | `let peloton = groups[0]` | golden only |
-| Course generation | Integer PRNG, deterministic per seed; DERIVE values, never add an R() call mid-generation | `course feature factories` | golden (course fields per case) |
+| Attacks | Committed events: windup, go, cooldown; no per-frame flicker; rivals follow a genuine dig near the front | `Attacks are now committed` | `attacks.test.js` |
+| Chase | The bunch chases a break it fears, harder late, sharper by division | `race.chase` | `chase.test.js` |
+| Sprint lines | You may change your line, not into someone contesting; relegation costs points, money, a fine | `sprintLine` | `sprint-line.test.js` |
+| Bike throw | Timed right, most of a bike length; stretches you out after | `throwWindow` in CFG | `throw.test.js` |
+| Primes | Sprint and KOM points on the road; summit finish = KOM and finish on one line | `nearestPrime` | `primes.test.js` |
+| Feed zones | Food scattered along the road (deliberately not gating attacks); musettes hand up on a line; empties carried or littered | `musetteReach` in CFG | `feedzone.test.js` (items; musette line + litter golden) |
+| Time trial | Start intervals, no-draft rule (yield when caught), time checks, cadence | `race.spec.tt` | `tt.test.js` (intervals, sheltering; checks + cadence golden) |
+| Abandonment | Three-week tours shrink the field to ~75%; quitting a tour costs it | `ABANDONMENT` | `abandonment.test.js` |
+| Groups | Peloton = largest group; break = riders 10+ clear of its head; ties resolve to the front group | `let peloton = groups[0]` | `groups.test.js` |
+| Course generation | Integer PRNG, deterministic per seed; DERIVE values, never add an R() call mid-generation | `course feature factories` | `course-gen.test.js` (+ golden per-case fields) |
 | Parts and builds | Six slots, three trades each, no budget; balance enforced by the harness, never by hand | `const PARTS` | dominance |
 
 ---
