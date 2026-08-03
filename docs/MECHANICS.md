@@ -16,9 +16,9 @@ way to check you have not broken it.
    dominant, 0 dead is the goal; `DOM_SERIAL=1` forces the byte-identical serial
    reference. Sensitive: the 3-seed casualty list can flip on tiny changes, so confirm
    a dead/dominant verdict at 6 seeds before acting on it (edit SEEDS in a scratch copy).
-4. **Browser suites** — `python3 tools/browser/smoke.py` (~90s: every screen, every
-   drill, a daily-challenge start on today's real course, a shrunk race end to end,
-   the pause card) and
+4. **Browser suites** — `python3 tools/browser/smoke.py` (~2 min: every screen, every
+   drill, a daily-challenge start on today's real course, the team car's whole
+   arrive-change-pull-tow life cycle, a shrunk race end to end, the pause card) and
    `python3 tools/browser/career.py` (~2 min: division display, route-pack pricing
    ladder, money, result recording, all against seeded saves). These cover the VIEW —
    the dead-button / unregistered-screen / CSS-specificity class of bug the sim tests
@@ -40,6 +40,7 @@ behavior, effort, or drafting (box-section wheels are the canary).
 | Peloton mass shelter | Deep in the bunch is the cheapest place on the road; a lone leader does real work | `sheltered by the mass` | `mass-shelter.test.js` |
 | Pace car slipstream | For seconds after the flag the car's hole can sling a rider clear; rivals race you for the bumper | `THE PACE CAR'S SLIPSTREAM` | `pacecar.test.js` |
 | Team car tow | The car paces you back after a mechanical; drift out of its draft and it leaves you | `towSpeed` in CFG | `teamcar.test.js` |
+| Team car continuity (view) | ONE car does the whole job: drives up from behind, sits alongside for the wheel, pulls through in front, tows you, then drops away. Never two cars, never a restarted run-up | `ONE CAR, ONE JOB` | `browser/smoke.py` teamcar flow |
 
 ## The rotation (through and off)
 

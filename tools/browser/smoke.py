@@ -29,6 +29,15 @@ PATCHES = [
     ("let ladder = { div: 8,", "let ladder = { div: 8, tutorialDone: true,"),
     # shrink STAGES[0] so the end-to-end race takes ~30s instead of ~3 minutes
     ("len: 1400", "len: 320"),
+    # Publish the team car's phase so the continuity flow can watch it. teamCar is a
+    # view closure and unreachable from evaluate, and the bug this catches (the car
+    # blinking out for a single frame between the wheel change and the tow) is invisible
+    # to a screenshot. Inert for every other flow: it only appends to an array.
+    ("if (!teamCar.phase) return;",
+     "if (!teamCar.phase) { (window.__tcLog=window.__tcLog||[]).push(0); return; }"),
+    ("const cd = you.dist + teamCar.dOff, cy = sy(cd);",
+     "(window.__tcLog=window.__tcLog||[]).push(teamCar.phase);"
+     " const cd = you.dist + teamCar.dOff, cy = sy(cd);"),
 ]
 
 RACE_DEADLINE = 90          # a race that never finishes within 90s is a FAIL
@@ -321,6 +330,53 @@ async def flow_daily(browser, uri):
         await ctx.close()
 
 
+async def flow_teamcar(browser, uri):
+    """ONE car does the whole job: arrives, changes the wheel, pulls through, tows.
+
+    The puncture drill loops the cycle, so the phase log should read exactly
+    1 (arriving) 2 (alongside) 3 (pulling through) 4 (towing) with no 0 in between.
+    A 0 mid-job means the car vanished and a second one appeared up the road — the
+    continuity break this replaced. An out-of-order run means it restarted its run-up.
+    """
+    ctx, pg, errs = await new_page(browser, uri)
+    try:
+        await open_drills(pg)
+        card = pg.locator("button.pick", has_text="Punctures and the team car")
+        if await card.count() == 0:
+            return False, "no 'Punctures and the team car' drill on the list"
+        await card.click()
+        await pg.locator("#drillBrief").wait_for(state="visible")
+        await pg.click("#dbGo")
+        await pg.locator("#drillDone").wait_for(state="visible")
+        side = 0
+        t0 = time.monotonic()
+        # one full cycle is ~14s of drill time; 40s covers it with margin
+        while time.monotonic() - t0 < 40:
+            await pg.keyboard.press("z" if side == 0 else "x")
+            side ^= 1
+            await asyncio.sleep(0.09)
+        log = await pg.evaluate("window.__tcLog || []")
+        if not log:
+            return False, "the team car never drew at all (instrumentation or drill broken)"
+        runs = []
+        for v in log:
+            if not runs or runs[-1] != v:
+                runs.append(v)
+        for need, name in ((1, "arriving"), (2, "alongside"), (3, "pulling through"), (4, "towing")):
+            if need not in runs:
+                return False, "car never reached phase %d (%s): %s" % (need, name, runs[:8])
+        core = runs[runs.index(1):runs.index(4) + 1]
+        if 0 in core:
+            return False, "car VANISHED mid-job (a 0 between arriving and towing): %s" % core
+        if core != [1, 2, 3, 4]:
+            return False, "car did not go straight through the job: %s" % core
+        if errs:
+            return False, "page error during the wheel change: " + errs[0]
+        return True, "one car: arrive, change, pull through, tow (%s)" % core
+    finally:
+        await ctx.close()
+
+
 # ---------------------------------------------------------------- main
 
 async def main():
@@ -335,7 +391,8 @@ async def main():
             browser = await launch(p)
             try:
                 for name, fn in [("load", flow_load), ("screens", flow_screens),
-                                 ("drills", flow_drills), ("daily", flow_daily)]:
+                                 ("drills", flow_drills), ("daily", flow_daily),
+                                 ("teamcar", flow_teamcar)]:
                     t0 = time.monotonic()
                     try:
                         ok, detail = await fn(browser, uri)
