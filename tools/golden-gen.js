@@ -37,10 +37,10 @@ for (const sc of G.schedules) {
   sc.stages = S.tourSchedule(sc.seed, sc.len);
 }
 G.note = 'Slipstream golden master. Regenerated ' + new Date().toISOString().slice(0, 10)
-  + ' after ROTATION QUEUE: the player is only called through once they have been to the BACK '
-  + 'of the working file since their last pull (no more YOUR TURN seconds after pulling, while '
-  + 'still drifting down the train), with a since-turn waiver so parking mid-file cannot dodge '
-  + 'the queue; a drifting player is not counted as the reliever; and calls have an 8s cooldown. '
-  + 'Physics footprint is the reliever selection only. Dominance: 0 dominant, 0 dead.';
+  + ' after DROP-BACK PARITY: the player easing back after a pull now sheds speed relative to '
+  + 'the break front exactly like an AI swinger (9% below the front, only while returning and '
+  + 'only when soft-pedalling), because their own ease floor could be matched by a recovering '
+  + 'group and they could never reach the back. Also the rotation-queue change (called only '
+  + 'after being to the back), reliever selection, and call cooldown from the same round.';
 fs.writeFileSync(GOLDEN_PATH, JSON.stringify(G, null, 0));
 console.log('regenerated', G.cases.length, 'cases,', G.schedules.length, 'schedules');

@@ -292,7 +292,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 4</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 5</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -2755,6 +2755,16 @@ function stepRider(race, r, dt) {
   // Coming around a front who finished their turn and slowed without moving aside:
   // ride just above their pace so the pass actually happens.
   if (r.passBy > 0 && race.breakFront) tgt = Math.max(tgt, race.breakFront.speed + 1.2);
+  // ★★ THE PLAYER'S DROP-BACK GETS THE SWINGER'S CUT. AI riders peel off at ~9% below
+  // the front's ACTUAL pace; the player easing back after a pull was floored at their
+  // own soft-pedal speed, which a recovering group can match or undercut — so they
+  // could never fall to the back ("it's capping you from slowing down"). While
+  // returning (youWasBack false, not on the front) and CHOOSING to soft-pedal, the
+  // player now sheds speed relative to the train exactly like a swinger. It only ever
+  // slows them, so there is nothing to exploit.
+  if (r.you && race.youWasBack === false && race.breakFront && race.breakFront !== r
+      && effVal < CFG.tempo * 0.85)
+    tgt = Math.min(tgt, race.breakFront.speed * (1 - CFG.swingCut));
   if (r.carTow > 0) tgt += CFG.base * 0.26 * r.carTow;
   const down0 = Math.max(0, -g);
   if (down0 > 0.012) {
@@ -7705,7 +7715,21 @@ const DRILLS = [
       // otherwise — they are raiders — so their distance is pinned to a short line around
       // you, leaving the ROTATION as the only thing that varies.
       const y = r.you, mates = r.riders.filter(o => !o.you).slice(0, 2);
-      mates.forEach((o, i) => {
+      // While the player is dropping back after a pull (returning, and NOT the one on
+      // the front), the train must be FREE TO HOLD ITS OWN PACE: pinning and clamping
+      // the mates to the easing player dragged the whole break down with them — the
+      // "capped from slowing down" feel — and once merely unclamped, the ±9 snap
+      // TELEPORTED the lead mate back beside the slowing player mid-drop. So while
+      // dropping, the train is pinned to ITSELF (tail to lead), the player falls away
+      // freely, and if they somehow drop absurdly far the train's pace is gently
+      // capped instead of anyone teleporting.
+      const youDropping = r.youWasBack === false && r.breakFront !== y;
+      if (youDropping) {
+        const lead = mates[0].dist > mates[1].dist ? mates[0] : mates[1];
+        const tail = lead === mates[0] ? mates[1] : mates[0];
+        if (lead.dist - tail.dist > 9) { tail.dist = lead.dist - 2.2; tail.prev = tail.dist; }
+        for (const o of mates) if (o.dist > y.dist + 14) o.speed = Math.min(o.speed, y.speed * 1.02);
+      } else mates.forEach((o, i) => {
         const want = y.dist + (o.dist > y.dist ? 2.2 + i * 2.2 : -(2.2 + i * 2.2));
         if (Math.abs(o.dist - want) > 9) { o.dist = want; o.prev = want; }
         // A swinging rider needs room to actually drift back past you, and a rider
