@@ -43,6 +43,13 @@ instead of new markers. Treat "add a HUD overlay" as a losing move.
   (tapping IS pedalling, holding a side IS steering). The existing hop button is used.
 - **A button to auto-position you in a rotation.** It would remove the only skill the
   mechanic teaches. The problem was that the rotation was invisible, not that it was hard.
+- **Making 4-6 rider breaks rotate** (decided 2026-08, option "leave it"). The group
+  detector calls the largest group "the peloton", and in an 8-rider field a 4+ break IS
+  the largest group, so through-and-off never engages for it. This deviates from real
+  racing — a 5-rider move up the road is still the break — but the fix means redefining
+  the peloton, which chase, the driver and mass shelter all hang off. A corner case at
+  this field size; documented as a known gap in MECHANICS.md. Revisit (as "peloton =
+  group with most GC riders" or "rearmost large group") if fields ever grow beyond 8.
 
 ## Design pillars
 

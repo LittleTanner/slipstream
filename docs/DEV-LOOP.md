@@ -33,24 +33,32 @@ the single thing that would be lost by porting to Swift early.
    `docs/MECHANICS.md`.
 4. `node tools/verify.js` — 1590 checks against the golden. Exits nonzero on failure.
    CI (`.github/workflows/verify.yml`) runs extract + mechanics suite + verify on
-   every PR and push to main, so a broken mechanic or golden cannot merge quietly.
+   every PR and push to main, plus the two browser suites as a parallel job, so a
+   broken mechanic, golden, or screen cannot merge quietly.
 5. `node tools/golden-gen.js` — regenerate after ANY sim change (physics, parts,
    rivals, course). Update its `G.note` to say what changed. Takes several minutes, so
    give it a generous timeout.
-6. `node tools/dominance.js` — parts balance. Goal: 0 dominant, 0 dead. It is
-   body-aware, because parts are only a ~35% tune on top of a rider's body. The 3-seed
-   verdict flips on tiny changes: confirm a dead/dominant call at 6 seeds before
-   acting on it.
-7. `python3 tools/loadcheck.py` — headless page-error check.
+6. `node tools/dominance.js` — parts balance, now on worker threads (~1.5 min; the
+   output is byte-identical to the serial reference, which `DOM_SERIAL=1` forces).
+   Goal: 0 dominant, 0 dead. It is body-aware, because parts are only a ~35% tune on
+   top of a rider's body. The 3-seed verdict flips on tiny changes: confirm a
+   dead/dominant call at 6 seeds before acting on it.
+7. `python3 tools/loadcheck.py` — headless page-error check. For VIEW changes go
+   deeper: `python3 tools/browser/smoke.py` (~75s) drives every screen, every drill,
+   a full shrunk race and the pause card; `python3 tools/browser/career.py` (~2 min)
+   checks division display, route-pack pricing, money and result recording against
+   seeded saves. Run smoke before shipping any UI change; career when touching
+   progression, money or save code.
 8. Ship: commit `index.html`, re-extract from the COMMITTED file, verify again. Bump the
    build number at the bottom of Settings (`verLine`) with every shipped change, so what
    is deployed is checkable against what was pushed.
 
 ## Sanity sweep — run BEFORE blessing a regenerated golden
 
-Loop every golden case and assert: no NaN times, no zero or negative times, everyone
-finishes, crash count sane, spread not absurd. A regenerated golden BAKES IN whatever it
-sees, so check the behaviour is right before regenerating, not after.
+`node tools/sanity.js` — loops every golden case under the CHANGED sim and asserts: no
+NaN times, no zero or negative times, everyone finishes, finisher spread sane (the one
+crashed-out +9999 sentinel, player only, is expected). A regenerated golden BAKES IN
+whatever it sees, so check the behaviour is right before regenerating, not after.
 
 ## When to run dominance
 

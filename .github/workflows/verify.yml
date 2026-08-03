@@ -19,3 +19,19 @@ jobs:
         run: node tools/tests/run.js
       - name: Verify against the golden master (1590 checks)
         run: node tools/verify.js
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Playwright + Chromium
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Smoke suite (every screen, every drill, a full race, the pause card)
+        run: python3 tools/browser/smoke.py
+      - name: Career suite (division, pricing ladder, money, result recording)
+        run: python3 tools/browser/career.py
