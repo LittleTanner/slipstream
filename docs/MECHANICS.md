@@ -12,12 +12,20 @@ way to check you have not broken it.
 2. **`node tools/verify.js` — the golden master (1590 checks, ~1 min).** Catches ANY
    behavioral drift, but says only "something moved", not what. A deliberate physics
    change fails it by design; regenerate with `tools/golden-gen.js` + a note.
-3. **`node tools/dominance.js` — parts balance (~4.5 min).** 0 dominant, 0 dead is the
-   goal. Sensitive: the 3-seed casualty list can flip on tiny changes, so confirm a
-   dead/dominant verdict at 6 seeds before acting on it (edit SEEDS in a scratch copy).
+3. **`node tools/dominance.js` — parts balance (~1.5 min on worker threads).** 0
+   dominant, 0 dead is the goal; `DOM_SERIAL=1` forces the byte-identical serial
+   reference. Sensitive: the 3-seed casualty list can flip on tiny changes, so confirm
+   a dead/dominant verdict at 6 seeds before acting on it (edit SEEDS in a scratch copy).
+4. **Browser suites** — `python3 tools/browser/smoke.py` (~75s: every screen, every
+   drill, a shrunk race end to end, the pause card) and
+   `python3 tools/browser/career.py` (~2 min: division display, route-pack pricing
+   ladder, money, result recording, all against seeded saves). These cover the VIEW —
+   the dead-button / unregistered-screen / CSS-specificity class of bug the sim tests
+   cannot see.
 
-CI runs tiers 1 and 2 on every PR. Tier 3 is manual, after anything touching AI
-behavior, effort, or drafting. Box-section wheels are the canary.
+CI runs tiers 1 and 2 on every PR. Tiers 3 and 4 are manual: dominance after anything
+touching AI behavior, effort, or drafting (box-section wheels are the canary); smoke
+before shipping any UI change; career when touching progression, money, or saves.
 
 ---
 
@@ -88,6 +96,7 @@ shelter all hang off the label). Decision pending.
 | Abandonment | Three-week tours shrink the field to ~75%; quitting a tour costs it | `ABANDONMENT` | `abandonment.test.js` |
 | Groups | Peloton = largest group; break = riders 10+ clear of its head; ties resolve to the front group | `let peloton = groups[0]` | `groups.test.js` |
 | Course generation | Integer PRNG, deterministic per seed; DERIVE values, never add an R() call mid-generation | `course feature factories` | `course-gen.test.js` (+ golden per-case fields) |
+| Tours / GC / jerseys | Stage times sum into GC, points into green/polka, leaders derived and fed back per stage, fatigue carries | view glue: `finishStage` | `tour.test.js` |
 | Parts and builds | Six slots, three trades each, no budget; balance enforced by the harness, never by hand | `const PARTS` | dominance |
 
 ---
