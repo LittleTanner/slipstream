@@ -6,7 +6,7 @@ way to check you have not broken it.
 
 ## The three test tiers
 
-1. **`node tools/tests/run.js` — the mechanics suite (~45s).** One focused test per
+1. **`node tools/tests/run.js` — the mechanics suite (~30s).** One focused test per
    mechanic promise. A failure NAMES the mechanic that broke. Run it after every sim
    edit; it is the first thing to consult before the slower tiers.
 2. **`node tools/verify.js` — the golden master (1590 checks, ~1 min).** Catches ANY
