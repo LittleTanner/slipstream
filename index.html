@@ -287,7 +287,9 @@
   <div class="secthead">Units</div>
   <button class="go ghost" id="unitBtn">Km</button>
   <div class="secthead">Bib number</div>
-  <div class="segmented" id="bibRow"></div>
+  <div class="segmented" id="bibTens"></div>
+  <div class="segmented" id="bibOnes"></div>
+  <p class="sub" id="bibNote"></p>
   <div class="secthead">Help</div>
   <button class="go ghost" id="howBtn">How to play</button>
   <button class="go ghost" id="dataBtnMenu">Palmarès</button>
@@ -3980,17 +3982,33 @@ function divDots(cur) {
   for (let d = 8; d >= 1; d--) out += d === cur ? "●" : "○";
   return out;
 }
+// 1-99 in two taps: a tens row and a ones row (rivals wear two digits at this scale
+// already, so the old one-digit argument was wrong). Bibs are unique in a real race,
+// so the seven numbers the rivals wear are refused by name, and there is no bib 0.
+// The rows move freely (a draft), but only a legal number is SAVED — blocking the
+// intermediate tap would dead-end anyone routing through a rival's number.
+let bibDraft = null;
 function renderBibs() {
-  // 1-9, one digit, because that is what fits a rider drawn at this scale. No 0:
-  // road racing has no bib 0, and the deviation would be for nothing.
-  const row = $("bibRow"); row.innerHTML = "";
-  for (let n = 1; n <= 9; n++) {
-    const b = document.createElement("button");
-    b.textContent = String(n);
-    b.setAttribute("aria-pressed", String((ladder.bib || 1) === n));
-    b.addEventListener("click", () => { ladder.bib = n; Store.save(ladder); renderBibs(); });
-    row.appendChild(b);
-  }
+  const cur = bibDraft === null ? (ladder.bib || 1) : bibDraft;
+  const tens = Math.floor(cur / 10), ones = cur % 10;
+  const taken = Sim.FIELD.find(f => f.n === cur);
+  const legal = cur >= 1 && !taken;
+  if (legal && ladder.bib !== cur) { ladder.bib = cur; Store.save(ladder); }
+  $("bibNote").textContent = cur === 0 ? "There is no bib 0. Pick 1 to 99."
+    : taken ? cur + " is " + taken.name + "'s number."
+    : "You ride as number " + cur + ".";
+  const fill = (el, digit, make) => {
+    el.innerHTML = "";
+    for (let d = 0; d <= 9; d++) {
+      const b = document.createElement("button");
+      b.textContent = String(d);
+      b.setAttribute("aria-pressed", String(digit === d));
+      b.addEventListener("click", () => { bibDraft = make(d); renderBibs(); });
+      el.appendChild(b);
+    }
+  };
+  fill($("bibTens"), tens, d => d * 10 + ones);
+  fill($("bibOnes"), ones, d => tens * 10 + d);
 }
 function refreshMenu() {
   renderBibs();
@@ -7360,7 +7378,7 @@ $("drillBack").addEventListener("click", () => { renderPractice(); show("practic
 $("dbBack").addEventListener("click", () => { renderDrills(); show("drills"); });
 $("dbGo").addEventListener("click", () => startDrill(drillPick));
 $("drillDone").addEventListener("click", endDrill);
-$("setBtn").addEventListener("click", () => show("settings"));
+$("setBtn").addEventListener("click", () => { bibDraft = null; renderBibs(); show("settings"); });
 $("setBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });
 $("pracBtn").addEventListener("click", () => { renderPractice(); show("practice"); });
 $("pBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });

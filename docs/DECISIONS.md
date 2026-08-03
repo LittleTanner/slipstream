@@ -47,8 +47,11 @@ instead of new markers. Treat "add a HUD overlay" as a losing move.
   A hidden meter: failing a grab at 85% reads as a random denial. Same intent, readable
   rule instead: the hand-up sits at 0.60 of the zone, and the pass is LATCHED — be in
   the soigneur's lane as you cross the start of the line and stay on it, or no bag.
-- **Bib 0.** Road racing has no bib 0, and the deviation bought nothing. The picker is
-  1-9: one digit is what fits a rider drawn at this scale (rivals wear 11-78).
+- **Bib 0, and duplicate bibs.** Road racing has no bib 0 and no two riders share a
+  number, so the picker (1-99, two segmented digit rows in Settings) refuses 0 and the
+  seven numbers the rivals wear, by name ("42 is PICO's number"). An earlier 1-9 cut
+  argued one digit is all that fits a rider dot; wrong on its own evidence, since
+  rivals already wear 11-78 legibly at the same scale.
 - **Making 4-6 rider breaks rotate** (decided 2026-08, option "leave it"). The group
   detector calls the largest group "the peloton", and in an 8-rider field a 4+ break IS
   the largest group, so through-and-off never engages for it. This deviates from real
