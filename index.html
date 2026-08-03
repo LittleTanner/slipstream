@@ -296,7 +296,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 6</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 7</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -5626,7 +5626,11 @@ function drawHud(dt) {
   for (const d of [{ x: b.easeX, t: "", side: "L" }, { x: b.atkX, t: "", side: "R" }]) {
     const lit = lastSide === d.side && now - (strokes[strokes.length - 1] || -9) < 0.22;
     const rateNow = coast ? 0 : strokeRate(now);
-    const good = clamp((rateNow - 0.5) / 3.0, 0, 1);
+    // Full green exactly where the pay ceilings: effort saturates at strokeAttack
+    // (4.0/s) and the spin bonus at strokeFull + 2 (4.2/s). It used to saturate at
+    // 3.5/s, hiding the last ~8% of speed inside "already fully green" — the pads
+    // are an instrument, not an Easter egg.
+    const good = clamp((rateNow - 0.5) / 3.7, 0, 1);
     const pedalling = !coast && rateNow > 0.4;
     ctx.fillStyle = coast ? PAL.water
       : bad ? "rgba(213,94,0,.55)"
