@@ -54,6 +54,19 @@ instead of new markers. Treat "add a HUD overlay" as a losing move.
   the offer spends it. Chosen over abstract mini games (rollers, ghost chase,
   cyclocross remount) because chasing back through the cars is what actually happens
   after a real crash.
+- **A convoy you can sit in.** The chase-back cars were first spaced evenly across
+  whatever the gap was, which put them nose to tail: one continuous draft, so the chase
+  was a straight line at whatever the shelter gave you. Cars are now spaced FURTHER
+  apart than a car's draft reaches, so every rung is earned through clean air — and
+  they are solid, so you ride around them or you stop. Measured skill gradient: using
+  the cars AND pacing wins every seed; flat out with no pacing is broomed 8 of 9;
+  ignoring the cars is broomed 9 of 9.
+- **Letting the wheel change feed legs as well as distance.** A fumble then punished
+  both and the two multiplied into a near-certain DNF (broomed 2 of 3 with perfect
+  play). The change moves ONE axis — how far back you restart — and the roadside stop
+  gives every rider the same breather. Related: a rider revived on cracked legs is
+  capped below bunch pace, so the whole convoy sails away and no chase exists at any
+  spacing; the leg floor is load-bearing, not generosity.
 - **A presence-percentage rule for the musette** ("in the lane 90% of the line").
   A hidden meter: failing a grab at 85% reads as a random denial. Same intent, readable
   rule instead: the hand-up sits at 0.60 of the zone, and the pass is LATCHED — be in

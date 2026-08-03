@@ -84,7 +84,8 @@ Revisit only if fields grow beyond 8.
 | Corners / switchbacks | Carrying too much speed into a bend costs speed and can crash you; AI brakes by sharpness | `Brake for the corner` | `cornering.test.js` |
 | Road furniture | Junctions, medians, roundabouts, narrows, surfaces, potholes; the hop clears holes and medians | `HOP A POTHOLE` | `road-furniture.test.js` (surfaces, narrows; the rest golden) |
 | Crashes | Impact severity scales with speed and lean; in top divisions a bad one ends your race (+9999 sentinel) | `function impact` | `crash.test.js` (+ the golden sentinel case) |
-| Second chance | ONE revival per crash-out race: wheel-change taps set the restart gap, the convoy's bumper drafts are the ladder back, slaloming is mandatory; catch the bunch or the broom wagon ends it for good. An unrevived race is bit-identical to before (verify passes with no regen) | `THE SECOND CHANCE` | `second-chance.test.js` |
+| Second chance | ONE revival per crash-out race: wheel-change taps set the restart gap, the convoy's bumper drafts are the ladder back, and you must both USE the cars and pace it; catch the bunch or the broom wagon ends it for good. An unrevived race is bit-identical to before (verify passes with no regen) | `THE SECOND CHANCE` | `second-chance.test.js` |
+| Cars are solid | A team car is a wall, not scenery: you are held at its bumper and carried at its pace until you steer around it. A position constraint, because bleeding closing speed (how riders hold each other off) let a rider grind straight through the bodywork | `A POSITION CONSTRAINT, NOT A SPEED PENALTY` | `second-chance.test.js` (head-on) |
 | Punctures | A flat is a STOP; the team car and sticky bottle bring you back | `A puncture is a stop` | `puncture.test.js` |
 
 ## Racing furniture
