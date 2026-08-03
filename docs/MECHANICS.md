@@ -16,8 +16,9 @@ way to check you have not broken it.
    dominant, 0 dead is the goal; `DOM_SERIAL=1` forces the byte-identical serial
    reference. Sensitive: the 3-seed casualty list can flip on tiny changes, so confirm
    a dead/dominant verdict at 6 seeds before acting on it (edit SEEDS in a scratch copy).
-4. **Browser suites** — `python3 tools/browser/smoke.py` (~75s: every screen, every
-   drill, a shrunk race end to end, the pause card) and
+4. **Browser suites** — `python3 tools/browser/smoke.py` (~90s: every screen, every
+   drill, a daily-challenge start on today's real course, a shrunk race end to end,
+   the pause card) and
    `python3 tools/browser/career.py` (~2 min: division display, route-pack pricing
    ladder, money, result recording, all against seeded saves). These cover the VIEW —
    the dead-button / unregistered-screen / CSS-specificity class of bug the sim tests
@@ -50,6 +51,7 @@ The most player-facing mechanic; it has its own suite. All of it lives in
 | Turn cue order | YOUR TURN only when the front's pull is done AND you are next in the working file | `rotation-cue.test.js` |
 | Swing-off + rejoin | A relieved rider swings aside, drifts outside the file, tucks in ON the last wheel, never mid-file, never colliding | `rotation-rejoin.test.js` |
 | The queue | You are only called again once you have BEEN TO THE BACK since your last pull; a shirking mate waives that after a full cycle | `rotation-recall.test.js` |
+| Cohesion | The working rotation is the cohesive chain at the head of the break (gaps > 10 m break it); a companion you dropped keeps no rotation alive and no cue fires while you are functionally alone | `rotation-cohesion.test.js` |
 | Drop-back | Soft-pedalling after your pull peels you off the train in ~3-4s (the swinger's cut, player edition) | `rotation-dropback.test.js` |
 | Wheel-suck escalation | Called and refusing: elbow flick, then the break sits up. Waiting your turn: never punished | `refusal.test.js` |
 | Go-around | Easing on the front without moving aside gets you passed within seconds, not a stalled train | covered inside `rotation-dropback` / `refusal` |
@@ -95,6 +97,8 @@ Revisit only if fields grow beyond 8.
 | Feed zones | Food scattered along the road (deliberately not gating attacks); musettes hand up on a line; empties carried or littered | `musetteReach` in CFG | `feedzone.test.js` (items; musette line + litter golden) |
 | Time trial | Start intervals, no-draft rule (yield when caught), time checks, cadence | `race.spec.tt` | `tt.test.js` (intervals, sheltering; checks + cadence golden) |
 | Abandonment | Three-week tours shrink the field to ~75%; quitting a tour costs it | `ABANDONMENT` | `abandonment.test.js` |
+| Finish roll-out | Riders ride THROUGH the line and coast, never parking on it; a finisher cannot speed-cap a sprinter still racing; the world lingers ~4 s after you cross | `RIDE THROUGH THE LINE` | `finish-rollout.test.js` |
+| Bottle-drop placement | No drop zone before the first feed (no empty can exist yet); always one after the last feed | `Never before the first feed` | `litter-placement.test.js` |
 | Groups | Peloton = largest group; break = riders 10+ clear of its head; ties resolve to the front group | `let peloton = groups[0]` | `groups.test.js` |
 | Course generation | Integer PRNG, deterministic per seed; DERIVE values, never add an R() call mid-generation | `course feature factories` | `course-gen.test.js` (+ golden per-case fields) |
 | Tours / GC / jerseys | Stage times sum into GC, points into green/polka, leaders derived and fed back per stage, fatigue carries | view glue: `finishStage` | `tour.test.js` |

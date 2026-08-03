@@ -273,6 +273,54 @@ async def flow_race(browser, uri):
         await ctx.close()
 
 
+async def flow_daily(browser, uri):
+    """Daily challenge start: menu -> daily -> build -> roll out -> 12s soak.
+
+    Exists because the daily start path shipped a freeze the other flows could not
+    see: the daily always fits radio level 3, whose LEADER readout hit an
+    out-of-scope variable and killed the rAF loop with a ReferenceError. The soak
+    covers the countdown, the flag and the first racing seconds on TODAY'S course
+    (the template rotates with the real date, which makes this a rolling canary).
+    """
+    ctx, pg, errs = await new_page(browser, uri)
+    try:
+        await pg.click("#dailyBtn")
+        await pg.locator("#daily").wait_for(state="visible")
+        if await pg.locator("#dRide").is_disabled():
+            return False, "daily 'Ride it' disabled on a fresh profile"
+        await pg.click("#dRide")
+        await pg.locator("#build").wait_for(state="visible")
+        await pg.click("#bLock")
+        await pg.locator("#brief").wait_for(state="visible")
+        base = len(errs)
+        await pg.click("#rollBtn")
+        try:
+            await pg.locator("#brief").wait_for(state="hidden", timeout=3000)
+        except Exception:
+            e = first_err(errs, base)
+            return False, "daily never started after Roll out" \
+                + (" (page error: %s)" % e if e else "")
+        # The freeze presented as a dead rAF loop, so assert the loop is ALIVE at the
+        # end of the soak, not just that no error fired.
+        side = 0
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < 12:
+            await pg.keyboard.press("z" if side == 0 else "x")
+            side ^= 1
+            await asyncio.sleep(0.11)
+        e = first_err(errs, base)
+        if e:
+            return False, "page error during the daily: " + e
+        f0 = await pg.evaluate("window.__smokeF = 0; requestAnimationFrame(function c(){window.__smokeF++; requestAnimationFrame(c)}); 0")
+        await pg.wait_for_timeout(1000)
+        frames = await pg.evaluate("window.__smokeF")
+        if frames < 20:
+            return False, "render loop nearly dead: %d frames in 1s" % frames
+        return True, "daily rolled out and ran 12s, loop alive (%d fps)" % frames
+    finally:
+        await ctx.close()
+
+
 # ---------------------------------------------------------------- main
 
 async def main():
@@ -287,7 +335,7 @@ async def main():
             browser = await launch(p)
             try:
                 for name, fn in [("load", flow_load), ("screens", flow_screens),
-                                 ("drills", flow_drills)]:
+                                 ("drills", flow_drills), ("daily", flow_daily)]:
                     t0 = time.monotonic()
                     try:
                         ok, detail = await fn(browser, uri)
