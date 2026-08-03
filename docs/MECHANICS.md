@@ -23,9 +23,9 @@ way to check you have not broken it.
    the dead-button / unregistered-screen / CSS-specificity class of bug the sim tests
    cannot see.
 
-CI runs tiers 1 and 2 on every PR. Tiers 3 and 4 are manual: dominance after anything
-touching AI behavior, effort, or drafting (box-section wheels are the canary); smoke
-before shipping any UI change; career when touching progression, money, or saves.
+CI runs tiers 1, 2 and 4 on every PR (the browser suites as a parallel job, so they do
+not slow the golden down). Tier 3 is manual: dominance after anything touching AI
+behavior, effort, or drafting (box-section wheels are the canary).
 
 ---
 

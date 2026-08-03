@@ -33,7 +33,8 @@ the single thing that would be lost by porting to Swift early.
    `docs/MECHANICS.md`.
 4. `node tools/verify.js` — 1590 checks against the golden. Exits nonzero on failure.
    CI (`.github/workflows/verify.yml`) runs extract + mechanics suite + verify on
-   every PR and push to main, so a broken mechanic or golden cannot merge quietly.
+   every PR and push to main, plus the two browser suites as a parallel job, so a
+   broken mechanic, golden, or screen cannot merge quietly.
 5. `node tools/golden-gen.js` — regenerate after ANY sim change (physics, parts,
    rivals, course). Update its `G.note` to say what changed. Takes several minutes, so
    give it a generous timeout.
