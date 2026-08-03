@@ -43,6 +43,17 @@ instead of new markers. Treat "add a HUD overlay" as a losing move.
   (tapping IS pedalling, holding a side IS steering). The existing hop button is used.
 - **A button to auto-position you in a rotation.** It would remove the only skill the
   mechanic teaches. The problem was that the rotation was invisible, not that it was hard.
+- **"Rejoin as if the crash never happened"** for the second chance, and **three
+  chances a race**. Both cut (2026-08). Erasing the crash makes crashing out a loading
+  screen and recklessness free; three chances is functionally always. Shipped shape:
+  ONCE per race, and the revival is a diegetic chase — wheel-change taps set how far
+  behind the bunch you restart, the convoy's bumper drafts are the ladder back
+  (slaloming bumper to bumper is mandatory; the road's crown drafts nothing), and the
+  broom wagon ends it exactly as if you had never tried. A bad wheel change costs
+  legs, not a stat: you must ride harder to make it, and you arrive cooked. Declining
+  the offer spends it. Chosen over abstract mini games (rollers, ghost chase,
+  cyclocross remount) because chasing back through the cars is what actually happens
+  after a real crash.
 - **A presence-percentage rule for the musette** ("in the lane 90% of the line").
   A hidden meter: failing a grab at 85% reads as a random denial. Same intent, readable
   rule instead: the hand-up sits at 0.60 of the zone, and the pass is LATCHED — be in
