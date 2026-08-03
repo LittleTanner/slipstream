@@ -202,6 +202,40 @@ async def main():
               "balance figure shows %r" % r["big"])
         await ctx.close()
 
+        # ---- 5. race craft is a CHOICE, not a win-count drip -----------------
+        # Both items used to arrive automatically on career wins, so the build was
+        # choiceless. Fitting decides whether you carry it; the career decides how
+        # good it is. The limit is 1 while the pool is 2, so carrying one must
+        # DROP the other, which is the whole point.
+        ladder = {"tutorialDone": True, "div": 4, "tours": 3, "wins": 5,
+                  "money": 1500, "tactics": ["radio"]}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        await pg.click("#buildBtn")
+        await pg.locator("#build").wait_for(state="visible")
+
+        async def craft():
+            return await pg.evaluate(
+                "Object.fromEntries([...document.querySelectorAll('#bTactics .card')]"
+                ".filter(c => c.querySelector('.btns'))"
+                ".map(c => [c.querySelector('b').textContent,"
+                " c.querySelector('.btns button').textContent]))")
+
+        st = await craft()
+        check("race craft: seeded fit shows as carried",
+              st.get("Race radio") == "Carrying" and st.get("Power meter") == "Carry this",
+              "seeded radio, cards read %r" % st)
+        await pg.locator("#bTactics .card", has_text="Power meter").locator(".btns button").click()
+        await pg.wait_for_timeout(150)
+        st = await craft()
+        check("race craft: carrying one drops the other",
+              st.get("Power meter") == "Carrying" and st.get("Race radio") == "Carry this",
+              "after carrying the power meter, cards read %r" % st)
+        saved = await pg.evaluate(
+            "window.storage.get('slipstream:ladder').then(r => r ? JSON.parse(r.value).tactics : null)")
+        check("race craft: the choice persists", saved == ["powerMeter"],
+              "saved tactics %r" % (saved,))
+        await ctx.close()
+
         # ---- 2. route pack pricing ladder: BY COUNT OWNED, not by pack ------
         # alps (the only pack with climbs, so the only card that can show a
         # price) stays unowned; other ids fill the owned list. Its displayed
