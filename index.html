@@ -284,11 +284,13 @@
 <div id="chanceCard" class="hide"><div class="tcInner">
   <div class="tcGrip"></div>
   <div class="tcStep">Crashed out</div>
-  <h3>The spare bike is on the roof</h3>
-  <p>One chance. Take the wheel change, then chase back through the team cars: sling
-  from bumper to bumper and catch the bunch before the broom wagon catches you.</p>
+  <h3>Take the spare bike?</h3>
+  <p>You get <b>one</b> chance a race. Change the wheel, then chase back up through the
+  team cars and catch the bunch before the broom wagon does. Ride around the cars, not
+  through them, and use each one's slipstream to reach the next.</p>
+  <p class="sub">Miss the bunch and your race is over anyway.</p>
   <button class="go" id="chGo">Chase back on</button>
-  <button class="go ghost" id="chQuit">Accept it</button>
+  <button class="go ghost" id="chQuit">No, end my race here</button>
 </div></div>
 
 <div class="screen hide" id="settings"><div class="inner">
@@ -311,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 9</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 10</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -554,10 +556,30 @@ const CFG = {
   // is the road, not a hidden dial turned against you. Going down is always your own
   // line, never something a rival did, and the message always names the mistake.
   crashDown: 0.38, crashOut: 1.05, downTime: 7.0, outDiv: 3,
+  // A CAR IS A CAR-SIZED OBSTACLE. These were drawn at rider size (1.15 x 1.84, the
+  // same box as a bike) which is why they read as scenery to ride through. The world
+  // size lives here and the renderer scales from it, so what you see is what you hit.
+  carLen: 2.8, carW: 1.5,
+  // Contact thresholds, centre to centre: half a rider plus half a car, exactly how
+  // HIT_LON/HIT_LAT work between two riders.
+  carLon: 2.35, carLat: 1.33,
   // The second chance: chasing back through the convoy after a crash-out.
-  chanceGap: 58, chanceGapMin: 34,    // restart distance behind the bunch, by wheel-change quality
-  chanceTime: 45,                     // seconds to catch the bunch before the broom wagon
-  convoyN: 5,                         // team cars strung between you and the bunch
+  chanceGap: 94, chanceGapMin: 58,    // restart distance behind the bunch, by wheel-change quality
+  chanceTime: 58,                     // seconds to catch the bunch before the broom wagon
+  // ★ LEGS ARE THE CURRENCY OF THE CHASE, so the roadside stop pays some back. The
+  // convoy holds station on the BUNCH, so every rung moves at bunch pace: the only way
+  // up the ladder is to exceed it, and the drafts make that cheap rather than free. A
+  // rider revived on cracked legs is capped BELOW bunch pace and the whole convoy simply
+  // sails away — measured, and unwinnable at any spacing.
+  // FLAT, deliberately: when the wheel change fed legs as well as distance, a fumble
+  // punished both and the two multiplied into a near-certain DNF (broomed 2 of 3 with
+  // perfect play). The change now moves ONE axis — how far back you start — and every
+  // rider gets the same breather, which is also the easier promise to state.
+  chanceLegs: 0.85,
+  // Cars are spaced FURTHER APART than a car's draft reaches (carDraft 13), so every
+  // bumper has to be earned with a real acceleration through clean air. The number of
+  // cars therefore falls out of how bad the wheel change was: a fumble means more rungs.
+  convoySpace: 20, convoyMax: 8,
   // Effort comes out of the pedals continuously. Stop pedalling and you soft pedal
   // and slowly lose ground; about two strokes a second holds tempo; more attacks.
   idle: 0.815, freeDraft: 0.72, strokeTempo: 2.0, strokeAttack: 4.0, strokeFull: 2.2,
@@ -1886,16 +1908,29 @@ function secondChance(race, quality) {
   const gap = CFG.chanceGap - (CFG.chanceGap - CFG.chanceGapMin) * q;
   you.dist = tail - gap; you.prev = you.dist;
   you.speed = CFG.base * 0.8; you.x = 0; you.tx = 0; you.vx = 0;
-  // Cars from just behind the bunch back toward you, evenly spaced: a worse wheel
-  // change means a longer chase AND wider hops between bumpers.
+  you.energy = Math.max(you.energy, you.legCap * CFG.chanceLegs);
+  you.cracked = false; you.spent = 0;
+  // ★ THE RUNGS OF THE LADDER, AT A FIXED SPACING. Spacing them evenly across whatever
+  // the gap was put five cars nose to tail in a lay-by: one long draft you could sit in
+  // the whole way. They are pinned convoySpace apart instead, laid out FROM the player
+  // forward, so the first bumper is always the same reach away and a worse wheel change
+  // simply means more of them to climb. They alternate sides, because a straight line of
+  // cars is a wall and the whole skill is picking your way up the convoy.
+  // Anchored at BOTH ends — 12 m off the bunch to 14 m off you. Pinning the spacing from
+  // the player instead left the last rung 24 m short of the bunch, and a rider who spent
+  // their tank climbing the ladder blew up in that unassisted final jump every time
+  // (measured: 20 m short, every seed). The count is whatever fits at roughly
+  // convoySpace, so every rung stays further apart than a car's draft reaches.
+  const span = Math.max(CFG.convoySpace, gap - 26);
+  const n = Math.max(2, Math.min(CFG.convoyMax, Math.round(span / CFG.convoySpace) + 1));
   race.convoy = [];
-  for (let i = 0; i < CFG.convoyN; i++) {
-    const off = 8 + i * (gap - 18) / (CFG.convoyN - 1);
-    race.convoy.push({ off, dist: tail - off, x: (i % 2 ? 1.8 : -1.8) });
+  for (let i = 0; i < n; i++) {
+    race.convoy.push({ off: 12 + span * i / (n - 1), dist: 0, x: (i % 2 ? 1 : -1) * 1.9 });
   }
-  race.chance = { active: true, until: race.clock + CFG.chanceTime };
+  for (const car of race.convoy) car.dist = tail - car.off;
+  race.chance = { active: true, gap0: gap, until: race.clock + CFG.chanceTime };
   race.over = false; race.overAt = undefined;
-  race.events.push({ t: "CHASE THE CARS \u00b7 CATCH THE BUNCH", c: "you" });
+  race.events.push({ t: "CHASE THE CARS", c: "you" });
   return true;
 }
 
@@ -3397,6 +3432,46 @@ function resolve(race, dt) {
       else if (front.you && closing > 1) bump(race, front, "HIT FROM BEHIND");
     }
   }
+  // ★ THE CONVOY IS SOLID. The cars were scenery you rode straight through, which made
+  // the chase back a straight line at whatever the drafts gave you rather than a slalom
+  // up the convoy. A car is now exactly a rider you cannot ride through — the one
+  // difference being that a car never gives way, so the whole shove lands on you.
+  // Only live during a second chance; there is no convoy at any other time, so this
+  // cannot touch an ordinary race.
+  if (race.convoy && race.chance && race.chance.active) {
+    for (const r of rs) {
+      if (r.finished || r.out) continue;
+      const lim = edgeAt(race.course, r.dist);
+      for (const car of race.convoy) {
+        const dd = car.dist - r.dist;
+        if (Math.abs(dd) >= CFG.carLon) continue;
+        let dx = car.x - r.x;
+        if (Math.abs(dx) >= CFG.carLat) continue;
+        if (Math.abs(dx) < 1e-3) dx = 1e-3;
+        const side = dx > 0 ? 1 : -1;                 // the car is on this side of you
+        const overlap = CFG.carLat - Math.abs(dx);
+        const carV = race.pelotonPace || CFG.base;
+        // Shoved out of its flank, harder than a rider shoves: a car does not flinch.
+        r.x = clamp(r.x - side * Math.min(overlap, 5.5 * dt), -lim, lim);
+        if (dd > 0) {
+          // ★ A POSITION CONSTRAINT, NOT A SPEED PENALTY. Bleeding the closing speed is
+          // how riders hold each other off, and against a car it was not enough: a rider
+          // pedalling flat out still ground straight through the bodywork at ~2.7 m/s
+          // (measured, 0.7 m off its centre line). You simply cannot occupy the space a
+          // car is in, so you are held at its back bumper and carried at its pace until
+          // you steer out of its way — ram it and you stop making progress, which is the
+          // whole point of having to ride around them.
+          r.dist = Math.min(r.dist, car.dist - CFG.carLon);
+          r.prev = Math.min(r.prev, r.dist);
+          r.speed = Math.min(r.speed, carV);
+          if (r.you) bump(race, r, "INTO THE BACK OF THE CAR");
+        } else {
+          r.speed = Math.min(r.speed, carV * 1.02);    // scraping down its flank
+          if (r.you) bump(race, r, "SCRAPED THE CAR");
+        }
+      }
+    }
+  }
 }
 function bump(race, r, text) {
   if (r.bump > 0) return;
@@ -3448,7 +3523,11 @@ function tick(race, dt) {
     if (you.dist > tail - 2.5) {
       race.chance.active = false; race.convoy = null;
       race.events.push({ t: "BACK IN THE BUNCH", c: "green" });
-    } else if (race.clock > race.chance.until) {
+    } else if (race.clock > race.chance.until
+               || tail - you.dist > (race.chance.gap0 || 0) * 1.4 + 8) {
+      // Time up, OR clearly going backwards. Without the second test a cracked rider
+      // watched the convoy sail away for another forty seconds with the result already
+      // decided \u2014 the commissaire pulls a rider who is visibly gone, and so do we.
       race.chance.active = false; race.convoy = null;
       you.out = true; you.down = 0; you.speed = 0;
       race.events.push({ t: "THE BROOM WAGON \u00b7 RACE OVER", c: "spot" });
@@ -5233,7 +5312,7 @@ function drawRiders() {
       ctx.beginPath(); ctx.moveTo(cx3, cy2); ctx.lineTo(lx3, sy(bx)); ctx.lineTo(rx3, sy(bx));
       ctx.closePath(); ctx.fill();
       ctx.restore();
-      drawCar(cx3, cy2, riderR * 2.0, riderR * 3.2, { body: "#2E312F", wheels: true, stripe: r.c });
+      drawCar(cx3, cy2, Sim.CFG.carW * pxM, Sim.CFG.carLen * pxM, { body: "#2E312F", wheels: true, stripe: r.c });
     }
     if (r.hop > 0) {                                   // airborne: a shadow under you
       ctx.save();
@@ -5672,12 +5751,27 @@ function drawHud(dt) {
   label(M.speed(you.speed).toFixed(0), W - pad, b.y - 16, 28, 700, PAL.ink, "right", -0.5);
   label(M.speedTag(), W - pad, b.y - 2, 10, 500, "rgba(46,49,47,.42)", "right", 1.4);
 
+  // Riders off the top of the screen, as pips on a rail with how far up the road they
+  // are. STAGGERED when they bunch up: at 10.5px a three-digit gap is ~22px wide, so
+  // two riders within a bike length of each other printed their numbers straight
+  // through one another and neither could be read (Kevin's screenshot: "31 26 30 25").
+  // Sorted by screen x, and any label too close to the one before it drops a row.
+  const pips = [];
   for (const r of race.riders) {
     if (r === you || sy(r.dist) > topBar + 116) continue;
-    const x = clamp(sx(r.dist, r.x), pad + 74, W - pad - 74), yy = topBar + 116;
-    ctx.fillStyle = r.c;
-    ctx.beginPath(); ctx.moveTo(x, yy - 9); ctx.lineTo(x + 7, yy + 2); ctx.lineTo(x - 7, yy + 2); ctx.closePath(); ctx.fill();
-    label(String(Math.round(r.dist - you.dist)), x, yy + 15, 10.5, 700, r.c, "center", 0);
+    pips.push({ r, x: clamp(sx(r.dist, r.x), pad + 74, W - pad - 74) });
+  }
+  pips.sort((a, b) => a.x - b.x);
+  let lastLabelX = -1e9, row = 0;
+  for (const p of pips) {
+    const yy = topBar + 116;
+    ctx.fillStyle = p.r.c;
+    ctx.beginPath(); ctx.moveTo(p.x, yy - 9); ctx.lineTo(p.x + 7, yy + 2); ctx.lineTo(p.x - 7, yy + 2); ctx.closePath(); ctx.fill();
+    const txt = String(Math.round(p.r.dist - you.dist));
+    const wNeed = textW(txt, 10.5, 700, 0) + 5;
+    row = (p.x - lastLabelX) < wNeed ? (row + 1) % 2 : 0;
+    lastLabelX = p.x;
+    label(txt, p.x, yy + 15 + row * 12, 10.5, 700, p.r.c, "center", 0);
   }
   coach();
   drawFlashes(dt);
@@ -5990,7 +6084,7 @@ function drawTeamCar(dt) {
   const cd = you.dist + teamCar.dOff, cy = sy(cd);
   if (cy < -90 || cy > H + 110) return;
   const cx = sx(cd, teamCar.x);
-  const w = riderR * 2.0, h = riderR * 3.2;
+  const w = Sim.CFG.carW * pxM, h = Sim.CFG.carLen * pxM;
   if (teamCar.phase === 4) {                       // the shelter, while it is real
     const good = clamp(1 - Math.abs(you.x - tx) / Sim.CFG.towShelter, 0, 1);
     const bx = you.dist - 1.5;
@@ -6112,7 +6206,7 @@ function drawConvoy() {
     const cy = sy(car.dist);
     if (cy < -90 || cy > H + 90) continue;
     const cx = sx(car.dist, car.x);
-    const cw = riderR * 1.9, ch = riderR * 3.2;
+    const cw = Sim.CFG.carW * pxM, ch = Sim.CFG.carLen * pxM;
     const gap = car.dist - race.you.dist;
     let tow = 0;
     if (gap > 0.5 && gap < Sim.CFG.carDraft) {
@@ -6161,9 +6255,28 @@ function drawChanceOverlay() {
     let tail = Infinity;
     for (const r of race.riders) if (!r.you && !r.finished && !r.out && r.inPeloton && r.dist < tail) tail = r.dist;
     const gap = isFinite(tail) ? Math.max(0, tail - race.you.dist) : 0;
-    label("CATCH THE BUNCH", W / 2, topBar + 58, 11, 700, "rgba(46,49,47,.6)", "center", 1.4);
-    label(Math.ceil(left) + "s", W / 2, topBar + 84, 30, 700, left < 10 ? PAL.spot : PAL.ink, "center", -0.5);
-    label("+" + M.near(gap), W / 2, topBar + 102, 12, 700, PAL.ink, "center", 0.5);
+    // ★ IN THE PANEL SLOT, NOT ACROSS THE MIDDLE OF THE ROAD. Centred at the top it
+    // landed straight on the rival pips and the position readout — three stacked
+    // numbers over the busiest part of the screen. This is the same rounded panel the
+    // CLEAR BY box uses, in the same place, and the two can never both be up (that one
+    // needs you AHEAD of the bunch, this one needs you behind it).
+    // BELOW the rival pip rail, not level with it. The CLEAR BY box this borrows its
+    // shape from can sit at gy + 20 because when you are up the road there is nobody
+    // ahead to draw pips for — in a chase the rail is full of them, and the panel
+    // landed straight on the numbers.
+    const pad = Math.max(14, W * 0.045), gy = topBar + 10 + 84;
+    const sw = Math.max(168, W * 0.44), sxp = W - pad - sw, syp = gy + 62;
+    const urgent = left < 12;
+    ctx.save();
+    ctx.fillStyle = "rgba(244,242,236,.92)"; roundRect(sxp, syp, sw, 54, 11); ctx.fill();
+    ctx.strokeStyle = urgent ? PAL.spot : "rgba(46,49,47,.22)"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.restore();
+    label("CATCH THE BUNCH", sxp + 12, syp + 16, 9.5, 700, "rgba(46,49,47,.55)", "left", 1.3);
+    label("+" + M.near(gap), sxp + 12, syp + 36, 13, 700, PAL.ink, "left", 0.4);
+    label(Math.ceil(left) + "s", sxp + sw - 12, syp + 36, 18, 700, urgent ? PAL.spot : PAL.ink, "right", -0.3);
+    ctx.fillStyle = "rgba(46,49,47,.15)"; roundRect(sxp + 12, syp + 43, sw - 24, 6, 3); ctx.fill();
+    ctx.fillStyle = urgent ? PAL.spot : "rgba(46,49,47,.45)";
+    roundRect(sxp + 12, syp + 43, (sw - 24) * clamp(left / Sim.CFG.chanceTime, 0, 1), 6, 3); ctx.fill();
   }
 }
 function drawPacer(dt) {
@@ -6176,7 +6289,7 @@ function drawPacer(dt) {
   if (p.dist === undefined) return;
   const cx = sx(p.dist, p.x), cy = sy(p.dist);
   if (cy < -90 || cy > H + 90) return;
-  const cw = riderR * 2.0, ch = riderR * 3.4;
+  const cw = Sim.CFG.carW * pxM, ch = Sim.CFG.carLen * pxM;
   // ★ THE CAR'S WAKE, visible ONLY from inside it. Drawing it always would hand the
   // pace-car sling to everyone on the start line; carTow is what the sim actually
   // pays you, it is zero through the whole neutral roll-out (the sim gates it on the
