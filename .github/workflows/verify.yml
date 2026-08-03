@@ -15,5 +15,7 @@ jobs:
           node-version: 22
       - name: Extract the sim from index.html
         run: node tools/extract.js
+      - name: Mechanics suite (one test per mechanic promise)
+        run: node tools/tests/run.js
       - name: Verify against the golden master (1590 checks)
         run: node tools/verify.js

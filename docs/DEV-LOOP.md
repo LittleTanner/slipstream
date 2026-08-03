@@ -26,16 +26,23 @@ the single thing that would be lost by porting to Swift early.
    `const Sim = (function`, then the first line after it whose trimmed content is
    `})();`, and writes that slice plus `module.exports = Sim;` to `tools/sim.js`.
    **Re-extract after every sim edit.**
-3. `node tools/verify.js` — 1590 checks against the golden. Exits nonzero on failure.
-   CI (`.github/workflows/verify.yml`) runs the same extract + verify on every PR and
-   push to main, so a broken golden cannot merge quietly.
-4. `node tools/golden-gen.js` — regenerate after ANY sim change (physics, parts,
+3. `node tools/tests/run.js` — the MECHANICS SUITE (~25s): one focused test per
+   mechanic promise (rotation, drafting, crosswind, climbing selection, recovery,
+   wheel-suck escalation...). A failure NAMES what broke — check this before the
+   slower tiers. The catalog of every mechanic, its promise, and its coverage is
+   `docs/MECHANICS.md`.
+4. `node tools/verify.js` — 1590 checks against the golden. Exits nonzero on failure.
+   CI (`.github/workflows/verify.yml`) runs extract + mechanics suite + verify on
+   every PR and push to main, so a broken mechanic or golden cannot merge quietly.
+5. `node tools/golden-gen.js` — regenerate after ANY sim change (physics, parts,
    rivals, course). Update its `G.note` to say what changed. Takes several minutes, so
    give it a generous timeout.
-5. `node tools/dominance.js` — parts balance. Goal: 0 dominant, 0 dead. It is
-   body-aware, because parts are only a ~35% tune on top of a rider's body.
-6. `python3 tools/loadcheck.py` — headless page-error check.
-7. Ship: commit `index.html`, re-extract from the COMMITTED file, verify again. Bump the
+6. `node tools/dominance.js` — parts balance. Goal: 0 dominant, 0 dead. It is
+   body-aware, because parts are only a ~35% tune on top of a rider's body. The 3-seed
+   verdict flips on tiny changes: confirm a dead/dominant call at 6 seeds before
+   acting on it.
+7. `python3 tools/loadcheck.py` — headless page-error check.
+8. Ship: commit `index.html`, re-extract from the COMMITTED file, verify again. Bump the
    build number at the bottom of Settings (`verLine`) with every shipped change, so what
    is deployed is checkable against what was pushed.
 
