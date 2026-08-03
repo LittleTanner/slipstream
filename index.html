@@ -155,6 +155,11 @@
     border-top:1.5px solid rgba(46,49,47,.16);border-radius:20px 20px 0 0;padding:10px 18px 20px;
     box-shadow:0 -12px 34px rgba(46,49,47,.18)}
   #pauseCard.hide{display:none}
+  #chanceCard{position:fixed;left:0;right:0;bottom:0;z-index:42;background:var(--paper);
+    border-top:1.5px solid rgba(46,49,47,.16);border-radius:20px 20px 0 0;padding:10px 18px 20px;
+    box-shadow:0 -12px 34px rgba(46,49,47,.18)}
+  #chanceCard.hide{display:none}
+  #chanceCard .go{width:100%;margin-bottom:8px}
   #pCal.hide{display:none}
   #pauseCard .go{width:100%;margin-bottom:8px}
   #tutCard.hide{display:none}
@@ -276,6 +281,16 @@
   <p id="pFoot" class="sub"></p>
 </div></div>
 
+<div id="chanceCard" class="hide"><div class="tcInner">
+  <div class="tcGrip"></div>
+  <div class="tcStep">Crashed out</div>
+  <h3>The spare bike is on the roof</h3>
+  <p>One chance. Take the wheel change, then chase back through the team cars: sling
+  from bumper to bumper and catch the bunch before the broom wagon catches you.</p>
+  <button class="go" id="chGo">Chase back on</button>
+  <button class="go ghost" id="chQuit">Accept it</button>
+</div></div>
+
 <div class="screen hide" id="settings"><div class="inner">
   <button class="navback" id="setBack" aria-label="Back">&#8592;</button>
   <h2>Settings</h2>
@@ -296,7 +311,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 7</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 8</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -539,6 +554,10 @@ const CFG = {
   // is the road, not a hidden dial turned against you. Going down is always your own
   // line, never something a rival did, and the message always names the mistake.
   crashDown: 0.38, crashOut: 1.05, downTime: 7.0, outDiv: 3,
+  // The second chance: chasing back through the convoy after a crash-out.
+  chanceGap: 58, chanceGapMin: 34,    // restart distance behind the bunch, by wheel-change quality
+  chanceTime: 45,                     // seconds to catch the bunch before the broom wagon
+  convoyN: 5,                         // team cars strung between you and the bunch
   // Effort comes out of the pedals continuously. Stop pedalling and you soft pedal
   // and slowly lose ground; about two strokes a second holds tempo; more attacks.
   idle: 0.815, freeDraft: 0.72, strokeTempo: 2.0, strokeAttack: 4.0, strokeFull: 2.2,
@@ -1646,7 +1665,7 @@ function makeRider(cfg, i, isYou, typeKey, R, extra) {
     stats: Object.assign({}, BASE_STATS, isYou ? a.stats : devStats(a.stats, cfg.D), extra || {}),
     dist: -(i * 2.2) - (isYou ? 4 : 0), prev: 0,
     x: clamp(((i % 5) - 2) * 1.5 + (Math.floor(i / 5) ? 0.7 : 0), -3.4, 3.4),
-    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0, musette: 0, swingOff: 0, swingT: 0, passBy: 0,
+    tx: 0, txS: 0, vx: 0, speed: 0, shelterOff: 0, startAt: 0, draftT: 0, musette: 0, swingOff: 0, swingT: 0, passBy: 0, convoyTow: 0,
     energy: 100, fuel: 100, fluid: 100,
     cracked: false, bonk: false, dry: false, absorb: 0, jump: 1, burst: 0, effV: undefined, launch: false, launched: false, prevEff: "tempo", bump: 0,
     eff: "tempo", q: 0, wheel: null, inPeloton: true, stumble: 0, spin: 0,
@@ -1845,6 +1864,41 @@ function impact(race, r, bite, why) {
   race.events.push({ t: why, c: "spot" });
 }
 
+// ★ THE SECOND CHANCE. In real racing a crash is rarely the end: you take the spare
+// bike off the roof and chase back through the team cars. Called by the VIEW only
+// (after the wheel-change tap game), never by the sim itself — a race that is never
+// revived behaves exactly as before, which is what keeps the golden untouched.
+// quality (0-1, the wheel change) sets how far behind the bunch you restart. The
+// convoy is strung between you and the bunch; each car's draft is a catapult to the
+// next. The chase resolves in tick: reach the bunch before the timer and you are
+// back in the race with the crash still on your legs; run out of time and the broom
+// wagon takes you, exactly as if you had never tried. Once per race.
+function secondChance(race, quality) {
+  const you = race.you;
+  if (!you.out || race.chanceUsed) return false;
+  race.chanceUsed = true;
+  you.out = false; you.finished = false; you.time = 0; you.rawTime = 0;
+  you.down = 0; you.stumble = 0; you.tow = 0; you.needTow = false; you.flat = 0;
+  let tail = Infinity;
+  for (const r of race.riders) if (!r.you && !r.finished && !r.out && r.inPeloton && r.dist < tail) tail = r.dist;
+  if (!isFinite(tail)) tail = race.pelotonHead || you.dist + 60;
+  const q = clamp(quality === undefined ? 0.5 : quality, 0, 1);
+  const gap = CFG.chanceGap - (CFG.chanceGap - CFG.chanceGapMin) * q;
+  you.dist = tail - gap; you.prev = you.dist;
+  you.speed = CFG.base * 0.8; you.x = 0; you.tx = 0; you.vx = 0;
+  // Cars from just behind the bunch back toward you, evenly spaced: a worse wheel
+  // change means a longer chase AND wider hops between bumpers.
+  race.convoy = [];
+  for (let i = 0; i < CFG.convoyN; i++) {
+    const off = 8 + i * (gap - 18) / (CFG.convoyN - 1);
+    race.convoy.push({ off, dist: tail - off, x: (i % 2 ? 1.8 : -1.8) });
+  }
+  race.chance = { active: true, until: race.clock + CFG.chanceTime };
+  race.over = false; race.overAt = undefined;
+  race.events.push({ t: "CHASE THE CARS \u00b7 CATCH THE BUNCH", c: "you" });
+  return true;
+}
+
 // Can you hop right now, and which way? Up onto the island if you are alongside its
 // kerb; down off it if you are on it. Returns the edge you would be jumping.
 // ★ HOP A POTHOLE — but ONLY when you are actually going to hit it. Kevin: "we need to make
@@ -1982,6 +2036,20 @@ function draftFor(race, r) {
       r.carTow = near * lined;
     } else r.carTow = 0;
   } else r.carTow = 0;
+  // The convoy's drafts, while a second chance is live: every car is a bumper you
+  // can sling off, same physics as the pace car because a car is a car.
+  r.convoyTow = 0;
+  if (race.convoy && race.chance && race.chance.active) {
+    for (const car of race.convoy) {
+      const gap = car.dist - r.dist;
+      if (gap > 0.5 && gap < CFG.carDraft) {
+        const near = 1 - gap / CFG.carDraft;
+        const lined = clamp(1 - Math.abs(r.x - car.x) / 2.2, 0, 1);
+        r.q = Math.max(r.q, near * lined * 1.7);
+        r.convoyTow = Math.max(r.convoyTow, near * lined);
+      }
+    }
+  }
   // A TIME TRIAL has no drafting at all. Rather than special-casing the wind, the
   // shelter quality every rider offers is simply zero, so exposure resolves to full for
   // everyone and the whole draft/peloton machinery below stays untouched.
@@ -3365,6 +3433,27 @@ function tick(race, dt) {
     }
   }
   updateGroups(race, dt);
+  // The convoy and the chase, if a second chance is live. Cars hold station behind
+  // the peloton's tail, exactly as a race convoy drives, so the string of drafts the
+  // player is climbing moves with the race rather than sitting on the road.
+  if (race.chance && race.chance.active) {
+    let tail = Infinity;
+    for (const r of race.riders) if (!r.you && !r.finished && !r.out && r.inPeloton && r.dist < tail) tail = r.dist;
+    if (!isFinite(tail)) tail = race.pelotonHead || 0;
+    for (const car of (race.convoy || [])) {
+      const want = tail - car.off;
+      car.dist += (want - car.dist) * clamp(dt * 0.9, 0, 1);
+    }
+    const you = race.you;
+    if (you.dist > tail - 2.5) {
+      race.chance.active = false; race.convoy = null;
+      race.events.push({ t: "BACK IN THE BUNCH", c: "green" });
+    } else if (race.clock > race.chance.until) {
+      race.chance.active = false; race.convoy = null;
+      you.out = true; you.down = 0; you.speed = 0;
+      race.events.push({ t: "THE BROOM WAGON \u00b7 RACE OVER", c: "spot" });
+    }
+  }
   for (const r of race.riders) stepRider(race, r, dt);
   separate(race, dt);
 }
@@ -3538,6 +3627,10 @@ function snapshot(race) {
     playerType: race.you.archetype.key, kit: race.kit, rndN: race.rndN,
     acc: race.acc, clock: race.clock, chase: race.chase, pelotonHead: race.pelotonHead,
     breakGap: race.breakGap, over: race.over, leaders: race.leaders,
+    chanceUsed: !!race.chanceUsed,     // the one-per-race second chance survives a save
+    // (a chase LIVE at save time is not persisted: resuming mid-chase drops the
+    // convoy and the timer, leaving the player simply behind the bunch — lenient,
+    // and far simpler than persisting a moving convoy)
     riders: race.riders.map(r => {
       const o = {};
       for (const k of SAVE_KEYS) if (r[k] !== undefined) o[k] = r[k];
@@ -3576,6 +3669,7 @@ function restore(snap, opts) {
   race.acc = snap.acc; race.clock = snap.clock; race.chase = snap.chase;
   race.pelotonHead = snap.pelotonHead; race.breakGap = snap.breakGap;
   race.over = snap.over; race.leaders = snap.leaders;
+  race.chanceUsed = !!snap.chanceUsed;
   return race;
 }
 
@@ -3616,7 +3710,7 @@ return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
-  createRace, snapshot, restore, step, tick, preRoll, settle, ROUTES, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
+  createRace, snapshot, restore, step, tick, preRoll, settle, secondChance, ROUTES, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
   danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
   surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
@@ -4122,6 +4216,7 @@ function startStage() {
   flashes = []; countdown = rollOut ? 7 : 3.2; phase = "count"; Tilt.recentre();
   moto = { phase: 0, t: 0, side: 1, visits: 0, coolUntil: 0, ahead: 0, v: 0, eligT: 0 };
   musLane = { zone: -1, ok: false };
+  chanceHold = false; wheelTap = null; $("chanceCard").classList.add("hide");
   paused = false; $("pauseCard").classList.add("hide");
   $("pauseBtn").classList.toggle("hide", dailyRun);
   if (tour && tour.daily) {                  // the attempt is spent the moment you roll out
@@ -4234,11 +4329,15 @@ addEventListener("keyup", e => keys.delete(e.key));
 // the same side is a missed pedal and costs you. Hold both and you are coasting.
 let strokes = [], lastSide = null, stumbleFlag = false, stumbleAt = -9;
 let alt = [], spinHint = 0;                            // recent clean alternating strokes
+// The second chance. chanceHold freezes the world under the offer card; wheelTap is
+// the live wheel change, eating clean pedal strokes as the mechanic's hands.
+let chanceHold = false, wheelTap = null;
 function stroke(side, now) {
   // Stop pedalling for a moment and your legs are back at the top: starting again on
   // either side is fine. Only a genuine double-tap mid-rhythm is a missed pedal.
   if (strokes.length && now - strokes[strokes.length - 1] > 1.1) lastSide = null;
   if (side === lastSide) { stumbleFlag = true; stumbleAt = now; alt = []; return; }
+  if (wheelTap) { lastSide = side; wheelTap.taps++; return; }   // the wheel change eats the strokes
   lastSide = side; strokes.push(now); alt.push(now); tutStrokes++;
   if (strokes.length > 24) strokes.shift();
   while (alt.length && now - alt[0] > 0.6) alt.shift();   // a jump is a quick burst
@@ -5940,6 +6039,76 @@ function drawMoto() {
   // the language the rest of the game already uses for the same number.
   label("TIME GAP", x, y - r * 2.35, 8, 700, "rgba(46,49,47,.6)", "center", 1.3);
 }
+// ★ THE CONVOY. Team cars strung between a revived rider and the bunch, each one a
+// bumper to sling off. Same charcoal language as the pace car and the team car; each
+// car's wake cone appears only while YOU are in that car's draft, computed with the
+// sim's own formula so what you see is exactly what you are being paid.
+function drawConvoy() {
+  if (!race || !race.convoy || !(race.chance && race.chance.active)) return;
+  for (const car of race.convoy) {
+    const cy = sy(car.dist);
+    if (cy < -90 || cy > H + 90) continue;
+    const cx = sx(car.dist, car.x);
+    const cw = riderR * 1.9, ch = riderR * 3.2;
+    const gap = car.dist - race.you.dist;
+    let tow = 0;
+    if (gap > 0.5 && gap < Sim.CFG.carDraft) {
+      const near = 1 - gap / Sim.CFG.carDraft;
+      tow = near * clamp(1 - Math.abs(race.you.x - car.x) / 2.2, 0, 1);
+    }
+    if (tow > 0.03) {
+      const tailD = car.dist - (ch / 2) / pxM;
+      const len = Sim.CFG.carDraft;
+      const by = sy(tailD - len);
+      const lx = sx(tailD - len, car.x - 2.2), rx2 = sx(tailD - len, car.x + 2.2);
+      ctx.save();
+      ctx.fillStyle = draftColour(tow, 0.08 + 0.22 * tow);
+      ctx.beginPath();
+      ctx.moveTo(lx, by); ctx.lineTo(sx(tailD, car.x), sy(tailD)); ctx.lineTo(rx2, by); ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.fillStyle = "rgba(46,49,47,.16)";
+    roundRect(cx - cw / 2 + 2, cy - ch / 2 + 3, cw, ch, 5); ctx.fill();
+    ctx.fillStyle = "#3A3D3A";
+    roundRect(cx - cw / 2, cy - ch / 2, cw, ch, 5); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.88)";
+    roundRect(cx - cw * 0.34, cy - ch * 0.16, cw * 0.68, ch * 0.3, 2); ctx.fill();
+    ctx.restore();
+  }
+}
+// The wheel-change overlay while the world waits, and the chase readout while it runs.
+function drawChanceOverlay() {
+  if (!race) return;
+  if (wheelTap) {
+    ctx.save();
+    ctx.fillStyle = "rgba(244,242,236,.6)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    label("WHEEL CHANGE", W / 2, H * 0.30, 26, 700, PAL.ink, "center", 0.5);
+    label("TAP THE PADS \u00b7 FAST AND CLEAN", W / 2, H * 0.355, 11.5, 700, "rgba(46,49,47,.6)", "center", 1.3);
+    label(Math.max(0, wheelTap.t).toFixed(1), W / 2, H * 0.46, 44, 700, PAL.ink, "center", -1);
+    const q = clamp(wheelTap.taps / 14, 0, 1);
+    const bw = Math.min(W * 0.6, 260), bx = W / 2 - bw / 2, by = H * 0.52;
+    ctx.save();
+    ctx.fillStyle = "rgba(46,49,47,.12)"; roundRect(bx, by, bw, 10, 5); ctx.fill();
+    ctx.fillStyle = draftColour(q, 0.9); roundRect(bx, by, bw * q, 10, 5); ctx.fill();
+    ctx.restore();
+    label(q > 0.85 ? "A CLEAN CHANGE" : q > 0.5 ? "WORKING..." : "FUMBLING", W / 2, by + 28, 10, 700,
+      draftColour(q, 0.95), "center", 1.2);
+    return;
+  }
+  if (race.chance && race.chance.active) {
+    const left = Math.max(0, race.chance.until - race.clock);
+    let tail = Infinity;
+    for (const r of race.riders) if (!r.you && !r.finished && !r.out && r.inPeloton && r.dist < tail) tail = r.dist;
+    const gap = isFinite(tail) ? Math.max(0, tail - race.you.dist) : 0;
+    label("CATCH THE BUNCH", W / 2, topBar + 58, 11, 700, "rgba(46,49,47,.6)", "center", 1.4);
+    label(Math.ceil(left) + "s", W / 2, topBar + 84, 30, 700, left < 10 ? PAL.spot : PAL.ink, "center", -0.5);
+    label("+" + M.near(gap), W / 2, topBar + 102, 12, 700, PAL.ink, "center", 0.5);
+  }
+}
 function drawPacer(dt) {
   if (!race || !race.pacer || race.pacer.gone) return;
   const p = race.pacer;
@@ -6658,7 +6827,16 @@ function frame(now) {
         }
       }
     }
-    else if (!paused && (!tut || $("tutCard").classList.contains("hide"))) {
+    else if (wheelTap) {
+      // The wheel change: the world waits on the mechanic, the taps are your hands.
+      wheelTap.t -= dt;
+      if (wheelTap.t <= 0) {
+        const q = clamp(wheelTap.taps / 14, 0, 1);
+        wheelTap = null;
+        Sim.secondChance(race, q);
+      }
+    }
+    else if (!paused && !chanceHold && (!tut || $("tutCard").classList.contains("hide"))) {
       // DRILLS jump straight to "race" and never see the countdown, which is where the
       // sensor was zeroed, so tilt did nothing at all in a drill: the exact place you go
       // to test tilt quickly. Any race that starts without a countdown learns the rest
@@ -6668,6 +6846,14 @@ function frame(now) {
       updateMusetteLatch();
       tutTick(dt);
       drillTick(dt);
+      // ★ THE SECOND CHANCE OFFER. Caught before race.over can fire (the world is
+      // held the moment the card is up), once per race, real races and the convoy
+      // drill only. Declining spends the chance: the crash plays out as it always did.
+      if (race.you.out && !race.over && !race.chanceUsed && !tut
+          && (!drill || DRILLS[drill.i].id === "convoy")) {
+        chanceHold = true;
+        $("chanceCard").classList.remove("hide");
+      }
     }
     // The camera holds the road centre while you are anywhere near the middle, and
     // only pans once you would otherwise leave the screen. A junction road is 22.5m
@@ -6696,8 +6882,9 @@ function frame(now) {
       const best = ghost.mine || ghost.mark;
       if (best) ghost.dist = race.course.len * clamp(ghost.t / best, 0, 1);
     }
-    drawRoad(); drawItems(); drawGhost(); drawMoto(); drawRiders(); drawWheelChange(dt); drawHud(dt);
+    drawRoad(); drawItems(); drawGhost(); drawMoto(); drawConvoy(); drawRiders(); drawWheelChange(dt); drawHud(dt);
     drawPacer(dt);
+    drawChanceOverlay();
     if (phase === "count") drawCountdown();
     drawTutHint();
     if (race.over && !tut) finishStage();
@@ -7167,6 +7354,7 @@ function resumeTour() {
     race.you.num = ladder.bib || 1;                       // the bib survives a resume
     moto = { phase: 0, t: 0, side: 1, visits: 0, coolUntil: 0, ahead: 0, v: 0, eligT: 0 };
     musLane = { zone: -1, ok: false };
+    chanceHold = false; wheelTap = null; $("chanceCard").classList.add("hide");
     flashes = []; paused = false; phase = "race"; Tilt.recentre();
     strokes = []; alt = []; lastSide = null; spinHint = 0;
     $("pauseCard").classList.add("hide"); $("pauseBtn").classList.remove("hide");
@@ -7392,6 +7580,16 @@ $("dailyBtn").addEventListener("click", () => { renderDaily(); show("daily"); })
 $("dBack").addEventListener("click", () => { refreshMenu(); showProfile(null); show("menu"); });
 $("dRide").addEventListener("click", () => openBuild("daily"));
 $("dShare").addEventListener("click", dailyShare);
+$("chGo").addEventListener("click", () => {
+  $("chanceCard").classList.add("hide");
+  chanceHold = false;
+  wheelTap = { t: 4.0, taps: 0 };
+});
+$("chQuit").addEventListener("click", () => {
+  $("chanceCard").classList.add("hide");
+  chanceHold = false;
+  if (race) race.chanceUsed = true;    // declined is spent: the crash plays out
+});
 $("bBackBtn").addEventListener("click", () => {
   if (tour && tour.practice) { tour = null; renderPractice(); show("practice"); return; }
   if (tour && tour.daily) { dailyRun = false; tour = null; renderDaily(); show("daily"); return; }
@@ -7878,6 +8076,44 @@ const DRILLS = [
       y.drillT = (y.drillT || 0) + 1;
       if (y.drillT > 150) { y.flat = 5.0; y.needTow = true; y.drillT = 0; }
     } },
+  { id: "convoy", name: "The second chance", tip: "Crashing out, and the chase back through the cars.",
+    tips: ["Crash out of a top-division race and you get ONE second chance a race. This drill loops it so you can practise.",
+      "Tap the pads fast and clean for the wheel change. The better the change, the closer to the bunch you restart.",
+      "Sling from car to car: each bumper's draft is a catapult, the open air between cars is the tax. Catch the bunch before the timer dies."],
+    stage: 0,
+    setup: r => {
+      tutCalm(r); tutStraight(r);
+      const others = r.riders.filter(o => !o.you);
+      others.forEach((o, i) => {
+        o.dist = r.you.dist + 26 + (i % 3) * 2.2;
+        o.x = ((i % 4) - 1.5) * 1.4;
+        o.speed = Sim.CFG.base;
+        o.plan = { k: "raid", at: 0.99, kick: 400 };
+      });
+      // the drill IS the aftermath: you are already on the ground
+      r.you.out = true; r.you.speed = 0; r.you.drillT = 0;
+    },
+    hold: r => {
+      const y = r.you;
+      r.over = false; r.overAt = undefined;        // a drill never ends itself
+      for (const o of r.riders) {
+        if (o.you) continue;
+        o.energy = o.legCap; o.fuel = 100; o.fluid = 100;
+        // the bunch neither waits for you nor bolts: a steady target to chase
+        if (r.chance && r.chance.active) o.speed = Math.max(o.speed, Sim.CFG.base * 0.96);
+      }
+      // Loop the exercise: once a chase has resolved (caught, or broomed), give it a
+      // beat — a moment in the bunch, or a moment in the ditch — then crash again.
+      if (r.chanceUsed && !(r.chance && r.chance.active)) {
+        y.drillT = (y.drillT || 0) + 1;
+        if (y.drillT > (y.out ? 300 : 900)) {
+          y.drillT = 0;
+          r.chanceUsed = false;
+          y.finished = false; y.time = 0; y.rawTime = 0;
+          y.out = true; y.speed = 0; y.down = 0;
+        }
+      }
+    } },
   { id: "wind", name: "Crosswinds", tip: "Finding shelter in a crosswind.", tips: ["The arrow at the top shows which way the wind is blowing, and how hard.", "Shelter swings to the sheltered side of the wheel ahead, not directly behind it.", "In a full crosswind, sitting straight behind someone is simply wrong."],
     stage: 3, setup: r => {
       const o = tutWheel(r, 6); o.x = 0;
@@ -8006,6 +8242,7 @@ function startDrill(i) {
     gc: {}, leaders: {}, div: pracDiv });
   race.you.num = ladder.bib || 1;
   musLane = { zone: -1, ok: false };   // the feed drill has real feeds; no stale latch
+  chanceHold = false; wheelTap = null; $("chanceCard").classList.add("hide");
   tour = { seed: 90210, stage: 0, gc: {}, leaders: {}, fatigue: {}, schedule: [d.stage], drill: true };
   d.setup(race);
   flashes = []; phase = "race"; paused = false; Tilt.recentre();
@@ -8015,6 +8252,7 @@ function startDrill(i) {
 }
 function endDrill() {
   drill = null; race = null; tour = null; phase = "menu";
+  chanceHold = false; wheelTap = null; $("chanceCard").classList.add("hide");
   $("drillDone").classList.add("hide");
   refreshMenu(); showProfile(null); renderDrills(); show("drills");
 }
@@ -8032,6 +8270,7 @@ function drillTick(dt) {
     }
     for (const hz of (c.hazards || [])) hz.hit = new Set();
     for (const pr of c.primes) pr.crossed = [];
+    for (const car of (race.convoy || [])) car.dist -= back;   // the chase loops with the road
     you.threw = null; you.forfeit = null;
   }
 }
