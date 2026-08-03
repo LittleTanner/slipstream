@@ -54,10 +54,11 @@ The most player-facing mechanic; it has its own suite. All of it lives in
 | Wheel-suck escalation | Called and refusing: elbow flick, then the break sits up. Waiting your turn: never punished | `refusal.test.js` |
 | Go-around | Easing on the front without moving aside gets you passed within seconds, not a stalled train | covered inside `rotation-dropback` / `refusal` |
 
-Known gap, by design for now: breaks of 4-6 riders never rotate, because the group
-detector labels the largest group "the peloton" and in an 8-rider field a 4+ break is
-always the largest group. Fixing it means redefining the peloton (chase, driver, mass
-shelter all hang off the label). Decision pending.
+Known gap, accepted by decision (DECISIONS.md, "Rejected, with reasons"): breaks of
+4-6 riders never rotate, because the group detector labels the largest group "the
+peloton" and in an 8-rider field a 4+ break is always the largest group. Fixing it
+means redefining the peloton (chase, driver, mass shelter all hang off the label).
+Revisit only if fields grow beyond 8.
 
 ## Body and resources
 
