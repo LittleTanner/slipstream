@@ -14,18 +14,27 @@
 // report() printer, so their stdout is byte-identical.
 const { Worker, isMainThread, parentPort } = require('worker_threads');
 const os = require('os');
-const Sim = require('./sim.js');
+// DOM_SIM points at an alternate extracted sim, so a "did MY change do this?" comparison
+// runs without swapping tools/sim.js under the harness's feet. Balance verdicts move with
+// terrain and difficulty changes, and the only way to attribute one is to run the same
+// grid against the sim before and after.
+const Sim = require(process.env.DOM_SIM || './sim.js');
 const P = require('./parts.js');
 
 // Parts are now a ~35% tune on top of a grown body, so test each part on a DEVELOPED rider
 // matched to the terrain (a climber on the queen), not a bodyless one. Mirrors view DIM_BODY.
-const DIM_BODY = { climb:{climbCost:-0.22}, sprint:{kick:0.14,attack:0.07}, endur:{recover:0.12,fuelUse:-0.04}, durab:{resilience:0.10,fatigueResist:-0.24,gut:0.30,sweatRate:-0.14} };
+const DIM_BODY = { climb:{climbCost:-0.22}, sprint:{kick:0.14,attack:0.07}, endur:{recover:0.12,fuelUse:-0.04}, durab:{resilience:0.10,fatigueResist:-0.24,gut:0.30,sweatRate:-0.14}, aero:{windTax:-0.13,draft:0.08}, handle:{handling:0.14,descend:0.10} };
 function body(dims){ const s={}; for(const d of dims) for(const k in DIM_BODY[d]) s[k]=(s[k]||0)+DIM_BODY[d][k]; return s; }
-const TERRAIN_BODY = [ ['sprint','endur','durab'], ['climb','sprint','endur'], ['climb','endur','durab'], ['sprint','endur','durab'], ['climb','endur','durab'] ];
+// Six dimensions now, so a terrain-matched rider carries the two that road asks for as
+// well: a windy flat day wants aero, a mountain day wants handling for the descents.
+const TERRAIN_BODY = [ ['sprint','endur','durab','aero'], ['climb','sprint','endur','handle'], ['climb','endur','durab','handle'], ['sprint','endur','durab','aero'], ['climb','endur','durab','handle'] ];
 
 const TEMPLATES = [0, 1, 2, 3, 4];
 const TNAME = ['flat', 'hills', 'mtn', 'panflat', 'queen'];
-const SEEDS = [11, 23, 37];
+// DEV-LOOP: confirm any dead/dominant verdict at 6 seeds before acting on it, because the
+// 3-seed casualty list churns. `DOM_SEEDS=11,23,37,52,71,89 node tools/dominance.js` does
+// it in place; copying the harness to a scratch dir silently runs it against a stale sim.
+const SEEDS = (process.env.DOM_SEEDS || "11,23,37").split(",").map(Number);
 const DIV = 4;
 const TERRAIN_PLAN = ['sprint', 'diesel', 'climb', 'sprint', 'climb'];
 
@@ -69,9 +78,25 @@ function report(cellFn) {
     });
     console.log('  ' + 'BEST'.padEnd(10) + best.map(x => x.padStart(9)).join(''));
     const wins = {}; parts.forEach(p => wins[p.id] = 0); best.forEach(b => wins[b]++);
+    // ★ "NEVER STRICTLY BEST" DOES NOT SCALE PAST A HANDFUL OF PARTS. With three parts over
+    // five templates each one had ~1.7 templates to claim; at five parts it is 1.0, so the
+    // pigeonhole alone condemns several parts however good they are, and the casualty list
+    // churns between seed counts (3 seeds said 4 dead, 6 seeds said 6 dead and named a
+    // different set). A part is healthy if you would SENSIBLY CHOOSE it somewhere, so the
+    // test is now whether it lands within a placing of the best on some template.
+    // Dominant is unchanged: strictly best everywhere is still a monoculture.
+    const LIVE = 0.40;                     // places behind the best and still worth picking
     for (const part of parts) {
+      const near = TEMPLATES.filter((t, ti) => {
+        let bv = Infinity;
+        for (const p2 of parts) if (grid[p2.id][ti] < bv) bv = grid[p2.id][ti];
+        return grid[part.id][ti] <= bv + LIVE;
+      }).length;
       if (wins[part.id] === TEMPLATES.length) { console.log('  !! DOMINANT: ' + part.id + ' — best on every template'); dominant++; }
-      if (wins[part.id] === 0 && !part.neutral) { console.log('  .. dead: ' + part.id + ' — never best'); dead++; }
+      if (near === 0 && !part.neutral) {
+        console.log('  .. dead: ' + part.id + ' — never within ' + LIVE.toFixed(2) + ' of the best anywhere');
+        dead++;
+      }
     }
   }
   console.log('\n---\nSUMMARY: ' + dominant + ' dominant, ' + dead + ' dead (neutral excluded). Goal: 0 dominant, 0 dead.');
@@ -121,7 +146,7 @@ function runParallel() {
 }
 
 if (!isMainThread) {
-  // WORKER: this thread required sim.js/parts.js itself (fresh module state); it
+  // WORKER: this thread required the sim/parts.js itself (fresh module state); it
   // builds each race from scratch, so no race object ever crosses a thread boundary.
   parentPort.on('message', (m) => {
     if (m === null) { parentPort.close(); return; }

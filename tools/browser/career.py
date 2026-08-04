@@ -67,6 +67,33 @@ def build_throwaway(scratch):
         # shrink both one-day draws (flat and hills) so a race takes ~30s
         ("len: 1400", "len: 320"),
         ("len: 1550", "len: 320"),
+        # Publish what the HUD decided to show about the RIVALS, so the radio gating
+        # can be asserted rather than eyeballed. drawHud is a view closure and
+        # unreachable from evaluate, and "a readout that should be hidden is showing"
+        # is exactly the class the sim tests cannot see. Inert otherwise: it only
+        # writes to a window object.
+        # Init at the TOP of drawHud, not inside the road-race branch: a time trial never
+        # enters that branch, and the POWER gauge is now asserted on a TT.
+        ("  const c = C(), you = race.you, pad = Math.max(14, W * 0.045);",
+         "  const c = C(), you = race.you, pad = Math.max(14, W * 0.045);\n"
+         "  (window.__hud = window.__hud || { pips: 0 }).radio = (you.stats.radio || 0);\n"
+         "  window.__hud.tt = (race.spec && race.spec.tt) ? 1 : 0;"),
+        ("  if ((you.stats.radio || 0) >= 2) {\n"
+         "    label(leader === you ? \"LEADING\"",
+         "  if ((you.stats.radio || 0) >= 2) {\n"
+         "    window.__hud.leader = 1;\n"
+         "    label(leader === you ? \"LEADING\""),
+        ("    const lvl = you.stats.powerMeter;",
+         "    window.__hud.power = 1;\n"
+         "    const lvl = you.stats.powerMeter;"),
+        ("  const pips = [];\n"
+         "  if ((you.stats.radio || 0) >= 3) for (const r of race.riders) {",
+         "  const pips = [];\n"
+         "  if (window.__hud) window.__hud.pipGate = ((you.stats.radio || 0) >= 3) ? 1 : 0;\n"
+         "  if ((you.stats.radio || 0) >= 3) for (const r of race.riders) {"),
+        ("  pips.sort((a, b) => a.x - b.x);",
+         "  if (window.__hud) window.__hud.pips = Math.max(window.__hud.pips || 0, pips.length);\n"
+         "  pips.sort((a, b) => a.x - b.x);"),
     ]
     for old, new in subs:
         n = html.count(old)
@@ -202,11 +229,11 @@ async def main():
               "balance figure shows %r" % r["big"])
         await ctx.close()
 
-        # ---- 5. race craft is a CHOICE, not a win-count drip -----------------
-        # Both items used to arrive automatically on career wins, so the build was
-        # choiceless. Fitting decides whether you carry it; the career decides how
-        # good it is. The limit is 1 while the pool is 2, so carrying one must
-        # DROP the other, which is the whole point.
+        # ---- 5. race craft: carry TWO of three -------------------------------
+        # The pool grew to three (radio / power meter / feed craft) and the limit to
+        # two, so a free slot must FILL and a full one must EVICT the oldest. Two of
+        # two was not a decision and one of three would have left the power meter
+        # permanently unfitted once the radio absorbed every rival readout.
         ladder = {"tutorialDone": True, "div": 4, "tours": 3, "wins": 5,
                   "money": 1500, "tactics": ["radio"]}
         ctx, pg = await open_case(browser, url, ladder, [], errs)
@@ -221,19 +248,127 @@ async def main():
                 " c.querySelector('.btns button').textContent]))")
 
         st = await craft()
-        check("race craft: seeded fit shows as carried",
-              st.get("Race radio") == "Carrying" and st.get("Power meter") == "Carry this",
-              "seeded radio, cards read %r" % st)
+        check("race craft: the pool is three and one seeded fit shows as carried",
+              len(st) == 3 and st.get("Race radio") == "Carrying"
+              and st.get("Power meter") == "Carry this" and st.get("Feed craft") == "Carry this",
+              "cards read %r" % st)
         await pg.locator("#bTactics .card", has_text="Power meter").locator(".btns button").click()
         await pg.wait_for_timeout(150)
         st = await craft()
-        check("race craft: carrying one drops the other",
-              st.get("Power meter") == "Carrying" and st.get("Race radio") == "Carry this",
-              "after carrying the power meter, cards read %r" % st)
+        check("race craft: a free second slot fills without evicting",
+              st.get("Race radio") == "Carrying" and st.get("Power meter") == "Carrying"
+              and st.get("Feed craft") == "Carry this",
+              "cards read %r" % st)
+        await pg.locator("#bTactics .card", has_text="Feed craft").locator(".btns button").click()
+        await pg.wait_for_timeout(150)
+        st = await craft()
+        carried = sorted(k for k, v in st.items() if v == "Carrying")
+        check("race craft: a third choice evicts the oldest, never exceeds two",
+              carried == ["Feed craft", "Power meter"],
+              "carrying %r" % (carried,))
         saved = await pg.evaluate(
             "window.storage.get('slipstream:ladder').then(r => r ? JSON.parse(r.value).tactics : null)")
-        check("race craft: the choice persists", saved == ["powerMeter"],
+        check("race craft: the choice persists", saved == ["powerMeter", "feedcraft"],
               "saved tactics %r" % (saved,))
+        await ctx.close()
+
+        # ---- 5b. the power meter draws in a TIME TRIAL -----------------------
+        # It was suppressed on the one day a real rider lives by power, which fell out
+        # of "a time trial shows ONE thing" rather than any decision. Practice can ride
+        # the race of truth directly, so this asserts it without needing a long tour.
+        ladder = {"tutorialDone": True, "div": 4, "tours": 3, "wins": 5,
+                  "money": 500, "tactics": ["powerMeter"]}
+        ctx, pg = await open_case(browser, url, ladder, [], errs, rand_seed=42)
+        try:
+            await pg.click("#pracBtn")
+            await pg.locator("#practice").wait_for(state="visible")
+            await pg.locator("#pStages button", has_text="Time trial").click()
+            await pg.click("#pRide")
+            await pg.wait_for_selector("#build:not(.hide)")
+            await pg.click("#bLock")
+            # startPractice() goes through showBriefing(), same as a real race; skipping
+            # the roll-out button meant the race never started and the HUD never drew.
+            await pg.wait_for_selector("#brief:not(.hide)")
+            await pg.click("#rollBtn")
+            side = 0
+            for _ in range(20):
+                await pg.keyboard.press("z" if side == 0 else "x")
+                side ^= 1
+                await pg.wait_for_timeout(320)
+            h = await pg.evaluate("window.__hud || null")
+            check("power meter draws on the race of truth",
+                  h is not None and h.get("tt") == 1 and h.get("power") == 1,
+                  "hud reported %r" % (h,))
+        finally:
+            await ctx.close()
+
+        # ---- 6. earned, then bought: parts, physique and training ------------
+        # Racing UNLOCKS, prize money BUYS, and money can never skip the unlock. Neutral
+        # options stay free so a rider who has bought nothing is still legal.
+        ladder = {"tutorialDone": True, "div": 3, "tours": 9, "wins": 5, "money": 6000,
+                  "career": {"climb": 95, "sprint": 40, "endur": 60, "durab": 50,
+                             "aero": 30, "handle": 55},
+                  "parts": [], "physique": [], "trainOwned": [], "training": []}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        await pg.click("#buildBtn")
+        await pg.locator("#build").wait_for(state="visible")
+
+        async def saved(key):
+            return await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value)['%s'])" % key)
+
+        await pg.locator("#bSlots button", has_text="Wheels").click()
+        await pg.wait_for_timeout(150)
+        disc = pg.locator("#bList .card", has_text="Deep / disc")
+        label = await disc.locator(".btns button").text_content()
+        check("part for sale before it is bought", "Buy" in label,
+              "an unlocked-but-unbought part offers a price: %r" % label)
+        await disc.locator(".btns button").click()
+        await pg.wait_for_timeout(200)
+        check("buying a part spends prize money", await saved("money") == 5000,
+              "6000 - 1000 = %r" % (await saved("money"),))
+        check("bought part is owned and fitted", await saved("parts") == ["disc"],
+              "owned parts %r" % (await saved("parts"),))
+
+        await pg.locator("#bPhysique .segmented").first.locator(
+            "button", has_text="Featherweight").click()
+        await pg.wait_for_timeout(200)
+        check("buying physique spends and is worn",
+              await saved("money") == 2600 and await saved("weight") == "feather",
+              "money %r, weight %r" % (await saved("money"), await saved("weight")))
+
+        hills = pg.locator("#bTraining .card", has_text="Hill repeats")
+        await hills.locator(".btns button").click()
+        await pg.wait_for_timeout(200)
+        check("buying training spends prize money", await saved("money") == 1900,
+              "2600 - 700 = %r" % (await saved("money"),))
+        after = await hills.locator(".btns button").text_content()
+        check("a bought block can then be carried", after == "Carry",
+              "button reads %r once owned" % after)
+        await ctx.close()
+
+        # ---- 7. a rider who owns NOTHING is still legal ----------------------
+        # The neutral rule. Every layer keeps a free option, so being broke never leaves
+        # you unable to field a complete bike.
+        ladder = {"tutorialDone": True, "div": 3, "tours": 2, "money": 0,
+                  "career": {"climb": 95, "sprint": 40, "endur": 60, "durab": 50,
+                             "aero": 30, "handle": 55},
+                  "parts": [], "physique": [], "trainOwned": [], "training": [],
+                  "build": {"frame": "carbon", "wheels": "disc", "gearing": "big",
+                            "position": "slammed", "tires": "grip"}}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        await pg.click("#buildBtn")
+        await pg.locator("#build").wait_for(state="visible")
+        arche = await pg.text_content("#bArche")
+        check("a broke rider still has a complete bike", "reads as a" in arche,
+              "build screen describes a bike: %r" % arche)
+        await pg.click("#bLock")
+        await pg.wait_for_timeout(250)
+        b = await pg.evaluate(
+            "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).build)")
+        unpaid = [v for v in (b or {}).values() if v in ("disc", "big", "slammed", "grip", "carbon")]
+        check("an unowned part cannot be locked into a build", not unpaid,
+              "saved build fell back to owned parts: %r" % (b,))
         await ctx.close()
 
         # ---- 2. route pack pricing ladder: BY COUNT OWNED, not by pack ------
@@ -268,6 +403,51 @@ async def main():
                       "want %d on the card and no next-costs paragraph; button %s, paragraph %r"
                       % (want, got_btn, r["priceLine"]))
             await ctx.close()
+
+        # ---- 3b. rival information belongs to the race radio -----------------
+        # Where the leader is, how far clear you are and where every rider off the
+        # top of the screen sits used to be free and permanently on screen. They are
+        # the radio's now, tiered: I hears the race, II gets the numbers, III sees
+        # the road ahead. Each case starts a race, rides a few seconds and reads what
+        # the HUD decided; no case runs to the line, because the gate is decided on
+        # the first frame.
+        async def hud_after_start(lad_seed):
+            ctx, pg = await open_case(browser, url, lad_seed, [], errs, rand_seed=42)
+            try:
+                await pg.click("#startBtn")
+                await pg.wait_for_selector("#pick:not(.hide)")
+                await pg.locator("#pickBody .card").first.locator("button.mini").click()
+                await pg.wait_for_selector("#build:not(.hide)")
+                await pg.click("#bLock")
+                await pg.wait_for_selector("#brief:not(.hide)")
+                await pg.click("#rollBtn")
+                side = 0
+                for _ in range(22):                     # ~7s of racing, past the roll-out
+                    await pg.keyboard.press("z" if side == 0 else "x")
+                    side ^= 1
+                    await pg.wait_for_timeout(320)
+                return await pg.evaluate("window.__hud || null")
+            finally:
+                await ctx.close()
+
+        base = {"tutorialDone": True, "div": 8, "tours": 1, "money": 500}
+        h = await hud_after_start(dict(base, tactics=["powerMeter"], wins=12))
+        check("no radio: no rival information at all",
+              h is not None and h.get("radio", 0) == 0
+              and not h.get("leader") and h.get("pipGate") == 0 and h.get("pips", 0) == 0,
+              "hud reported %r" % (h,))
+
+        h = await hud_after_start(dict(base, tactics=["radio"], wins=0))
+        check("radio I: hears the race, sees no numbers",
+              h is not None and h.get("radio", 0) == 1
+              and not h.get("leader") and h.get("pipGate") == 0 and h.get("pips", 0) == 0,
+              "hud reported %r" % (h,))
+
+        h = await hud_after_start(dict(base, tactics=["radio"], wins=12))
+        check("radio III: leader gap and the rider rail both open",
+              h is not None and h.get("radio", 0) == 3
+              and h.get("leader") == 1 and h.get("pipGate") == 1,
+              "hud reported %r" % (h,))
 
         # ---- 4. result recording: one shrunk one-day race -------------------
         # seeded with the medium credit already held, so at Division 8 (top

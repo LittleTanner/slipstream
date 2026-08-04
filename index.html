@@ -313,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 11</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 16</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -431,6 +431,10 @@
   <div class="secthead">Tune each part</div>
   <div class="segmented" id="bSlots"></div>
   <div id="bList"></div>
+  <div class="secthead">Your body</div>
+  <div id="bPhysique"></div>
+  <div class="secthead">Training</div>
+  <div id="bTraining"></div>
   <div class="secthead">Rider career</div>
   <div id="bTactics"></div>
   <button class="go" id="bLock">Lock in this build</button>
@@ -742,36 +746,117 @@ const ARCHETYPES = {
     blurb: "Flies uphill, suffers in the wind, recovers fast. Win on the summits.",
     stats: { attack: 1.19, climbCost: 0.68, fuelUse: 0.92, recover: 1.16, windTax: 1.06, kick: 0.95, descend: 1.00 } }
 };
-// Rivals toughen with the division: their durability (which archetypes leave at baseline)
-// climbs toward a fully-developed rider's by Division 1, so a player's grown durability is
-// an edge that shrinks as the field hardens rather than a permanent grand-tour advantage.
-// Mirrors the player's full durability dimension (view DIM_BODY.durab).
-const RIVAL_DURAB = { resilience: 0.10, fatigueResist: -0.24, gut: 0.30, sweatRate: -0.14 };
+// ★ RIVALS HARDEN ON EVERY DIMENSION, NOT JUST DURABILITY. They used to toughen only in
+// durability, so a developed player's climbing, sprinting, aero and handling were all
+// permanent edges that compounded at the top of the ladder. Kevin: "the rivals should be
+// competitive in whatever division you are in." Each rival now leans into the dimensions
+// their archetype implies and picks up a share of the rest, which is what a professional
+// field actually is: specialists who are also good everywhere. Scaled by D.t, so Division
+// 8 is a soft field and Division 1 is full of finished riders.
+// MIRRORS the view's DIM_BODY. The two drift silently; change them together.
+const DIM_STATS = {
+  climb:  { climbCost: -0.22 },
+  sprint: { kick: 0.14, attack: 0.07 },
+  endur:  { recover: 0.12, fuelUse: -0.04 },
+  durab:  { resilience: 0.10, fatigueResist: -0.24, gut: 0.30, sweatRate: -0.14 },
+  aero:   { windTax: -0.13, draft: 0.08 },
+  handle: { handling: 0.14, descend: 0.10 }
+};
+const RIVAL_DIMS = {
+  climber:  ["climb", "endur", "durab", "handle"],
+  sprinter: ["sprint", "endur", "durab", "aero"],
+  rouleur:  ["endur", "durab", "aero", "handle"]
+};
+const RIVAL_SPREAD = 0.45;      // share of the dimensions their archetype does NOT imply
+// ★ THE GROWTH CURVE IS STRAIGHT, AND IT WAS TRIED CURVED. Making the rivals LAG in the
+// easy divisions and converge at the top is the obvious way to let a young career feel
+// itself getting stronger, and it does exactly that on paper: at exponent 1.6 the worst
+// rung's payoff for a whole career of growth went from 0.88 places to 1.31. It also
+// quietly broke THE SECOND CHANCE, which is calibrated against the bunch's pace: a
+// fumbled wheel change went from catching the bunch on 5 of 7 seeds to 1 of 7, which is
+// the near-certain-DNF failure mode DECISIONS.md already records as rejected once.
+// Exponent 1.25 measured 1 of 7 and 1.15 measured 3 of 7, so it is not a matter of
+// finding a gentler value. Whatever weakens the mid-ladder field re-tunes that chase.
+// The problem it was aimed at was fixed a different way, in tierProfile: the day gets
+// harder rather than the rivals getting faster, which lifted the worst rung to 1.46 and
+// IMPROVED the chase. If this is revisited anyway, re-measure the chase FIRST
+// (tools/tests/second-chance.test.js across seeds, both wheel-change qualities), not last.
+function rivalBody(type, t) {
+  const own = RIVAL_DIMS[type] || RIVAL_DIMS.rouleur;
+  const out = {};
+  for (const dim in DIM_STATS) {
+    const w = (own.indexOf(dim) >= 0 ? 1 : RIVAL_SPREAD) * t;
+    for (const k in DIM_STATS[dim]) out[k] = (out[k] || 0) + DIM_STATS[dim][k] * w;
+  }
+  return out;
+}
 
 // ===== Rider build model (build-from-scratch redesign). Six slots, three trade parts
 // each; a build's stats are BASE_STATS plus every chosen part's deltas, so the archetype
 // is derived from the shape, not chosen. Balanced headless to 0 dominant / 0 dead. =====
-const SLOTS = [["frame", "Frame"], ["wheels", "Wheels"], ["gearing", "Gearing"], ["position", "Position"], ["tires", "Tires"], ["engine", "Engine"]];
+// ENGINE IS GONE FROM THE BIKE. Diesel legs are physiology, not equipment; the slot only
+// lived here because this is where the build system was. Its parts are now MUSCLES in
+// the body, stat for stat, so no rider loses anything.
+const SLOTS = [["frame", "Frame"], ["wheels", "Wheels"], ["gearing", "Gearing"], ["position", "Position"], ["tires", "Tires"]];
 const PARTS = {
   frame: [
     { id: "steel",  name: "Steel",  note: "Heavy, but soaks up the road and never lets go", d: { resilience: +0.035, recover: +0.014, climbCost: +0.017 } },
     { id: "alloy",  name: "Alloy",  neutral: true, note: "The honest all-rounder: good everywhere, best nowhere", d: {} },
-    { id: "carbon", name: "Carbon", note: "Feathery and stiff uphill, punishing when it turns rough",extreme: true, unlockDiv: 7,  d: { climbCost: -0.066, resilience: -0.025 } }
+    { id: "carbon", name: "Carbon", note: "Feathery and stiff uphill, punishing when it turns rough",extreme: true, unlockDiv: 7,  d: { climbCost: -0.066, resilience: -0.025 } },
+    // FATIGUE RESISTANCE enters the bike at all for the first time: no part touched it
+    // before, so no build could ever be about lasting.
+    // An "aero frame" was written here and CUT. Aero is the most crowded axis in the
+    // game already (wheels, position AND tires all trade it against handling), so a
+    // fourth way to buy it is not a new decision, and the harness read it dead at six
+    // seeds. A new part has to open an axis the BIKE lacks, not just one its slot lacks.
+    { id: "endurgeo",  name: "Endurance geometry", note: "Still fresh in the third week, never quick", d: { fatigueResist: -0.100, recover: +0.010, windTax: +0.025 } }
   ],
   wheels: [
-    { id: "box",  name: "Box section", note: "Light and sure-footed, but no shelter from the wind", d: { handling: +0.16, descend: +0.14, windTax: 0 } },
+    // ★ BOX IS THE LIGHT WHEEL. It used to be pure handling and descending, which is not
+    // what a shallow rim actually buys you, and once the body could grow a handling
+    // dimension of its own the wheel had nothing left that was uniquely its: dominance
+    // read it DEAD, the canary DEV-LOOP names. It is now what a box-section wheel really
+    // is: lighter uphill, still surer in the wind's hands than a deep rim, and a little
+    // slower through the air. The handling figure also comes down from 0.16, which was a
+    // bigger swing on that axis than an entire career of growth.
+    { id: "box",  name: "Box section", note: "Light uphill and sure-footed, but it gives away the flat", d: { climbCost: -0.045, handling: +0.09, descend: +0.08, windTax: +0.02 } },
     { id: "mid",  name: "Mid depth",   neutral: true, note: "A bit of everything, nothing to fear", d: { windTax: -0.03 } },
-    { id: "disc", name: "Deep / disc", note: "Slippery in a straight line, a handful when it blows across",extreme: true, unlockDiv: 6,  d: { windTax: -0.13, draft: +0.07, handling: -0.13, descend: -0.05 } }
+    { id: "disc", name: "Deep / disc", note: "Slippery in a straight line, a handful when it blows across",extreme: true, unlockDiv: 6,  d: { windTax: -0.13, draft: +0.07, handling: -0.13, descend: -0.05 } },
+    // A DESCENDER'S WHEEL, and a semi-deep that is stable in a crosswind rather than fast
+    // in a straight line, so aero stops being one single "go deep and hold on" decision.
+    // These were first written around puncture RESILIENCE, which the harness measured as
+    // dead: the five templates carry almost no hazards or rough surface at all, so a
+    // tough wheel has no road to be good on. Rewritten onto descending, which every
+    // mountain template exercises.
+    { id: "tub",  name: "Tubular, glued", note: "Glued on and utterly sure of itself pointing downhill", d: { descend: +0.100, handling: +0.040, climbCost: +0.015, windTax: +0.010 } }
+    // A "semi-deep" wheel was written here and CUT for the same reason, and for a worse
+    // one: it sat BETWEEN mid and disc on the very axis the slot already had, which is a
+    // finer version of a choice you were already making rather than a new one.
   ],
   gearing: [
     { id: "compact",  name: "Compact",   note: "Spins up the steep stuff, gives away the top end", d: { climbCost: -0.09, kick: -0.01 } },
     { id: "standard", name: "Standard",  neutral: true, note: "Ratios for any road", d: {} },
-    { id: "big",      name: "Big block", note: "A monster sprint, a millstone on the climbs",extreme: true, unlockDiv: 5,  d: { kick: +0.042, attack: +0.017, climbCost: +0.056 } }
+    { id: "big",      name: "Big block", note: "A monster sprint, a millstone on the climbs",extreme: true, unlockDiv: 5,  d: { kick: +0.042, attack: +0.017, climbCost: +0.056 } },
+    // FUEL ECONOMY through cadence: spinning a sensible gear all day burns less than
+    // grinding one. Nothing on the bike touched food before.
+    { id: "wide",     name: "Wide range", note: "A gear for everything, and no sprint to speak of", d: { climbCost: -0.035, fuelUse: -0.015, kick: -0.030 } },
+    { id: "close",    name: "Close ratio", note: "Always the right cadence on the flat, nothing left for a wall", d: { fuelUse: -0.022, recover: +0.014, climbCost: +0.025, kick: +0.010 } }
   ],
   position: [
     { id: "upright", name: "Upright",       note: "Comfortable and in control, but it catches the wind", d: { handling: +0.09, recover: +0.014, windTax: +0.05 } },
     { id: "endur",   name: "Endurance fit", neutral: true, note: "A sane compromise between fast and rideable", d: { windTax: -0.02 } },
-    { id: "slammed", name: "Slammed",       note: "Knifes the wind, murder on the back and the handling",extreme: true, unlockDiv: 4,  d: { windTax: -0.12, handling: -0.07, recover: -0.017 } }
+    { id: "slammed", name: "Slammed",       note: "Knifes the wind, murder on the back and the handling",extreme: true, unlockDiv: 4,  d: { windTax: -0.12, handling: -0.07, recover: -0.017 } },
+    // DRAFT QUALITY, which only deep wheels touched: how well you actually sit in a
+    // wheel is a position, not a rim. And fatigue resistance on the other end.
+    { id: "tuck",    name: "Trained aero tuck", note: "Sits in a wheel like it is glued there",extreme: true, unlockDiv: 3, d: { draft: +0.070, windTax: -0.050, recover: -0.012 } },
+    // ★ NEEDED SAME-DAY VALUE, BECAUSE THE HARNESS CANNOT SEE TOMORROW. Its virtue was
+    // almost entirely `fatigueResist`, which is "you carry less damage into the next
+    // stage" — and dominance rides ONE stage, so that was invisible by construction. It
+    // survived on today's terrain by a whisker and went dead on both seed sets once the
+    // days got longer. Rather than tune the measurement, give a relaxed reach what it
+    // actually gives a rider on the day as well: you can hold a line and keep eating on a
+    // long one. Wind penalty trimmed to match, since it is no longer the only cost.
+    { id: "relaxed", name: "Relaxed reach",     note: "Comfortable enough to still be here tomorrow, and steady enough to eat on the move", d: { fatigueResist: -0.090, handling: +0.060, recover: +0.012, windTax: +0.032 } }
   ],
   tires: [
     // windTax -0.07 -> -0.09: crisper rotations (shorter front spells) shrank total wind
@@ -779,19 +864,19 @@ const PARTS = {
     // on 3- and 6-seed runs alike. A deeper aero edge restores its terrain.
     { id: "slick",    name: "Race slick",      note: "Fast and light, but nothing in reserve when it gets loose", d: { windTax: -0.09, climbCost: -0.007, descend: -0.05, handling: -0.04 } },
     { id: "allround", name: "All-round",       neutral: true, note: "Grip and speed in fair measure", d: {} },
-    { id: "grip",     name: "Grippy tubeless", note: "Sticks to anything, drags a little on smooth tar",extreme: true, unlockDiv: 3,  d: { descend: +0.09, handling: +0.07, windTax: +0.05 } }
+    { id: "grip",     name: "Grippy tubeless", note: "Sticks to anything, drags a little on smooth tar",extreme: true, unlockDiv: 3,  d: { descend: +0.09, handling: +0.07, windTax: +0.05 } },
+    // NOTE: an "armoured casing" tire was written here and CUT. Its whole virtue was
+    // puncture resistance, and the stage templates carry almost no rough road, so the
+    // harness read it dead and it would have been dead in play too. Four tires is
+    // better than five with one that never earns a ride.
+    { id: "cotton",   name: "Supple cotton",   note: "Fast, light and made of paper",extreme: true, unlockDiv: 2, d: { windTax: -0.040, climbCost: -0.015, descend: +0.020, resilience: -0.030 } }
   ],
-  engine: [
-    { id: "diesel",   name: "Diesel legs",    note: "Rolls all day and recovers, with no explosive kick", d: { recover: +0.028, resilience: +0.021, kick: -0.017, fuelUse: -0.01 } },
-    { id: "allround", name: "All-round legs", neutral: true, note: "A balanced engine", d: {} },
-    { id: "punch",    name: "Fast twitch",    note: "A vicious kick and attack, but it burns fuel and fades", d: { kick: +0.035, attack: +0.025, fuelUse: +0.021, recover: -0.014 } }
-  ]
 };
 const PRESETS = {
-  Climber:  { frame: "carbon", wheels: "box",  gearing: "compact",  position: "upright", tires: "slick", engine: "diesel" },
-  Sprinter: { frame: "steel",  wheels: "disc", gearing: "big",      position: "slammed", tires: "slick", engine: "punch"  },
-  Rouleur:  { frame: "alloy",  wheels: "disc", gearing: "standard", position: "slammed", tires: "slick", engine: "diesel" },
-  Puncheur: { frame: "carbon", wheels: "box",  gearing: "standard", position: "endur",   tires: "grip",  engine: "punch"  }
+  Climber:  { frame: "carbon", wheels: "box",  gearing: "compact",  position: "upright", tires: "slick" },
+  Sprinter: { frame: "steel",  wheels: "disc", gearing: "big",      position: "slammed", tires: "slick" },
+  Rouleur:  { frame: "alloy",  wheels: "disc", gearing: "standard", position: "slammed", tires: "slick" },
+  Puncheur: { frame: "carbon", wheels: "box",  gearing: "standard", position: "endur",   tires: "grip" }
 };
 const UNLOCK_COST = 1000;   // prize money to unlock one extreme specialist part
 function buildStats(build) {
@@ -927,16 +1012,46 @@ function tourSchedule(seed, len) {
 // The ladder. Division 8 is the bottom rung, Division 1 the top. Difficulty comes
 // from the race being harder to read, not from rivals being faster: sparser feeding,
 // stronger wind, longer and hillier stages, and an AI that stops making mistakes.
+//
+// ★ THE DAY GETS HARDER, THE RIDERS DO NOT GET FASTER. There used to be a
+// `strength: 0.035 * t` here, a raw speed bonus of up to 3.5% added to every RIVAL and to
+// nobody else — the player's strength is pinned at 1.0 with no way on earth to earn any.
+// Measured with tools/ladder.js: arrive at each division developed exactly for it and you
+// finished 4.11 at Division 8 sliding to 6.27 at Division 1, second to last in an
+// eight-rider field having done everything right. Not a treadmill, a downward escalator.
+//
+// Deleting it ALONE was tried and was worse: mountains stopped selecting, because what
+// shatters a field on a climb is absolute pace, and the queen-stage margin for a climbing
+// rider over a sprinting one went from +20 places to -11. Sprinters winning mountain
+// stages. Two other fixes (giving the player the same ramp, curving the rivals' growth)
+// each turned the second chance's fumbled wheel change into a near-certain DNF, which is
+// the exact outcome DECISIONS.md records as rejected once already.
+//
+// What works is deleting the speed ramp AND making the DAY that leads to the climb
+// harder: `len` 0.18 -> 0.40 and `hilly` 0.14 -> 0.32, so a top-division stage is longer
+// with more climbing in the legs before the decisive climb. You arrive at the foot of it
+// with less left, which is exactly why a real mountain stage is harder in a Grand Tour
+// than in a one-day race. Measured against all three gates at once:
+//
+//              ladder drift   worst GAIN   queen margin   2nd chance clean/fumbled
+//   before        +2.16          0.88          +20              5/7 , 5/7
+//   now           +1.11          1.46          +49              7/7 , 6/7
+//
+// AND IT HAD TO BE THE DAY, NOT THE CLIMB — that is Kevin's question answered. A named
+// route stamps its REAL gradient and length into the road (see buildStage) and must keep
+// them, or Alpe d'Huez stops reading HC off its own figures. Steepen climbs by division
+// and a $2.99 route pack becomes the way to buy an easier Division 1, which breaks
+// "the ladder is never pay-to-skip". Length and preamble scale on a route stage too, so
+// this lever cannot be bought around.
 function tierProfile(div) {
   const t = Math.max(0, Math.min(1, (8 - div) / 7));
   return {
     t,
-    len: 1 + 0.18 * t,        // longer stages
-    hilly: 0.14 * t,          // more climbing
+    len: 1 + 0.40 * t,        // longer stages: the main lever, and routes cannot dodge it
+    hilly: 0.32 * t,          // more GENERATED climbing before the decisive climb
     wind: 0.75 + 0.70 * t,    // stronger crosswinds
     items: 1 - 0.42 * t,      // less on the road
-    strength: 0.035 * t,      // rivals genuinely faster, not just better developed
-    spread: 0.035 - 0.021 * t, // ... but far more ALIKE: a tight field means one mistake costs places
+    spread: 0.035 - 0.021 * t, // the field gets far more ALIKE: one mistake costs places
     ai: t                     // rivals much sharper
   };
 }
@@ -1763,11 +1878,11 @@ function createRace(opts) {
     // whoever owned the chosen colour inherits the one the player gave up
     const cf = f.c === kit ? Object.assign({}, f, { c: YOU.c }) : f;
     const type = sharp.has(k) ? parcoursArch : f.type;   // specialists become the terrain archetype
-    const durb = {};                                     // durability grows toward a developed rider by division
-    for (const st in RIVAL_DURAB) durb[st] = BASE_STATS[st] + RIVAL_DURAB[st] * D.t;
+    const durb = {};                                     // their body grows toward a developed rider by division
+    const rb = rivalBody(type, D.t);
+    for (const st in rb) durb[st] = BASE_STATS[st] + rb[st];
     const r = makeRider(Object.assign({}, cf, { D }), k + 1, false, type, R, durb);
     r.plan = pickPlan(k + 1, R);
-    r.strength += D.strength;
     r.speed = rollIn;
     if (!gone.has(r.name)) riders.push(r);       // draws already made; only the rider is dropped
   });
@@ -3789,7 +3904,7 @@ return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
-  createRace, snapshot, restore, step, tick, preRoll, settle, secondChance, ROUTES, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
+  createRace, snapshot, restore, step, tick, preRoll, settle, secondChance, DIM_STATS, rivalBody, ROUTES, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
   danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
   surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
@@ -3834,7 +3949,8 @@ let playerType = "rouleur";
 let committedBuild = null;
 let playerKit = "magenta";
 let dailyRun = false;
-let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio"], daily: null,
+let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio", "feedcraft"],
+  weight: "balanced", muscle: "allround", training: [], parts: [], physique: [], daily: null,
   owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0, packs: [], req: {} };
 
 // ---------------------------------------------------------------- tilt steering
@@ -5528,14 +5644,29 @@ function drawHud(dt) {
       label("CHECK " + (chk.k + 1) + "  FASTEST", W - pad, yTop + 62, 11, 700, PAL.green, "right", 1);
     }
   } else {
+  // ★ RIVAL INFORMATION IS THE RADIO'S JOB, AND NOTHING ELSE'S. Where the leader is,
+  // where the bunch is, whether it is chasing and where every rider off the top of the
+  // screen sits were all FREE, permanently on screen, for everyone. That is a modern
+  // earpiece handed to a rider who did not fit one, and it made the radio tactic mostly
+  // decorative: it repeated numbers you already had. Now the whole "them" layer is
+  // tiered behind it (I: what they are DOING, II: how far, III: exactly where), and
+  // without it you ride on what you can see, which is how racing worked for a century.
+  // The gap is still COMPUTED here — the radio block below reads it — only the readout
+  // is gated. YOUR position, points, KOM, speed and gauges are never gated: they are
+  // yours, and you can feel them.
   gap = leader === you ? 0 : leader.dist - you.dist;
-  label(leader === you ? "LEADING" : "TO LEADER", W - pad, yTop + 14, 10.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
-  label(leader === you ? "-" : "+" + M.near(gap), W - pad, yTop + 42, 25, 700,
-    leader === you ? PAL.ink : (gap > 30 ? PAL.spot : PAL.ink), "right", -0.3);
+  if ((you.stats.radio || 0) >= 2) {
+    label(leader === you ? "LEADING" : "TO LEADER", W - pad, yTop + 14, 10.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
+    label(leader === you ? "-" : "+" + M.near(gap), W - pad, yTop + 42, 25, 700,
+      leader === you ? PAL.ink : (gap > 30 ? PAL.spot : PAL.ink), "right", -0.3);
+  }
   }
   if (!(race.spec && race.spec.tt)) {
-    label("POINTS " + you.sprintPts, W - pad, yTop + 62, 11, 700, "rgba(46,49,47,.55)", "right", 1);
-    label("KOM " + you.komPts, W - pad, yTop + 78, 11, 700, "rgba(46,49,47,.55)", "right", 1);
+    // Yours, so never gated — and they slide up into the empty slot rather than leaving
+    // a hole where the leader gap used to be.
+    const py = (you.stats.radio || 0) >= 2 ? yTop + 62 : yTop + 20;
+    label("POINTS " + you.sprintPts, W - pad, py, 11, 700, "rgba(46,49,47,.55)", "right", 1);
+    label("KOM " + you.komPts, W - pad, py + 16, 11, 700, "rgba(46,49,47,.55)", "right", 1);
   }
   // Race radio (a tactic, only if fitted): calls out the race as it happens. Higher
   // levels add the time gap and name the attacker.
@@ -5547,7 +5678,8 @@ function drawHud(dt) {
     else if (race.chase > 0.5) { msg = "PELOTON CHASING"; mcol = PAL.spot; }
     else if (!you.inPeloton && you.dist > race.pelotonHead + 8) { msg = "YOU'RE CLEAR"; mcol = PAL.green; }
     else if (race.chase > 0.2) { msg = "PELOTON STIRRING"; }
-    else if (lvl >= 2 && leader !== you && gap > 4) { msg = "LEADER +" + M.near(gap); }
+    // No "LEADER +x" line here any more: level II now puts that number in the corner
+    // readout, and printing the same gap twice on one screen is not a second feature.
     if (msg) {
       const rw = textW(msg, 10, 700, 1.0) + 46, rx = W / 2 - rw / 2, ry = yTop - 2;
       ctx.save();
@@ -5597,7 +5729,15 @@ function drawHud(dt) {
   gauge(gx, gy, gw, gh, you.fluid, you.dry ? PAL.spot : PAL.water, "FLUID");
   // Power meter (a tactic, only if fitted): reads your effort so you can pace it.
   }
-  if (!ttOnly && (you.stats.powerMeter || 0) > 0) {
+  // ★ AND IT DRAWS IN A TIME TRIAL, WHICH IS THE ONE DAY IT SHOULD MATTER MOST. It used to
+  // be suppressed here, which was never a decision: it fell out of "a time trial shows ONE
+  // thing" when the rhythm bar replaced the gauges, and swept the power meter out with the
+  // three resource bars. A real time triallist rides to numbers and nothing else, so
+  // hiding it on the race of truth was backwards. The other three stay hidden; that
+  // reasoning still holds, because legs, food and fluid look after themselves once you
+  // hold the rhythm. This is also what stops the power meter being a slot nobody spends:
+  // on a TT it is the only tactic that does anything at all.
+  if ((you.stats.powerMeter || 0) > 0) {
     const lvl = you.stats.powerMeter;
     const target = you.eff === "ease" ? 16 : you.eff === "attack" ? 92 : 52;
     pmVal += (target - pmVal) * Math.min(1, dt * 6);
@@ -5609,7 +5749,10 @@ function drawHud(dt) {
     // pace car that read as food (DECISIONS.md). Charcoal belongs to no resource; amber
     // and orange stay, because those two carry meaning.
     const col = redline ? PAL.spot : pmVal > 60 ? PAL.fuel : "#4A4E4B";
-    gx += gstep;
+    // On a TT the three gauges never drew, so gx is still at the left margin where the
+    // rhythm bar is about to go. Clear it deliberately rather than by one gauge step, or
+    // the POWER column lands on the rhythm bar's shoulder.
+    gx = ttOnly ? pad + Math.max(20, gw * 2.1) + 20 : gx + gstep;
     gauge(gx, gy, gw, gh, pmVal, col, "POWER");
     if (lvl >= 2) label(redline ? "REDLINE" : pmVal < 30 ? "EASY" : pmVal > 60 ? "HARD" : "STEADY",
       gx + gw / 2, gy + gh + 14, 8, 700, col, "center", 0.5);
@@ -5682,11 +5825,16 @@ function drawHud(dt) {
       inZone ? PAL.water : "rgba(46,49,47,.42)", "right", 1.2);
   }
 
-  if (!you.inPeloton && you.dist > race.pelotonHead + 8) {
+  // How far clear you are and whether they are chasing is the single most valuable
+  // thing a DS says to a rider up the road, so it is the radio's, tiered like the rest:
+  // level I tells you what the bunch is DOING, level II adds how far back it is.
+  if (!you.inPeloton && you.dist > race.pelotonHead + 8 && (you.stats.radio || 0) > 0) {
+    const far = (you.stats.radio || 0) >= 2;
     const sw = Math.max(126, W * 0.36), sxp = W - pad - sw, syp = gy + 20;
     ctx.fillStyle = "rgba(244,242,236,.9)"; roundRect(sxp, syp, sw, 50, 11); ctx.fill();
     ctx.strokeStyle = race.chase > 0.4 ? PAL.spot : "rgba(46,49,47,.22)"; ctx.lineWidth = 1.5; ctx.stroke();
-    label("CLEAR BY " + M.near(you.dist - race.pelotonHead), sxp + 12, syp + 18, 10.5, 700, PAL.ink, "left", 1.1);
+    label(far ? "CLEAR BY " + M.near(you.dist - race.pelotonHead) : "YOU ARE CLEAR",
+      sxp + 12, syp + 18, 10.5, 700, PAL.ink, "left", 1.1);
     label(race.chase > 0.55 ? "CHASING" : race.chase > 0.2 ? "STIRRING" : "SITTING UP",
       sxp + 12, syp + 31, 9, 700, race.chase > 0.55 ? PAL.spot : "rgba(46,49,47,.5)", "left", 1.1);
     ctx.fillStyle = "rgba(46,49,47,.15)"; roundRect(sxp + 12, syp + 37, sw - 24, 6, 3); ctx.fill();
@@ -5765,8 +5913,13 @@ function drawHud(dt) {
   // two riders within a bike length of each other printed their numbers straight
   // through one another and neither could be read (Kevin's screenshot: "31 26 30 25").
   // Sorted by screen x, and any label too close to the one before it drops a row.
+  // ★ ONLY WITH RACE RADIO III. Knowing exactly where every rider off the top of the
+  // screen sits, and by how many metres, is the strongest information in the game and
+  // it used to be free. It is the last rung of the radio now: level I hears the race,
+  // II gets the numbers, III sees the road ahead. Without it you race what is in front
+  // of you.
   const pips = [];
-  for (const r of race.riders) {
+  if ((you.stats.radio || 0) >= 3) for (const r of race.riders) {
     if (r === you || sy(r.dist) > topBar + 116) continue;
     pips.push({ r, x: clamp(sx(r.dist, r.x), pad + 74, W - pad - 74) });
   }
@@ -7335,7 +7488,9 @@ function finishStage() {
   const oneDay = tour.schedule.length === 1;
   const words = ["Stage win", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Last"];
   const gcPlace = gc.indexOf(you) + 1;
-  growCareer(you, specAt(tour.stage).type, lastStage);   // the rider's body grows from how this stage went
+  // The whole spec, not just its type: aero growth needs to know it was a time trial or a
+  // windy day, which the type alone cannot say.
+  growCareer(you, specAt(tour.stage), lastStage);        // the rider's body grows from how this stage went
   Store.save(ladder);
   let earned = you.money;                    // per-race total; each stage banks its own
   if (lastStage) {
@@ -7845,13 +8000,39 @@ const pracOwnsDiv = () => pracDiv >= (ladder.peakDiv || 8);
 const archetypeOnly = () => buildFrom === "practice" && !pracOwnsDiv();
 const fullPreset = name => Object.assign({}, Sim.PRESETS[name]);
 function partUnlocked(part) { return buildAllUnlocked || !part.extreme || buildDivFor() <= part.unlockDiv; }
+// ★ EARNED, THEN BOUGHT. Racing to a division UNLOCKS a part; prize money buys it. Money
+// can never skip the unlock, so it saves grinding rather than gameplay and a free rider's
+// ceiling is identical. Neutral parts are always owned, so a rider who has bought nothing
+// still has a complete, legal, competitive bike.
+function partOwned(part) {
+  if (buildAllUnlocked || part.neutral || !part.extreme) return true;
+  return (ladder.parts || []).indexOf(part.id) >= 0;
+}
+function partCost(part) { return Sim.UNLOCK_COST; }
+function buyPart(part) {
+  if (partOwned(part) || !partUnlocked(part)) return false;
+  const cost = partCost(part);
+  if ((ladder.money || 0) < cost) return false;
+  ladder.money -= cost;
+  ladder.parts = (ladder.parts || []).concat([part.id]);
+  Store.save(ladder);
+  return true;
+}
 // A preset with any locked parts swapped for that slot's neutral, so a fresh rider can
 // always ride a gentle version of the archetype and unlock the sharp parts later.
 function ridablePreset(name) {
-  const p = Sim.PRESETS[name], out = {};
+  return ridableBuild(Sim.PRESETS[name]);
+}
+// ★ NO BUILD MAY CARRY A PART YOU DO NOT HAVE. Anything locked or unbought falls back to
+// the slot's neutral, which is always owned, so every build is legal by construction
+// rather than by the UI happening to hide the button. Also the migration path: a save made
+// before parts were bought keeps riding, it just falls back where it has not paid.
+function ridableBuild(b) {
+  const out = {};
   for (const [slot] of Sim.SLOTS) {
-    const list = Sim.PARTS[slot], want = list.find(x => x.id === p[slot]);
-    out[slot] = (want && partUnlocked(want)) ? want.id : (list.find(x => x.neutral) || list[0]).id;
+    const list = Sim.PARTS[slot], want = list.find(x => x.id === (b || {})[slot]);
+    const ok = want && partUnlocked(want) && partOwned(want);
+    out[slot] = ok ? want.id : (list.find(x => x.neutral) || list[0]).id;
   }
   return out;
 }
@@ -7929,7 +8110,8 @@ function renderBuild() {
     const top = document.createElement("div"); top.className = "top";
     const nb = document.createElement("b"); nb.textContent = part.name; top.appendChild(nb);
     const tag = document.createElement("span"); tag.className = "pips";
-    tag.textContent = chosen ? "fitted" : locked ? "locked" : ""; top.appendChild(tag);
+    tag.textContent = chosen ? "fitted" : locked ? "locked" : !partOwned(part) ? "for sale" : "";
+    top.appendChild(tag);
     card.appendChild(top);
     const note = document.createElement("div"); note.className = "note"; note.textContent = part.note; card.appendChild(note);
     const btns = document.createElement("div"); btns.className = "btns";
@@ -7937,6 +8119,18 @@ function renderBuild() {
       const note2 = document.createElement("div"); note2.className = "fx";
       note2.innerHTML = '<span class="lead">Unlocks at Division ' + part.unlockDiv + '</span>';
       card.appendChild(note2);
+    } else if (!partOwned(part)) {
+      // Unlocked by racing, not yet bought. Money buys the part; it can never buy the unlock.
+      const cost = partCost(part);
+      const afford = (ladder.money || 0) >= cost;
+      const buy = document.createElement("button");
+      buy.textContent = afford ? "Buy · " + cost : cost + " prize money";
+      buy.disabled = !afford;
+      buy.addEventListener("click", ev => {
+        ev.stopPropagation();
+        if (buyPart(part)) { buildDraft[buildSlot] = part.id; renderBuild(); refreshMenu(); }
+      });
+      btns.appendChild(buy);
     } else {
       const fit = document.createElement("button");
       fit.textContent = chosen ? "Fitted" : "Fit"; fit.className = chosen ? "on" : "";
@@ -7949,7 +8143,7 @@ function renderBuild() {
   }
   list.appendChild(strip);
   const career = buildAllUnlocked ? FULL_CAREER : (ladder.career || {});
-  const body = bodyStats(career, buildAllUnlocked ? null : ladder.div);
+  const body = fullBody(career, ladder.div, buildAllUnlocked);
   const addBody = (s) => { for (const k in body) s[k] = (s[k] === undefined ? 0 : s[k]) + body[k]; return s; };
   const now = addBody(Sim.buildStats(buildDraft));
   const bodyOnly = addBody(Sim.buildStats(Sim.neutralBuild()));
@@ -7959,24 +8153,61 @@ function renderBuild() {
   // neutral rider there, which taught two different visual languages for one idea.
   drawRadar($("bRadar"), now, riderProfile(Sim.buildStats(Sim.neutralBuild())), riderProfile(bodyOnly));
   renderMeters(now, bodyOnly, false, $("bMeters"));
+  renderPhysique(); renderTraining();
   $("bPrev").textContent = "Green is your body on a neutral bike, earned by racing. Solid is that body on THIS bike, so the space between them is what the bike tunes. The dashed line is a neo-pro. Parts unlock as you climb divisions.";
   renderTactics();
 }
 // Tactics are a layer on top of the build (a separate progression, kept on the ladder,
 // not per-build). They don't change raw speed — they give you information in the race.
 const TACTICS = [
-  { key: "radio", name: "Race radio", note: "Calls out attacks, the chase and time gaps as they happen." },
-  { key: "powerMeter", name: "Power meter", note: "Reads out how hard you are going, so you can pace and not blow up." }
+  // ★ THREE TACTICS, THREE DIFFERENT SUBJECTS, AND YOU CARRY TWO. The radio is everything
+  // THEY are doing, the power meter is everything YOU are doing, feed craft is everything
+  // your RESOURCES are doing. Leaving one out has to hurt in a different way each time,
+  // which is why a fourth information tactic would have been the wrong addition: two ways
+  // to read the race is one decision made twice, the same mistake wheels, position and
+  // tires were making with aero.
+  { key: "radio", name: "Race radio", note: "Everything the race is doing around you. I: attacks, and whether the bunch is chasing. II: how far back the leader is, and how far clear you are. III: every rider off the top of the screen, and by how much. Carry nothing and you race what you can see." },
+  { key: "powerMeter", name: "Power meter", note: "Everything your own body is doing. Reads your effort live, so you can pace a climb instead of finding out you overcooked it when the legs go. The one thing that helps in a time trial." },
+  // ★ THE SIM ALREADY DID ALL OF THIS AND NO RIDER COULD EVER HAVE IT. carbMix (a bottle
+  // feeding you as well as watering you) and feedSmooth (no stumble when you take one
+  // wide) are implemented in stepRider, sit in BASE_STATS and in FLAG_KEYS, and were
+  // reachable only through the dead UPGRADES catalog that nothing calls. Merged into ONE
+  // tactic at the ceilings that catalog gave them, because two separate feeding tactics
+  // would be the same decision twice.
+  // ★ REACH AND SMOOTH MUST ARRIVE TOGETHER, AND MEASUREMENT IS WHY. A flat per-level ramp
+  // (carbMix/feedSmooth +1, reach +0.25 each) made level I WORSE THAN CARRYING NOTHING:
+  // 6.50 against 4.03 finishing places on the mountain template. The reason is in the sim,
+  // two lines apart — `off > 0.95 * st.reach` decides whether you can grab at all, and
+  // `off > 0.95 && st.feedSmooth < 2` stumbles you for grabbing that wide. So extra reach
+  // with feedSmooth 1 buys you nothing but the wobble. Level I therefore carries feedSmooth
+  // 2 outright, and the ceilings are below the old catalog's (carbMix 2, reach 1.50) because
+  // the full ramp measured 1.32 places, which is a must-pick and not a choice.
+  { key: "feedcraft", name: "Feed craft", note: "Everything your bottles are doing. You can take a bidon from further off your line without the wobble that costs you a wheel, and higher up the drink starts carrying calories as well as water.",
+    levels: [
+      { feedSmooth: 2, reach: 0.20 },
+      { feedSmooth: 2, reach: 0.35, carbMix: 1 },
+      { feedSmooth: 3, reach: 0.50, carbMix: 2 }
+    ] }
 ];
-const WIN_STEPS = { radio: [1, 4, 8], powerMeter: [2, 6, 11] };   // career wins to reach lvl 1/2/3 (tunable)
+// Career wins to reach lvl 1/2/3 (tunable). Feed craft comes early, because eating badly
+// is a beginner's mistake and the tactic that fixes it should be available to a beginner.
+const WIN_STEPS = { radio: [1, 4, 8], powerMeter: [2, 6, 11], feedcraft: [1, 5, 10] };
 function tacticLevel(kind, wins) { return (WIN_STEPS[kind] || []).reduce((n, x) => n + (wins >= x ? 1 : 0), 0); }
 // ★ YOU CHOOSE YOUR RACE CRAFT. Both of these used to arrive on a win-count drip and you
 // simply had whatever your career had handed you, which Kevin called out as the thing
 // that made the build feel choiceless. Now FITTING decides whether you carry it at all and
 // the career decides how good it is, with a floor of level 1 so fitting is never a wasted
-// slot for a new rider. The limit is deliberately ONE while the pool is two, because
-// "fit 2 of 2" is not a decision; it rises as the pool grows.
-const FIT_TACTICS = 1;
+// slot for a new rider. The limit rises with the pool: it was ONE of two, because "fit 2
+// of 2" is not a decision, and it is now TWO of three, which is three real combinations.
+//
+// Two of three exists because of what build 15 did. Moving every piece of rival
+// information behind the radio made the radio carry five things against the power meter's
+// one, and one slot for that pool means nobody ever fits the power meter — a dead option
+// by the same standard the dominance harness holds parts to. Widening the pool alone would
+// not have fixed it (you would take radio plus whatever else, and the power meter is still
+// the one dropped), so the power meter also got the time trial, which is a day it wins
+// outright. Both halves or neither.
+const FIT_TACTICS = 2;
 function fittedTactics() {
   const f = (ladder.tactics || []).filter(k => TACTICS.some(t => t.key === k));
   return f.slice(0, FIT_TACTICS);
@@ -7989,29 +8220,163 @@ function toggleTactic(key) {
   else { f.push(key); while (f.length > FIT_TACTICS) f.shift(); }   // oldest drops out
   ladder.tactics = f; Store.save(ladder);
 }
-// The rider's body has FOUR identity dimensions that grow from how you race — climbing
-// from contesting mountains, sprinting from contesting flats, endurance from front
-// finishes, durability from surviving tours. Each is ~65% of a specialist's edge; the bike
-// tunes the other ~35%. Milestone-based (levels 0-5), so each step is a career goal, and
-// you are never locked in: race a new terrain and that dimension starts to grow.
+// The rider's body has SIX identity dimensions that grow from how you race — climbing from
+// contesting mountains, sprinting from contesting flats, endurance from front finishes,
+// durability from surviving tours, aero from time trials and windy days, handling from
+// descents and technical roads. Milestone-based (levels 0-5), so each step is a career
+// goal, and you are never locked in: race a new terrain and that dimension starts to grow.
 const DIMS = [
   { key: "climb",  name: "Climbing",   ident: "Climber",    grow: "Top finishes on mountain stages" },
   { key: "sprint", name: "Sprinting",  ident: "Sprinter",   grow: "Top finishes on flat stages" },
   { key: "endur",  name: "Endurance",  ident: "Rouleur",    grow: "Finishing near the front, any terrain" },
-  { key: "durab",  name: "Durability", ident: "Hard rider", grow: "Finishing tours without cracking" }
+  { key: "durab",  name: "Durability", ident: "Hard rider", grow: "Finishing tours without cracking" },
+  // ★ THE TWO AXES THE BODY COULD NOT REACH. Aero and handling were pure bike: a whole
+  // career moved them 0.00 while one wheel swap moved handling 0.48, which is why the
+  // bike looked like the only thing that mattered. Now every radar axis is a mix.
+  { key: "aero",   name: "Aerodynamics", ident: "Tester",    grow: "Time trials and riding the wind" },
+  { key: "handle", name: "Bike handling", ident: "Descender", grow: "Descents, corners and technical roads" }
 ];
 const DIM_MILES = {   // cumulative progress for levels I-V; front-loaded so early progress is quick, mastery is a grind (tunable)
   climb:  [12, 30, 55, 85, 120],
   sprint: [12, 30, 55, 85, 120],
   endur:  [8, 20, 36, 56, 80],
-  durab:  [6, 16, 30, 48, 70]
+  durab:  [6, 16, 30, 48, 70],
+  aero:   [10, 26, 48, 75, 105],
+  handle: [10, 26, 48, 75, 105]
 };
+// MIRRORS the sim's DIM_STATS, which hardens the rivals. Change them together.
 const DIM_BODY = {
   climb:  { climbCost: -0.22 },
   sprint: { kick: +0.14, attack: +0.07 },
   endur:  { recover: +0.12, fuelUse: -0.04 },
-  durab:  { resilience: +0.10, fatigueResist: -0.24, gut: +0.30, sweatRate: -0.14 }
+  durab:  { resilience: +0.10, fatigueResist: -0.24, gut: +0.30, sweatRate: -0.14 },
+  aero:   { windTax: -0.13, draft: +0.08 },
+  handle: { handling: +0.14, descend: +0.10 }
 };
+// ★ PHYSIQUE: the pro/con half of the body. Training makes you better at something without
+// making you worse elsewhere, so training is a pure positive on a budget (below). A BODY
+// cannot do that: you cannot be light and powerful at once. Weight is the oldest trade in
+// the sport, and because mass carries momentum downhill and frontal area costs watts, it
+// touches descending, aero and food as well as the obvious climbing and sprinting.
+// Balanced and All-round are FREE, so a rider who has bought nothing still has a complete
+// legal setup; the rest are earned then bought (Phase 4).
+const WEIGHTS = [
+  { id: "feather",  name: "Featherweight", note: "Floats uphill, blows about and has nothing in a sprint",
+    d: { climbCost: -0.100, descend: -0.060, kick: -0.050, attack: -0.020, windTax: -0.020, resilience: -0.030, fuelUse: -0.020 } },
+  { id: "lean",     name: "Lean",          note: "A climber's build without the fragility",
+    d: { climbCost: -0.050, descend: -0.030, kick: -0.025, attack: -0.010, windTax: -0.010, resilience: -0.015, fuelUse: -0.010 } },
+  { id: "balanced", name: "Balanced", neutral: true, note: "No gift and no penalty on any road", d: {} },
+  { id: "solid",    name: "Solid",         note: "Carries speed down and through, pays for it on the way up",
+    d: { climbCost: +0.050, descend: +0.035, kick: +0.030, attack: +0.015, windTax: +0.015, resilience: +0.020, fuelUse: +0.012 } },
+  { id: "power",    name: "Powerhouse",    note: "A sprinter's engine and a sprinter's mountains",
+    d: { climbCost: +0.100, descend: +0.070, kick: +0.060, attack: +0.030, windTax: +0.030, resilience: +0.040, fuelUse: +0.025 } }
+];
+// Muscle type: the old `engine` BIKE slot, moved to the body where it always belonged.
+// Diesel legs are physiology, not equipment.
+const MUSCLES = [
+  { id: "slow",     name: "Slow twitch",  note: "Rolls all day and recovers, with no explosive kick",
+    d: { recover: +0.028, resilience: +0.021, kick: -0.017, fuelUse: -0.010 } },
+  { id: "allround", name: "All-round", neutral: true, note: "A balanced engine", d: {} },
+  { id: "fast",     name: "Fast twitch",  note: "A vicious kick and attack, but it burns fuel and fades",
+    d: { kick: +0.035, attack: +0.025, fuelUse: +0.021, recover: -0.014 } },
+  { id: "metro",    name: "Metronome",    note: "Sips fuel and never quite explodes",
+    d: { fuelUse: -0.032, recover: +0.012, attack: -0.022 } },
+  { id: "furnace",  name: "Furnace",      note: "Takes on food like nobody else, and sweats it out",
+    d: { gut: +0.200, sweatRate: +0.030, fuelUse: +0.015, kick: +0.015 } }
+];
+function physique(list, id) {
+  const pick = list.find(x => x.id === id);
+  // An option you have not bought cannot be worn, so a save that loses its purchases (or
+  // is edited) quietly falls back to the free neutral rather than racing something unpaid.
+  if (pick && physOwned(pick)) return pick;
+  return list.find(x => x.neutral) || list[0];
+}
+// Earned by racing the dimension it belongs to, then bought. Neutral is always free.
+const PHYS_REQ = {
+  lean:    { dim: "climb",  lvl: 2, cost: 800 },
+  solid:   { dim: "sprint", lvl: 2, cost: 800 },
+  feather: { dim: "climb",  lvl: 4, cost: 2400 },
+  power:   { dim: "sprint", lvl: 4, cost: 2400 },
+  slow:    { dim: "endur",  lvl: 2, cost: 1200 },
+  fast:    { dim: "sprint", lvl: 2, cost: 1200 },
+  metro:   { dim: "endur",  lvl: 3, cost: 1600 },
+  furnace: { dim: "durab",  lvl: 3, cost: 1600 }
+};
+function physOwned(opt) {
+  if (buildAllUnlocked || opt.neutral) return true;
+  return (ladder.physique || []).indexOf(opt.id) >= 0;
+}
+function physUnlocked(opt) {
+  if (buildAllUnlocked || opt.neutral) return true;
+  const r = PHYS_REQ[opt.id]; if (!r) return true;
+  return dimLevel(r.dim, (ladder.career || {})[r.dim]) >= r.lvl;
+}
+function buyPhysique(opt) {
+  const r = PHYS_REQ[opt.id]; if (!r) return false;
+  if (physOwned(opt) || !physUnlocked(opt) || (ladder.money || 0) < r.cost) return false;
+  ladder.money -= r.cost;
+  ladder.physique = (ladder.physique || []).concat([opt.id]);
+  Store.save(ladder);
+  return true;
+}
+// Training blocks are bought the same way, priced by how many points they carry.
+function trainReq(t) { return { dim: t.dim, lvl: t.pts, cost: t.pts * 700 }; }
+function trainOwned(t) { return buildAllUnlocked || (ladder.trainOwned || []).indexOf(t.id) >= 0; }
+function trainUnlocked(t) {
+  const r = trainReq(t);
+  return buildAllUnlocked || dimLevel(r.dim, (ladder.career || {})[r.dim]) >= r.lvl;
+}
+function buyTraining(t) {
+  const r = trainReq(t);
+  if (trainOwned(t) || !trainUnlocked(t) || (ladder.money || 0) < r.cost) return false;
+  ladder.money -= r.cost;
+  ladder.trainOwned = (ladder.trainOwned || []).concat([t.id]);
+  Store.save(ladder);
+  return true;
+}
+// ★ TRAINING: the pure-positive half, balanced by a BUDGET rather than by a downside on
+// each item. Making every single choice a trade-off means you can never simply feel
+// stronger, which is the point of having a career. Better blocks cost more points, and the
+// budget is EARNED by racing and can never be bought.
+const TRAINING = [
+  { id: "hills",    dim: "climb",  name: "Hill repeats",        pts: 1, d: { climbCost: -0.050 } },
+  { id: "thresh",   dim: "climb",  name: "Threshold block",     pts: 2, d: { climbCost: -0.070, fatigueResist: -0.050 } },
+  { id: "altitude", dim: "climb",  name: "Altitude camp",       pts: 3, d: { climbCost: -0.120, recover: +0.020 } },
+  { id: "gym",      dim: "sprint", name: "Gym block",           pts: 1, d: { kick: +0.040 } },
+  { id: "sprints",  dim: "sprint", name: "Sprint work",         pts: 2, d: { kick: +0.080, attack: +0.030 } },
+  { id: "leadout",  dim: "sprint", name: "Leadout drills",      pts: 3, d: { kick: +0.100, attack: +0.050, draft: +0.030 } },
+  { id: "long",     dim: "endur",  name: "Long rides",          pts: 1, d: { recover: +0.040 } },
+  { id: "base",     dim: "endur",  name: "Aerobic base",        pts: 2, d: { recover: +0.070, fuelUse: -0.015 } },
+  { id: "gtblock",  dim: "endur",  name: "Grand tour block",    pts: 3, d: { recover: +0.100, fatigueResist: -0.080 } },
+  { id: "core",     dim: "durab",  name: "Core work",           pts: 1, d: { resilience: +0.030 } },
+  { id: "fit",      dim: "durab",  name: "Bike fit",            pts: 1, d: { fatigueResist: -0.060 } },
+  { id: "gut",      dim: "durab",  name: "Gut training",        pts: 2, d: { gut: +0.180 } },
+  { id: "heat",     dim: "durab",  name: "Heat acclimatisation", pts: 2, d: { sweatRate: -0.070 } },
+  { id: "suck",     dim: "aero",   name: "Wheel sucking",       pts: 1, d: { draft: +0.050 } },
+  { id: "tunnel",   dim: "aero",   name: "Wind tunnel session", pts: 2, d: { windTax: -0.050 } },
+  { id: "posn",     dim: "aero",   name: "Position work",       pts: 3, d: { windTax: -0.090 } },
+  { id: "corners",  dim: "handle", name: "Cornering drills",    pts: 1, d: { handling: +0.050 } },
+  { id: "descamp",  dim: "handle", name: "Descending camp",     pts: 2, d: { descend: +0.070 } },
+  { id: "technic",  dim: "handle", name: "Technical block",     pts: 3, d: { handling: +0.080, descend: +0.050 } }
+];
+// Earned only, never purchasable: racing widens what you can carry at once.
+function trainingBudget(career, div) {
+  let lv = 0; for (const d of DIMS) lv += dimLevel(d.key, (career || {})[d.key]);
+  return 3 + (8 - (div || 8)) + Math.floor(lv / 3);
+}
+function fittedTraining() {
+  const owned = ladder.training || [];
+  const budget = trainingBudget(ladder.career, ladder.div);
+  const out = []; let spent = 0;
+  for (const id of owned) {
+    const t = TRAINING.find(x => x.id === id);
+    // Unbought or over budget simply does not ride, so neither an edited save nor a
+    // division drop (which shrinks the budget) can put an illegal rider on the road.
+    if (!t || !trainOwned(t) || !trainUnlocked(t) || spent + t.pts > budget) continue;
+    out.push(t); spent += t.pts;
+  }
+  return out;
+}
 const ROMAN = ["", "I", "II", "III", "IV", "V"];
 const FULL_CAREER = { climb: 999, sprint: 999, endur: 999, durab: 999 };
 const RUST_FULL = 12;   // uncontested stages for form to fade one full level (tunable)
@@ -8036,9 +8401,11 @@ function riderIdentity(career) {
 // Grow the dimensions from a finished stage — terrain-tied so you can't farm one to raise
 // another, and rewarding contesting (top 8) not just winning, so a developing rider climbs out.
 // Also track rust: every stage dulls each discipline's form a little; contesting one wipes its rust.
-function growCareer(you, type, tourDone) {
-  const c = ladder.career = ladder.career || { climb: 0, sprint: 0, endur: 0, durab: 0 };
-  const rz = ladder.rust = ladder.rust || { climb: 0, sprint: 0, endur: 0, durab: 0 };
+function growCareer(you, spec, tourDone) {
+  const type = spec && spec.type ? spec.type : spec;    // tolerates the old type-only call
+  const blank = () => ({ climb: 0, sprint: 0, endur: 0, durab: 0, aero: 0, handle: 0 });
+  const c = ladder.career = Object.assign(blank(), ladder.career);
+  const rz = ladder.rust = Object.assign(blank(), ladder.rust);
   for (const k in rz) rz[k]++;                          // a stage passes; form dulls a touch everywhere
   const top = Math.max(0, 8 - (you.place || 8));       // 7 for a win, 0 for 8th+
   const cl = type === "mountain" ? top : type === "hills" ? top * 0.5 : 0;
@@ -8048,6 +8415,108 @@ function growCareer(you, type, tourDone) {
   if (en > 0) { c.endur += en; rz.endur = 0; }
   const du = (!you.bonk && !you.dry ? 1.5 : 0) + (tourDone ? 3 : 0);
   if (du > 0) { c.durab += du; rz.durab = 0; }
+  // AERO comes from riding against the air on purpose: a time trial is nothing else, and
+  // a windy road is the other place position is worth real time.
+  const windy = spec && spec.wind !== undefined ? spec.wind : 0;
+  const ae = (spec && spec.tt) ? Math.max(2, top) : windy > 0.6 ? top * 0.5 : 0;
+  if (ae > 0) { c.aero += ae; rz.aero = 0; }
+  // HANDLING comes from roads that ask for it. Mountains are the descending school, and
+  // hills are twistier than a pan-flat sprinters' day.
+  const hd = type === "mountain" ? top * 0.7 : type === "hills" ? top * 0.4 : 0;
+  if (hd > 0) { c.handle += hd; rz.handle = 0; }
+}
+// Physique: two rows of pro/con choices. Rendered as the same segmented control the
+// presets use, because it IS the same kind of choice: one of a short list, no cost.
+function renderPhysique() {
+  const host = $("bPhysique"); if (!host) return; host.innerHTML = "";
+  const rows = [
+    { list: WEIGHTS, cur: ladder.weight, name: "Race weight",
+      set: v => { ladder.weight = v; }, note: "Light climbs. Heavy descends and sprints." },
+    { list: MUSCLES, cur: ladder.muscle, name: "Muscle type",
+      set: v => { ladder.muscle = v; }, note: "What your legs are made for." }
+  ];
+  for (const row of rows) {
+    const head = document.createElement("div"); head.className = "note";
+    head.textContent = row.name + " · " + row.note; host.appendChild(head);
+    const seg = document.createElement("div"); seg.className = "segmented";
+    const cur = physique(row.list, row.cur);
+    for (const opt of row.list) {
+      const b = document.createElement("button");
+      b.textContent = opt.name;
+      b.title = opt.note;
+      const owned = physOwned(opt), unl = physUnlocked(opt);
+      const req = PHYS_REQ[opt.id];
+      b.setAttribute("aria-pressed", String(opt.id === cur.id));
+      if (!unl) { b.disabled = true; b.title = opt.name + " — needs " + req.dim + " " + ROMAN[req.lvl]; }
+      else if (!owned) b.title = opt.name + " — " + req.cost + " prize money";
+      b.addEventListener("click", () => {
+        if (!unl) return;
+        if (!owned && !buyPhysique(opt)) return;      // cannot afford it yet
+        row.set(opt.id); Store.save(ladder); renderBuild(); refreshMenu();
+      });
+      seg.appendChild(b);
+    }
+    host.appendChild(seg);
+    const sub = document.createElement("div"); sub.className = "fx";
+    const shop = row.list.filter(o => !physOwned(o) && physUnlocked(o))
+      .map(o => o.name + " " + PHYS_REQ[o.id].cost);
+    sub.innerHTML = '<span class="lead">' + cur.name + " — " + cur.note
+      + (shop.length ? "  ·  for sale: " + shop.join(", ") : "") + "</span>";
+    host.appendChild(sub);
+  }
+}
+// Training: pure positives on an earned budget. Better blocks cost more points, and what
+// does not fit simply does not ride, so the budget is the balance rather than a downside
+// bolted onto each block.
+function renderTraining() {
+  const host = $("bTraining"); if (!host) return; host.innerHTML = "";
+  const budget = trainingBudget(ladder.career, ladder.div);
+  const fitted = fittedTraining().map(t => t.id);
+  const spent = fittedTraining().reduce((a, t) => a + t.pts, 0);
+  const head = document.createElement("div"); head.className = "note";
+  head.textContent = "Carrying " + spent + " of " + budget
+    + " points. Race more, and you can carry more.";
+  host.appendChild(head);
+  const strip = document.createElement("div"); strip.className = "strip";
+  for (const t of TRAINING) {
+    const dim = DIMS.find(d => d.key === t.dim);
+    const lvl = dimLevel(t.dim, (ladder.career || {})[t.dim]);
+    const earned = trainUnlocked(t);             // a 3-point block wants that dimension at III
+    const bought = trainOwned(t);
+    const on = fitted.indexOf(t.id) >= 0;
+    const card = document.createElement("div"); card.className = "card" + (earned ? "" : " locked");
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = t.name; top.appendChild(nb);
+    const pips = document.createElement("span"); pips.className = "pips";
+    pips.textContent = t.pts + (t.pts === 1 ? " pt" : " pts"); top.appendChild(pips);
+    card.appendChild(top);
+    const note = document.createElement("div"); note.className = "note";
+    note.textContent = dim ? dim.name : t.dim; card.appendChild(note);
+    const btns = document.createElement("div"); btns.className = "btns";
+    const b = document.createElement("button");
+    if (!earned) { b.textContent = "Needs " + (dim ? dim.name : t.dim) + " " + ROMAN[t.pts]; b.disabled = true; }
+    else if (!bought) {
+      const cost = trainReq(t).cost, afford = (ladder.money || 0) >= cost;
+      b.textContent = afford ? "Buy · " + cost : cost + " prize money";
+      b.disabled = !afford;
+      b.addEventListener("click", () => { if (buyTraining(t)) { renderBuild(); refreshMenu(); } });
+    }
+    else {
+      const room = on || spent + t.pts <= budget;
+      b.textContent = on ? "Carrying" : room ? "Carry" : "No room";
+      b.disabled = !room;
+      b.className = on ? "on" : "";
+      b.addEventListener("click", () => {
+        const cur = (ladder.training || []).slice();
+        const at = cur.indexOf(t.id);
+        if (at >= 0) cur.splice(at, 1); else cur.push(t.id);
+        ladder.training = cur; Store.save(ladder); renderBuild();
+      });
+    }
+    btns.appendChild(b); card.appendChild(btns);
+    strip.appendChild(card);
+  }
+  host.appendChild(strip);
 }
 function renderTactics() {
   const host = $("bTactics"); if (!host) return; host.innerHTML = "";
@@ -8110,18 +8579,41 @@ function renderTactics() {
 }
 // A build's stats with the rider's grown body (the four dimensions) and race-craft tactics
 // layered on. The daily gives a fully-developed body and full tactics.
+// ★ ONE SOURCE FOR "EVERYTHING THAT IS BODY": grown dimensions, physique and training.
+// The radar and the race MUST agree, and the way that breaks is two places assembling the
+// rider slightly differently. Both call this.
+// The daily hands out a developed body but a NEUTRAL physique and no training, so everyone
+// rides the same rider and the shared board stays fair.
+function fullBody(career, div, daily) {
+  const out = daily ? bodyStats(FULL_CAREER, null) : bodyStats(career || {}, div);
+  if (!daily) {
+    for (const p of [physique(WEIGHTS, ladder.weight), physique(MUSCLES, ladder.muscle)])
+      for (const k in p.d) out[k] = (out[k] === undefined ? 0 : out[k]) + p.d[k];
+    for (const t of fittedTraining())
+      for (const k in t.d) out[k] = (out[k] === undefined ? 0 : out[k]) + t.d[k];
+  }
+  return out;
+}
 function raceStats(build, career, daily) {
   const s = Sim.buildStats(build || Sim.neutralBuild());
-  const body = daily ? bodyStats(FULL_CAREER, null) : bodyStats(career || {}, ladder.div);
+  const body = fullBody(career, ladder.div, daily);
   for (const k in body) s[k] = (s[k] === undefined ? 0 : s[k]) + body[k];
   const w = daily ? 99 : (ladder.wins || 0);
   // Fitted decides IF, career decides HOW GOOD (floor 1, so fitting always buys you
   // something). The daily still hands everyone the lot, which is what keeps the shared
   // leaderboard fair and must stay true whatever the economy does.
   for (const t of TACTICS) {
-    s[t.key] = daily ? 3
-      : isFitted(t.key) ? Math.max(1, tacticLevel(t.key, w))
-      : 0;
+    const lvl = daily ? 3 : isFitted(t.key) ? Math.max(1, tacticLevel(t.key, w)) : 0;
+    s[t.key] = lvl;
+    // A tactic whose key IS a sim flag (radio, powerMeter) just carries its level. One that
+    // drives SEVERAL stats spells out each level explicitly in `levels`, NOT as a per-level
+    // multiplier: Feed craft's stats are coupled in the sim (reach is a liability until
+    // feedSmooth reaches 2), so a linear ramp made its first level worse than nothing.
+    // Deltas ADD to the base, and an unfitted tactic contributes nothing at all.
+    if (t.levels && lvl > 0) {
+      const g = t.levels[Math.min(lvl, t.levels.length) - 1];
+      for (const k in g) s[k] = (s[k] === undefined ? 0 : s[k]) + g[k];
+    }
   }
   return s;
 }
@@ -8142,6 +8634,9 @@ $("bLock").addEventListener("click", () => {
   }
   committedBuild = Object.assign({}, buildDraft);
   playerType = "rouleur";                      // build fully overrides stats; keep a valid base
+  // Sanitised on the way in, so a build can never carry an unowned part even if the UI
+  // let one through.
+  committedBuild = ridableBuild(committedBuild);
   ladder.build = committedBuild; Store.save(ladder);
   showProfile(null);                            // refresh the menu radar to the new build
   if (buildFrom === "tour") showBriefing();     // committing the build starts the tour
@@ -8975,7 +9470,7 @@ function showProfile(ghostKey) {
   // his career growth because it was folded into a single line the bike also moved; now
   // the green ring IS the growth and the space beyond it is what the bike tunes.
   const neutral = Sim.buildStats(Sim.neutralBuild());
-  const body = bodyStats(ladder.career || {}, ladder.div);
+  const body = fullBody(ladder.career || {}, ladder.div, false);
   const bodyOnly = Object.assign({}, neutral);
   for (const k in body) bodyOnly[k] = (bodyOnly[k] === undefined ? 0 : bodyOnly[k]) + body[k];
   const stats = Sim.buildStats(committedBuild || Sim.neutralBuild());
@@ -8993,7 +9488,7 @@ function showProfile(ghostKey) {
 }
 requestAnimationFrame(() => { showProfile(null); renderKits(); });
 refreshMenu();
-Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); if (ladder.steer === "tilt") { ladder.steer = "drag"; armTiltOnFirstTap(); } ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build || null; pracBuild = ladder.pracBuild || null; refreshMenu(); renderKits(); showProfile(null); } });
+Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); if (ladder.steer === "tilt") { ladder.steer = "drag"; armTiltOnFirstTap(); } ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build ? ridableBuild(ladder.build) : null; pracBuild = ladder.pracBuild ? ridableBuild(ladder.pracBuild) : null; refreshMenu(); renderKits(); showProfile(null); } });
 Store.loadData().then(v => { history = v || []; });   // PORT: a @Query, not a blob read
 $("rollBtn").addEventListener("click", () => { hideAll(); startStage(); });
 $("nextBtn").addEventListener("click", () => {

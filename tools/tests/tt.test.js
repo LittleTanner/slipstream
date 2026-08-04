@@ -11,9 +11,23 @@ const starts = race.riders.map(r => r.startAt).sort((a, b) => a - b);
 const gapsOk = starts.every((s, i) => i === 0 || Math.abs((s - starts[i - 1]) - CFG.ttGap) < 0.01);
 console.log('start slots: ' + starts.map(s => s.toFixed(0)).join(','));
 if (new Set(starts).size !== starts.length || !gapsOk) { console.log('FAIL: TT starts are not clean ' + CFG.ttGap + 's intervals'); process.exit(1); }
+// FLATTEN THE WIND AND STRAIGHTEN THE ROAD before measuring the shelter. The shelter sits
+// off to one side in a crosswind AND to the inside of a bend, so a rider pinned directly
+// behind a wheel drifts in and out of it as the weather and the road roll past: what the
+// commissaire counts becomes a reading of the parcours rather than of the rule. Left live,
+// this passed or failed on which patch of wind and which curve the player happened to be
+// in (found when rivals gained an aero dimension, which shifted their speed and therefore
+// their position in both fields). Same hard rule the other scenario tests follow.
+race.course.winds = [{ d: -1e6, dir: 0, str: 0, lon: 0 }, { d: 1e9, dir: 0, str: 0, lon: 0 }];
+race.course.bend = { a: 0, f: 1, p: 0 }; race.course.swAmp = 0;
 // glue the player to a rider's wheel and let the commissaire count
 const hare = race.riders.filter(o => !o.you)[0];
 race.you.startAt = 0; hare.startAt = 0;
+// AND CLEAR THE PRE-ROLL DEBT. createRace records the player's start slot as a debt the
+// first step() pays off in one go; moving the slot to 0 afterwards does not cancel it. The
+// first step therefore rode 84 seconds, carrying the player over the finish line, where a
+// finished rider is skipped entirely and there is no shelter left to measure.
+race.preRoll = 0;
 race.you.dist = 60; hare.dist = 61.4; hare.speed = race.you.speed = 11;
 let sheltered = null, pen0 = race.you.penalties.length;
 for (let g = 0; g < 120 * 20; g++) {

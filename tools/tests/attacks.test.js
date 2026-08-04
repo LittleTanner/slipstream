@@ -14,12 +14,17 @@ c.rounds = []; c.narrows = []; c.hazards = []; c.surfaces = []; c.primes = []; c
 const raider = race.riders.filter(o => !o.you)[0];
 raider.plan = { k: 'raid', at: 0.08, kick: 400 };
 for (const o of race.riders.filter(o => !o.you).slice(1)) o.plan = { k: 'raid', at: 0.99, kick: 400 };
-let episodes = [], cur = null;
+let episodes = [], cur = null, armed = false;
 for (let g = 0; g < 120 * 120; g++) {
   Sim.step(race, CFG.fixedDt, { rate: 2.5, ease: false, launch: false, stumble: false, tx: race.you.x });
   const t = g / 120;
   if (t < 15) continue;                       // skip the pace-car bumper scramble window
   const attacking = raider.eff === 'attack';
+  // An attack already UNDERWAY when the window opens is truncated at the head, exactly as
+  // one still open at the end is truncated at the tail, and its clipped length reads as a
+  // flicker. Wait for one clean non-attacking frame before counting anything.
+  if (!attacking) armed = true;
+  if (!armed) continue;
   if (attacking && !cur) cur = { start: t };
   if (!attacking && cur) { cur.end = t; episodes.push(cur); cur = null; }
   while (race.events.length) race.events.shift();
