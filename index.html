@@ -313,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 14</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 15</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -768,6 +768,17 @@ const RIVAL_DIMS = {
   rouleur:  ["endur", "durab", "aero", "handle"]
 };
 const RIVAL_SPREAD = 0.45;      // share of the dimensions their archetype does NOT imply
+// ★ THE GROWTH CURVE IS STRAIGHT, AND IT WAS TRIED CURVED. Making the rivals LAG in the
+// easy divisions and converge at the top is the obvious way to let a young career feel
+// itself getting stronger, and it does exactly that on paper: at exponent 1.6 the worst
+// rung's payoff for a whole career of growth went from 0.88 places to 1.31. It also
+// quietly broke THE SECOND CHANCE, which is calibrated against the bunch's pace: a
+// fumbled wheel change went from catching the bunch on 5 of 7 seeds to 1 of 7, which is
+// the near-certain-DNF failure mode DECISIONS.md already records as rejected once.
+// Exponent 1.25 measured 1 of 7 and 1.15 measured 3 of 7, so it is not a matter of
+// finding a gentler value. Whatever weakens the mid-ladder field re-tunes that chase.
+// If this is revisited, re-measure the chase FIRST (tools/tests/second-chance.test.js
+// across seeds, both wheel-change qualities), not last.
 function rivalBody(type, t) {
   const own = RIVAL_DIMS[type] || RIVAL_DIMS.rouleur;
   const out = {};
@@ -992,6 +1003,28 @@ function tourSchedule(seed, len) {
 // The ladder. Division 8 is the bottom rung, Division 1 the top. Difficulty comes
 // from the race being harder to read, not from rivals being faster: sparser feeding,
 // stronger wind, longer and hillier stages, and an AI that stops making mistakes.
+//
+// ★ KNOWN, MEASURED, AND OPEN. `strength` below is a raw speed bonus added to every
+// RIVAL and to nobody else; the player's strength is pinned at 1.0 with no way to earn
+// any. Measured with tools/ladder.js (a body-matched player on a neutral bike, 5
+// templates x 3 seeds): arrive at each division developed exactly for it and you finish
+// 4.11 at Division 8 sliding to 6.27 at Division 1 — second to last in an eight-rider
+// field, having done everything right. Not a treadmill, a DOWNWARD ESCALATOR.
+//
+// Three fixes were built and measured, and every one of them broke something else:
+//   * delete it            -> ladder drift +2.16 to +0.32, but MOUNTAINS STOP SELECTING.
+//                             What shatters a field on a climb is absolute pace: the
+//                             queen-stage margin for a climbing rider over a sprinting
+//                             one goes from +20 places to -11, i.e. sprinters start
+//                             winning mountain stages.
+//   * share it with you    -> the second chance's fumbled wheel change goes from
+//                             catching the bunch on 5 of 7 seeds to 2 of 7.
+//   * curve the rival body -> best mountains of anything tried (+73), and the same
+//                             fumble goes to 1 of 7. See rivalBody.
+// The near-certain-DNF outcome is the exact failure DECISIONS.md already records as
+// rejected once, so none of the three shipped. The untried lever is making the TERRAIN
+// harder with division rather than the RACING faster, which would let the speed ramp
+// come down without flattening the climbs. That is a bigger change than a constant.
 function tierProfile(div) {
   const t = Math.max(0, Math.min(1, (8 - div) / 7));
   return {
@@ -1000,8 +1033,8 @@ function tierProfile(div) {
     hilly: 0.14 * t,          // more climbing
     wind: 0.75 + 0.70 * t,    // stronger crosswinds
     items: 1 - 0.42 * t,      // less on the road
-    strength: 0.035 * t,      // rivals genuinely faster, not just better developed
-    spread: 0.035 - 0.021 * t, // ... but far more ALIKE: a tight field means one mistake costs places
+    strength: 0.035 * t,      // the whole race is faster up here, you included
+    spread: 0.035 - 0.021 * t, // the field gets far more ALIKE: one mistake costs places
     ai: t                     // rivals much sharper
   };
 }
@@ -1797,6 +1830,9 @@ function createRace(opts) {
   const riders = [];
   const kitId = (KITS.find(k => k.id === opts.kit) || KITS[0]).id;
   const kit = (KITS.find(k => k.id === kitId) || KITS[0]).c;
+  // NOTE: the player is built WITHOUT D on purpose (see tierProfile's note on the
+  // division speed ramp). Passing it here is a one-word change that hands you the
+  // division's pace as well, and it was measured: it costs the second chance.
   const you = makeRider(Object.assign({}, YOU, { c: kit }), 0, true, opts.playerType, R, opts.playerStats);
   // ROLLING START. A road stage does not begin from a standstill: the bunch rolls out behind
   // the car and the flag drops with everyone already moving. A time trial genuinely does start
@@ -5595,14 +5631,29 @@ function drawHud(dt) {
       label("CHECK " + (chk.k + 1) + "  FASTEST", W - pad, yTop + 62, 11, 700, PAL.green, "right", 1);
     }
   } else {
+  // ★ RIVAL INFORMATION IS THE RADIO'S JOB, AND NOTHING ELSE'S. Where the leader is,
+  // where the bunch is, whether it is chasing and where every rider off the top of the
+  // screen sits were all FREE, permanently on screen, for everyone. That is a modern
+  // earpiece handed to a rider who did not fit one, and it made the radio tactic mostly
+  // decorative: it repeated numbers you already had. Now the whole "them" layer is
+  // tiered behind it (I: what they are DOING, II: how far, III: exactly where), and
+  // without it you ride on what you can see, which is how racing worked for a century.
+  // The gap is still COMPUTED here — the radio block below reads it — only the readout
+  // is gated. YOUR position, points, KOM, speed and gauges are never gated: they are
+  // yours, and you can feel them.
   gap = leader === you ? 0 : leader.dist - you.dist;
-  label(leader === you ? "LEADING" : "TO LEADER", W - pad, yTop + 14, 10.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
-  label(leader === you ? "-" : "+" + M.near(gap), W - pad, yTop + 42, 25, 700,
-    leader === you ? PAL.ink : (gap > 30 ? PAL.spot : PAL.ink), "right", -0.3);
+  if ((you.stats.radio || 0) >= 2) {
+    label(leader === you ? "LEADING" : "TO LEADER", W - pad, yTop + 14, 10.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
+    label(leader === you ? "-" : "+" + M.near(gap), W - pad, yTop + 42, 25, 700,
+      leader === you ? PAL.ink : (gap > 30 ? PAL.spot : PAL.ink), "right", -0.3);
+  }
   }
   if (!(race.spec && race.spec.tt)) {
-    label("POINTS " + you.sprintPts, W - pad, yTop + 62, 11, 700, "rgba(46,49,47,.55)", "right", 1);
-    label("KOM " + you.komPts, W - pad, yTop + 78, 11, 700, "rgba(46,49,47,.55)", "right", 1);
+    // Yours, so never gated — and they slide up into the empty slot rather than leaving
+    // a hole where the leader gap used to be.
+    const py = (you.stats.radio || 0) >= 2 ? yTop + 62 : yTop + 20;
+    label("POINTS " + you.sprintPts, W - pad, py, 11, 700, "rgba(46,49,47,.55)", "right", 1);
+    label("KOM " + you.komPts, W - pad, py + 16, 11, 700, "rgba(46,49,47,.55)", "right", 1);
   }
   // Race radio (a tactic, only if fitted): calls out the race as it happens. Higher
   // levels add the time gap and name the attacker.
@@ -5614,7 +5665,8 @@ function drawHud(dt) {
     else if (race.chase > 0.5) { msg = "PELOTON CHASING"; mcol = PAL.spot; }
     else if (!you.inPeloton && you.dist > race.pelotonHead + 8) { msg = "YOU'RE CLEAR"; mcol = PAL.green; }
     else if (race.chase > 0.2) { msg = "PELOTON STIRRING"; }
-    else if (lvl >= 2 && leader !== you && gap > 4) { msg = "LEADER +" + M.near(gap); }
+    // No "LEADER +x" line here any more: level II now puts that number in the corner
+    // readout, and printing the same gap twice on one screen is not a second feature.
     if (msg) {
       const rw = textW(msg, 10, 700, 1.0) + 46, rx = W / 2 - rw / 2, ry = yTop - 2;
       ctx.save();
@@ -5749,11 +5801,16 @@ function drawHud(dt) {
       inZone ? PAL.water : "rgba(46,49,47,.42)", "right", 1.2);
   }
 
-  if (!you.inPeloton && you.dist > race.pelotonHead + 8) {
+  // How far clear you are and whether they are chasing is the single most valuable
+  // thing a DS says to a rider up the road, so it is the radio's, tiered like the rest:
+  // level I tells you what the bunch is DOING, level II adds how far back it is.
+  if (!you.inPeloton && you.dist > race.pelotonHead + 8 && (you.stats.radio || 0) > 0) {
+    const far = (you.stats.radio || 0) >= 2;
     const sw = Math.max(126, W * 0.36), sxp = W - pad - sw, syp = gy + 20;
     ctx.fillStyle = "rgba(244,242,236,.9)"; roundRect(sxp, syp, sw, 50, 11); ctx.fill();
     ctx.strokeStyle = race.chase > 0.4 ? PAL.spot : "rgba(46,49,47,.22)"; ctx.lineWidth = 1.5; ctx.stroke();
-    label("CLEAR BY " + M.near(you.dist - race.pelotonHead), sxp + 12, syp + 18, 10.5, 700, PAL.ink, "left", 1.1);
+    label(far ? "CLEAR BY " + M.near(you.dist - race.pelotonHead) : "YOU ARE CLEAR",
+      sxp + 12, syp + 18, 10.5, 700, PAL.ink, "left", 1.1);
     label(race.chase > 0.55 ? "CHASING" : race.chase > 0.2 ? "STIRRING" : "SITTING UP",
       sxp + 12, syp + 31, 9, 700, race.chase > 0.55 ? PAL.spot : "rgba(46,49,47,.5)", "left", 1.1);
     ctx.fillStyle = "rgba(46,49,47,.15)"; roundRect(sxp + 12, syp + 37, sw - 24, 6, 3); ctx.fill();
@@ -5832,8 +5889,13 @@ function drawHud(dt) {
   // two riders within a bike length of each other printed their numbers straight
   // through one another and neither could be read (Kevin's screenshot: "31 26 30 25").
   // Sorted by screen x, and any label too close to the one before it drops a row.
+  // ★ ONLY WITH RACE RADIO III. Knowing exactly where every rider off the top of the
+  // screen sits, and by how many metres, is the strongest information in the game and
+  // it used to be free. It is the last rung of the radio now: level I hears the race,
+  // II gets the numbers, III sees the road ahead. Without it you race what is in front
+  // of you.
   const pips = [];
-  for (const r of race.riders) {
+  if ((you.stats.radio || 0) >= 3) for (const r of race.riders) {
     if (r === you || sy(r.dist) > topBar + 116) continue;
     pips.push({ r, x: clamp(sx(r.dist, r.x), pad + 74, W - pad - 74) });
   }
@@ -8074,8 +8136,11 @@ function renderBuild() {
 // Tactics are a layer on top of the build (a separate progression, kept on the ladder,
 // not per-build). They don't change raw speed — they give you information in the race.
 const TACTICS = [
-  { key: "radio", name: "Race radio", note: "Calls out attacks, the chase and time gaps as they happen." },
-  { key: "powerMeter", name: "Power meter", note: "Reads out how hard you are going, so you can pace and not blow up." }
+  // The two tactics are deliberately about DIFFERENT SUBJECTS: the radio is everything
+  // THEY are doing, the power meter is everything YOU are doing. Carrying one means
+  // racing the other half blind, which is the whole point of a choice.
+  { key: "radio", name: "Race radio", note: "Everything the race is doing around you. I: attacks, and whether the bunch is chasing. II: how far back the leader is, and how far clear you are. III: every rider off the top of the screen, and by how much. Carry nothing and you race what you can see." },
+  { key: "powerMeter", name: "Power meter", note: "Everything your own body is doing. Reads your effort live, so you can pace a climb instead of finding out you overcooked it when the legs go." }
 ];
 const WIN_STEPS = { radio: [1, 4, 8], powerMeter: [2, 6, 11] };   // career wins to reach lvl 1/2/3 (tunable)
 function tacticLevel(kind, wins) { return (WIN_STEPS[kind] || []).reduce((n, x) => n + (wins >= x ? 1 : 0), 0); }

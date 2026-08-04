@@ -95,6 +95,17 @@ archetype" actually meant.
   legal, competitive setup.
 - **`engine` moves from the bike to the body.** Diesel legs are physiology, not equipment;
   it only sat in the bike list because that is where the build system happened to live.
+- **Every piece of RIVAL information on the HUD belongs to the race radio.** Where the
+  leader is, how far clear of the bunch you are, whether it is chasing, and the rail of
+  riders off the top of the screen were all free and permanently on screen for everyone,
+  which is a modern earpiece handed to a rider who never fitted one. It also made the
+  radio nearly decorative, because it repeated numbers you already had. Now it is tiered:
+  **I** hears the race (attacks, chase), **II** adds the numbers (leader gap, how far
+  clear), **III** opens the rider rail. Carry nothing and you race what you can see, which
+  is how racing worked for a century. YOUR position, points, KOM, speed and gauges are
+  never gated: they are yours and you can feel them. Follow-on idea, not built: the
+  chalkboard moto (the ardoisier) as the free, diegetic way to learn a gap without a radio,
+  using the moto that already visits rather than new screen furniture.
 - **Race craft is fitted, not drip-fed.** Race radio and power meter used to arrive
   automatically on career wins, so you simply had whatever your record had handed you.
   Fitting now decides whether you carry it, the career decides how good it is (floored at
@@ -168,6 +179,49 @@ Consequences worth keeping straight:
   the peloton, which chase, the driver and mass shelter all hang off. A corner case at
   this field size; documented as a known gap in MECHANICS.md. Revisit (as "peloton =
   group with most GC riders" or "rearmost large group") if fields ever grow beyond 8.
+
+## The ladder's downward escalator, and why nothing was changed yet
+
+Kevin, 2026-08: "It shouldn't feel like when you improve that nothing changed compared to
+your rivals." He proposed making the rivals weaker in the easy divisions and equal at the
+top. Measured with a new harness, `tools/ladder.js`, which grids DIVISION against PLAYER
+DEVELOPMENT and reads the spread down each column:
+
+- **Growing your body DOES pay at every rung** (weakest is Division 7 at 0.88 places for a
+  whole career of growth), so "nothing changed" is not literally what is happening.
+- **The real fault is worse and it is the other way round.** A rider who arrives at each
+  division developed exactly for it finishes **4.11 at Division 8 sliding to 6.27 at
+  Division 1** — second to last in an eight-rider field, having done everything right.
+  Not a treadmill, a downward escalator.
+- **The cause is `tierProfile().strength`**, a raw speed bonus of up to 3.5% added to every
+  rival and to nobody else. The player's `strength` is pinned at 1.0 with no way to earn
+  any. Note that the comment two lines above it in the source says difficulty comes "not
+  from rivals being faster", which the code has been contradicting all along.
+
+Three fixes were built and measured. Every one broke something else, so **none shipped**:
+
+| fix | ladder drift D8 to D1 | mountains select climbers | second chance, fumbled change |
+|---|---|---|---|
+| today | +2.16 | +20 places | 5 of 7 seeds |
+| delete the bonus | **+0.32** | **-11 (sprinters win mountains)** | 5 of 7 |
+| share it with the player | +2.16 | not isolated | **2 of 7** |
+| curve the rival body (1.6) | +0.32 | **+73, no division inverted** | **1 of 7** |
+
+What that table says: the speed ramp is **load-bearing for mountain selectivity**, because
+what shatters a field on a climb is absolute pace. And anything that weakens the mid-ladder
+field re-tunes the second chance, whose whole balance is calibrated against the bunch's
+pace — a fumbled wheel change becoming a near-certain DNF is the exact outcome this file
+already records as rejected once. Gentler curve exponents do not escape it (1.25 measured 1
+of 7, 1.15 measured 3 of 7).
+
+**The untried lever, and the recommendation: make the TERRAIN harder with division rather
+than the RACING faster.** Steeper and longer climbs shatter the field for everyone equally,
+including you, and your climbing development is the honest answer to them. That would let
+the speed ramp come down without flattening the mountains. It is a bigger change than a
+constant, it re-tunes the second chance again, and it is Kevin's call.
+
+Until then the sim is untouched, verify passes 1590/1590 with no regen, and the harness that
+found this is in the tree so the next attempt starts from measurement.
 
 ## Design pillars
 

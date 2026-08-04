@@ -67,6 +67,24 @@ def build_throwaway(scratch):
         # shrink both one-day draws (flat and hills) so a race takes ~30s
         ("len: 1400", "len: 320"),
         ("len: 1550", "len: 320"),
+        # Publish what the HUD decided to show about the RIVALS, so the radio gating
+        # can be asserted rather than eyeballed. drawHud is a view closure and
+        # unreachable from evaluate, and "a readout that should be hidden is showing"
+        # is exactly the class the sim tests cannot see. Inert otherwise: it only
+        # writes to a window object.
+        ("  gap = leader === you ? 0 : leader.dist - you.dist;\n"
+         "  if ((you.stats.radio || 0) >= 2) {",
+         "  gap = leader === you ? 0 : leader.dist - you.dist;\n"
+         "  (window.__hud = window.__hud || { pips: 0 }).radio = (you.stats.radio || 0);\n"
+         "  if ((you.stats.radio || 0) >= 2) { window.__hud.leader = 1;"),
+        ("  const pips = [];\n"
+         "  if ((you.stats.radio || 0) >= 3) for (const r of race.riders) {",
+         "  const pips = [];\n"
+         "  if (window.__hud) window.__hud.pipGate = ((you.stats.radio || 0) >= 3) ? 1 : 0;\n"
+         "  if ((you.stats.radio || 0) >= 3) for (const r of race.riders) {"),
+        ("  pips.sort((a, b) => a.x - b.x);",
+         "  if (window.__hud) window.__hud.pips = Math.max(window.__hud.pips || 0, pips.length);\n"
+         "  pips.sort((a, b) => a.x - b.x);"),
     ]
     for old, new in subs:
         n = html.count(old)
@@ -337,6 +355,51 @@ async def main():
                       "want %d on the card and no next-costs paragraph; button %s, paragraph %r"
                       % (want, got_btn, r["priceLine"]))
             await ctx.close()
+
+        # ---- 3b. rival information belongs to the race radio -----------------
+        # Where the leader is, how far clear you are and where every rider off the
+        # top of the screen sits used to be free and permanently on screen. They are
+        # the radio's now, tiered: I hears the race, II gets the numbers, III sees
+        # the road ahead. Each case starts a race, rides a few seconds and reads what
+        # the HUD decided; no case runs to the line, because the gate is decided on
+        # the first frame.
+        async def hud_after_start(lad_seed):
+            ctx, pg = await open_case(browser, url, lad_seed, [], errs, rand_seed=42)
+            try:
+                await pg.click("#startBtn")
+                await pg.wait_for_selector("#pick:not(.hide)")
+                await pg.locator("#pickBody .card").first.locator("button.mini").click()
+                await pg.wait_for_selector("#build:not(.hide)")
+                await pg.click("#bLock")
+                await pg.wait_for_selector("#brief:not(.hide)")
+                await pg.click("#rollBtn")
+                side = 0
+                for _ in range(22):                     # ~7s of racing, past the roll-out
+                    await pg.keyboard.press("z" if side == 0 else "x")
+                    side ^= 1
+                    await pg.wait_for_timeout(320)
+                return await pg.evaluate("window.__hud || null")
+            finally:
+                await ctx.close()
+
+        base = {"tutorialDone": True, "div": 8, "tours": 1, "money": 500}
+        h = await hud_after_start(dict(base, tactics=["powerMeter"], wins=12))
+        check("no radio: no rival information at all",
+              h is not None and h.get("radio", 0) == 0
+              and not h.get("leader") and h.get("pipGate") == 0 and h.get("pips", 0) == 0,
+              "hud reported %r" % (h,))
+
+        h = await hud_after_start(dict(base, tactics=["radio"], wins=0))
+        check("radio I: hears the race, sees no numbers",
+              h is not None and h.get("radio", 0) == 1
+              and not h.get("leader") and h.get("pipGate") == 0 and h.get("pips", 0) == 0,
+              "hud reported %r" % (h,))
+
+        h = await hud_after_start(dict(base, tactics=["radio"], wins=12))
+        check("radio III: leader gap and the rider rail both open",
+              h is not None and h.get("radio", 0) == 3
+              and h.get("leader") == 1 and h.get("pipGate") == 1,
+              "hud reported %r" % (h,))
 
         # ---- 4. result recording: one shrunk one-day race -------------------
         # seeded with the medium credit already held, so at Division 8 (top
