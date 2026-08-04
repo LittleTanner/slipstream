@@ -53,8 +53,10 @@ cycling terms.
 
 ## Before shipping
 
-- **Remove the "Unlock everything (testing)" button in Settings.** It hands over the
-  $4.99 career and every $2.99 route pack for free, and it rewrites a real save.
+- ~~Remove the "Unlock everything (testing)" button in Settings.~~ **Done (build 21).** It
+  is behind a gesture now: hold the build number five seconds, type the passphrase, and a
+  Debug button appears with a diagnostics page. The flag is not persisted, so a shipped
+  build starts clean.
 - The free-play gate ("play Divisions 8-6, then the paywall") is an idea, not a decision.
 - Real-money purchases are StoreKit work and belong in the port.
 

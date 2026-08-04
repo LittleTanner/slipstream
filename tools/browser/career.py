@@ -373,6 +373,50 @@ async def main():
         finally:
             await ctx.close()
 
+        # ---- 4bis. the test shortcut is behind a gesture ----------------------
+        # It used to be a plainly labelled Settings button handing over the $4.99 career and
+        # every $2.99 pack for free. Now: hold the build number 5s, type the passphrase. The
+        # assertions that matter are that it is INVISIBLE at rest (a shipped build must not
+        # leak it) and that the debug screen is REGISTERED with show() — an unregistered
+        # screen leaves the previous one visible underneath, which is a known bug class here.
+        ladder = {"tutorialDone": True, "div": 6, "tours": 3, "money": 250}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            await pg.click("#setBtn")
+            await pg.wait_for_selector("#settings:not(.hide)")
+            check("debug: the shortcut is invisible until the gesture",
+                  await pg.locator("#debugBtn").is_hidden(), "")
+            pg.on("dialog", lambda d: asyncio.ensure_future(d.accept("developer_debug!")))
+            box = await pg.locator("#verLine").bounding_box()
+            await pg.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            await pg.mouse.down()
+            await pg.wait_for_timeout(5600)
+            await pg.mouse.up()
+            await pg.wait_for_timeout(400)
+            check("debug: holding the build number and answering reveals it",
+                  await pg.locator("#debugBtn").is_visible(), "")
+            await pg.click("#debugBtn")
+            await pg.wait_for_selector("#debug:not(.hide)")
+            leaked = await pg.evaluate(
+                "['menu','settings','routes','build'].filter(id =>"
+                " !document.getElementById(id).classList.contains('hide'))")
+            check("debug: the screen is registered, nothing shows underneath",
+                  not leaked, "still visible: %r" % (leaked,))
+            rows = await pg.evaluate("document.querySelectorAll('#dbgState .note').length")
+            check("debug: the panel dumps the save state", rows >= 12, "%d rows" % rows)
+            await pg.locator("#dbgGive button", has_text="10,000").click()
+            await pg.wait_for_timeout(200)
+            money = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).money)")
+            check("debug: +10,000 lands in the save", money == 10250, "money %r" % money)
+            await pg.locator("#dbgDivs button", has_text="1").first.click()
+            await pg.wait_for_timeout(200)
+            div = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).div)")
+            check("debug: jumping division rewrites the save", div == 1, "div %r" % div)
+        finally:
+            await ctx.close()
+
         # ---- 4c. real roads, free and paid -----------------------------------
         # Kevin: "seeing real routes throughout the game is more exciting than unnamed
         # routes." Free roads are always owned and come from ranges no pack claims, so the
@@ -403,7 +447,7 @@ async def main():
                 " disabled: c.querySelector('.btns button').disabled }))")
             sellable = [p for p in packs if not p["disabled"]]
             check("a pack on sale always has roads in it",
-                  sellable and all("climb" in p["tag"] for p in sellable),
+                  sellable and all(("climb" in p["tag"] or "sector" in p["tag"]) for p in sellable),
                   "sellable %r" % ([(p["name"], p["tag"]) for p in sellable],))
             empty = [p for p in packs if "in the works" in p["tag"]]
             check("a pack with no roads cannot be bought",
@@ -412,6 +456,18 @@ async def main():
             check("the Pyrenees pack is no longer an empty box",
                   any(p["name"] == "The Pyrenees" and "climb" in p["tag"] for p in packs),
                   "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
+            check("every advertised pack now has roads, including the cobbles",
+                  not empty and len(sellable) == 3,
+                  "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
+            # A sector has no gradient and no summit, so listing it like a climb prints
+            # "at undefined%". It is rated in stars, the way pave actually is.
+            roads = await pg.evaluate(
+                "[...document.querySelectorAll('#routesBody .card .note')].map(n => n.textContent)")
+            cobble_lines = [r for r in roads if "pave" in r]
+            check("a cobbled sector is described as pave, not as a climb",
+                  cobble_lines and all("undefined" not in r and "%" not in r
+                                       for r in cobble_lines),
+                  "sector lines %r" % (cobble_lines,))
         finally:
             await ctx.close()
 

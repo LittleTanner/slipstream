@@ -314,6 +314,30 @@ which supersedes this one). Note that the first phrasing of that recommendation 
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
 
+## The cobbles pack, and the test shortcut behind a gesture (build 21)
+
+**The cobbles pack was the one that could not be built, and the reason was a category
+error.** A route stamps a GRADIENT into the terrain, and pave has no gradient, so the pack
+sat advertised and empty while the other two shipped. The machinery was there the whole
+time: `SURFACES.cobbles` already carries drag, jostle, lost grip, punctures, and — the one
+that matters — **drafting cut to 0.62**, which is what turns a sector from a tax into the
+moment a race comes apart. All it needed was a second KIND of route: `isSector()`, stamped
+into the surfaces list rather than the terrain, and assigned to FLAT days rather than
+mountain ones, because pave decides a flat race and would be invisible on a col.
+
+One sector per race, never one per flat day: a cobbled stage is an event, and pave
+everywhere is wallpaper. Sectors are rated in stars, not gradients, and described by what
+they do to you — a sector listed like a climb printed "at undefined%".
+
+**The test shortcut is behind a gesture now**, which retires the pre-ship blocker in
+CLAUDE.md. It used to be a plainly labelled Settings button handing over the $4.99 career
+and every $2.99 pack for free, rewriting a real save to do it. Hold the build number for
+five seconds, type the passphrase, and a Debug button appears with a diagnostics page:
+the whole save dumped as text, division jumps, money, unlock toggles, and the two escape
+hatches for a stuck save (clear the saved tour, clear the held tour). The flag is NOT
+persisted, so a shipped build starts clean every time and one session never leaks into the
+next.
+
 ## The free roads are real roads too (build 20)
 
 Kevin: "I'm thinking we might want all our free routes to be based on real routes... seeing
@@ -441,40 +465,51 @@ The lesson, and it is the one already in CLAUDE.md: a producer and a consumer di
 about the shape of one object, and the field they disagreed about was the one the lock keyed
 on. `career.py` now asserts all three lockout paths plus the ordinary held-tour case.
 
-## The AI's drop-back is slow, and `swingCut` cannot fix it (open, build 18)
+## CORRECTED: the AI's drop-back was never slow (build 18's claim, retracted in build 21)
 
-Kevin, after build 17 sped the player's drop-back to 3.3s: "the AI rivals seem to have been
-even slower to drop back." He is right, and by more than the code claims. The swing re-arm
-comment says "at full cut it is the four-to-six seconds a real drop-back takes". Measured in
-a pure-AI break with nothing clamped (the drill's `hold()` pins a swinger to 90% of your
-speed and hides this): **median 11.91s, worst case 44.8s.**
+**Build 18 recorded that a rival's swing takes a median 11.91s against the code's own claim
+of four to six. That number was wrong, and it was mine.** The harness timed contiguous runs
+of `r.swingOff`, and that flag is re-armed by three separate paths (turn expiry, being
+relieved, and the stay-out-until-you-are-behind rule), so a single run chained several
+swings into one. It was reported to Kevin as a defect and written into two docs before
+anyone measured the thing itself rather than the flag.
 
-Raising `swingCut` does not fix it, it breaks the rotation. Swept against the refusal
-mechanic, which is the one that notices:
+`tools/aiswing.js` now measures front-handover to behind-the-last-wheel:
 
-| swingCut | median swing | refusal |
+| | median | worst |
 |---|---|---|
-| 0.09 (shipped) | 11.91s | passes |
-| 0.12 | 10.13s | passes |
-| 0.14 | 9.31s | break never sits up |
-| 0.18 | 8.41s | no elbow flick at all |
-| 0.22 | 7.43s | break never sits up |
-| 0.26 | 6.69s | no elbow flick |
-| 0.32 | 5.98s | no elbow flick |
+| a rival | **3.65s** | 39.07s |
+| the player (`easeCut`) | 3.3s | 8.9s |
 
-Traced at 0.32: the mates swing off, blow far past the last wheel and **never come back
-through**, sitting 2-4 m behind a rider who is merely holding a steady wheel. That rider
-leads by default, `sinceTurn` resets every frame, and the wheel-suck escalation can never
-fire. Not a faster rotation, a rotation that has stopped rotating. Note that the second
-chance (7/7 and 7/7) and dominance (1 dead, better than shipped) both PASSED at 0.32 — only
-refusal caught it, which is a reminder that the gate set is not the mechanic.
+So rivals drop back in about the same time you do, and the design's "four-to-six seconds"
+is met. **What is genuinely wrong is the TAIL**: the worst case runs to ~39s, which is a
+rider stranded off the back of a small break for most of a minute, and that is probably what
+Kevin was seeing when he said rivals seemed slower.
 
-**The real fix is structural, and it is a decision for Kevin.** The swing is a PACE CUT held
-until a distance is cleared, so making the cut bigger overshoots the distance instead of
-arriving sooner. It wants a DISTANCE BUDGET instead: drop back at whatever pace clears the
-last wheel in about four seconds and then stop, rather than riding 32% slower until you have
-gone too far. That is a rewrite of the swing, needs a golden regen, and should be measured
-against refusal FIRST, since it is the only gate that sees this.
+**A distance-budget swing was built, measured and NOT shipped (build 21).** It replaces the
+fixed pace cut with "work out how far you still have to drop and take the deficit that
+clears it in four seconds", which cannot overshoot and is the more principled mechanism. It
+passed every gate — 38/38 mechanics, second chance unchanged at 7/7 and 6/7, sanity clean,
+and no dominance verdict that repeated across seed sets — and it **halved the tail, 39.1s to
+20.1s**. It was held because the median goes marginally the wrong way (3.65s to 3.83s) and
+shipping it costs a golden regen (every finishing order, every purse) to fix a tail, on the
+back of a premise that had just evaporated. Revisit if the tail is what bothers you in the
+hand; the branch work is described here well enough to redo in an hour.
+
+The old entry's conclusion still stands on its own terms and is worth keeping: **raising
+`swingCut` breaks the rotation rather than speeding it up.** Swept against the refusal
+mechanic, which is the only gate that sees it:
+
+| swingCut | refusal |
+|---|---|
+| 0.09 (shipped) | passes |
+| 0.12 | passes |
+| 0.14 and above | no elbow flick, or the break never sits up |
+
+Traced at 0.32: the mates swing off, blow far past the last wheel and never come back
+through, sitting 2-4 m behind a rider merely holding a steady wheel. That rider leads by
+default, `sinceTurn` resets every frame, and the wheel-suck escalation can never fire. The
+second chance (7/7, 7/7) and dominance both PASSED at 0.32 — only refusal caught it.
 
 ## The mechanics suite gives a FALSE GREEN on the swing constants
 
