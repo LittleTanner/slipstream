@@ -236,6 +236,75 @@ async def main():
               "saved tactics %r" % (saved,))
         await ctx.close()
 
+        # ---- 6. earned, then bought: parts, physique and training ------------
+        # Racing UNLOCKS, prize money BUYS, and money can never skip the unlock. Neutral
+        # options stay free so a rider who has bought nothing is still legal.
+        ladder = {"tutorialDone": True, "div": 3, "tours": 9, "wins": 5, "money": 6000,
+                  "career": {"climb": 95, "sprint": 40, "endur": 60, "durab": 50,
+                             "aero": 30, "handle": 55},
+                  "parts": [], "physique": [], "trainOwned": [], "training": []}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        await pg.click("#buildBtn")
+        await pg.locator("#build").wait_for(state="visible")
+
+        async def saved(key):
+            return await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value)['%s'])" % key)
+
+        await pg.locator("#bSlots button", has_text="Wheels").click()
+        await pg.wait_for_timeout(150)
+        disc = pg.locator("#bList .card", has_text="Deep / disc")
+        label = await disc.locator(".btns button").text_content()
+        check("part for sale before it is bought", "Buy" in label,
+              "an unlocked-but-unbought part offers a price: %r" % label)
+        await disc.locator(".btns button").click()
+        await pg.wait_for_timeout(200)
+        check("buying a part spends prize money", await saved("money") == 5000,
+              "6000 - 1000 = %r" % (await saved("money"),))
+        check("bought part is owned and fitted", await saved("parts") == ["disc"],
+              "owned parts %r" % (await saved("parts"),))
+
+        await pg.locator("#bPhysique .segmented").first.locator(
+            "button", has_text="Featherweight").click()
+        await pg.wait_for_timeout(200)
+        check("buying physique spends and is worn",
+              await saved("money") == 2600 and await saved("weight") == "feather",
+              "money %r, weight %r" % (await saved("money"), await saved("weight")))
+
+        hills = pg.locator("#bTraining .card", has_text="Hill repeats")
+        await hills.locator(".btns button").click()
+        await pg.wait_for_timeout(200)
+        check("buying training spends prize money", await saved("money") == 1900,
+              "2600 - 700 = %r" % (await saved("money"),))
+        after = await hills.locator(".btns button").text_content()
+        check("a bought block can then be carried", after == "Carry",
+              "button reads %r once owned" % after)
+        await ctx.close()
+
+        # ---- 7. a rider who owns NOTHING is still legal ----------------------
+        # The neutral rule. Every layer keeps a free option, so being broke never leaves
+        # you unable to field a complete bike.
+        ladder = {"tutorialDone": True, "div": 3, "tours": 2, "money": 0,
+                  "career": {"climb": 95, "sprint": 40, "endur": 60, "durab": 50,
+                             "aero": 30, "handle": 55},
+                  "parts": [], "physique": [], "trainOwned": [], "training": [],
+                  "build": {"frame": "carbon", "wheels": "disc", "gearing": "big",
+                            "position": "slammed", "tires": "grip"}}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        await pg.click("#buildBtn")
+        await pg.locator("#build").wait_for(state="visible")
+        arche = await pg.text_content("#bArche")
+        check("a broke rider still has a complete bike", "reads as a" in arche,
+              "build screen describes a bike: %r" % arche)
+        await pg.click("#bLock")
+        await pg.wait_for_timeout(250)
+        b = await pg.evaluate(
+            "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).build)")
+        unpaid = [v for v in (b or {}).values() if v in ("disc", "big", "slammed", "grip", "carbon")]
+        check("an unowned part cannot be locked into a build", not unpaid,
+              "saved build fell back to owned parts: %r" % (b,))
+        await ctx.close()
+
         # ---- 2. route pack pricing ladder: BY COUNT OWNED, not by pack ------
         # alps (the only pack with climbs, so the only card that can show a
         # price) stays unowned; other ids fill the owned list. Its displayed

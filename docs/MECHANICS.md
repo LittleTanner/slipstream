@@ -107,7 +107,8 @@ Revisit only if fields grow beyond 8.
 | Groups | Peloton = largest group; break = riders 10+ clear of its head; ties resolve to the front group | `let peloton = groups[0]` | `groups.test.js` |
 | Course generation | Integer PRNG, deterministic per seed; DERIVE values, never add an R() call mid-generation | `course feature factories` | `course-gen.test.js` (+ golden per-case fields) |
 | Tours / GC / jerseys | Stage times sum into GC, points into green/polka, leaders derived and fed back per stage, fatigue carries | view glue: `finishStage` | `tour.test.js` |
-| Parts and builds | Six slots, three trades each, no budget; balance enforced by the harness, never by hand | `const PARTS` | dominance |
+| Parts and builds | FIVE slots (engine moved to the body), 4-5 trade parts each, 22 in all; balance enforced by the harness, never by hand | `const PARTS` | dominance |
+| The economy | Racing UNLOCKS, prize money BUYS, and money can never skip an unlock, so a free rider's ceiling is identical and only adaptability and grind differ. Every layer keeps a free neutral, so a rider who owns nothing is still legal. Applies to specialist bike parts, physique and training | `partOwned`, `physOwned`, `trainOwned`, `ridableBuild` | `career.py` (24 checks) |
 
 ---
 

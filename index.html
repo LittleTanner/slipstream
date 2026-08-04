@@ -313,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 13</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 14</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -3901,7 +3901,7 @@ let committedBuild = null;
 let playerKit = "magenta";
 let dailyRun = false;
 let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio"],
-  weight: "balanced", muscle: "allround", training: [], daily: null,
+  weight: "balanced", muscle: "allround", training: [], parts: [], physique: [], daily: null,
   owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0, packs: [], req: {} };
 
 // ---------------------------------------------------------------- tilt steering
@@ -7914,13 +7914,39 @@ const pracOwnsDiv = () => pracDiv >= (ladder.peakDiv || 8);
 const archetypeOnly = () => buildFrom === "practice" && !pracOwnsDiv();
 const fullPreset = name => Object.assign({}, Sim.PRESETS[name]);
 function partUnlocked(part) { return buildAllUnlocked || !part.extreme || buildDivFor() <= part.unlockDiv; }
+// ★ EARNED, THEN BOUGHT. Racing to a division UNLOCKS a part; prize money buys it. Money
+// can never skip the unlock, so it saves grinding rather than gameplay and a free rider's
+// ceiling is identical. Neutral parts are always owned, so a rider who has bought nothing
+// still has a complete, legal, competitive bike.
+function partOwned(part) {
+  if (buildAllUnlocked || part.neutral || !part.extreme) return true;
+  return (ladder.parts || []).indexOf(part.id) >= 0;
+}
+function partCost(part) { return Sim.UNLOCK_COST; }
+function buyPart(part) {
+  if (partOwned(part) || !partUnlocked(part)) return false;
+  const cost = partCost(part);
+  if ((ladder.money || 0) < cost) return false;
+  ladder.money -= cost;
+  ladder.parts = (ladder.parts || []).concat([part.id]);
+  Store.save(ladder);
+  return true;
+}
 // A preset with any locked parts swapped for that slot's neutral, so a fresh rider can
 // always ride a gentle version of the archetype and unlock the sharp parts later.
 function ridablePreset(name) {
-  const p = Sim.PRESETS[name], out = {};
+  return ridableBuild(Sim.PRESETS[name]);
+}
+// ★ NO BUILD MAY CARRY A PART YOU DO NOT HAVE. Anything locked or unbought falls back to
+// the slot's neutral, which is always owned, so every build is legal by construction
+// rather than by the UI happening to hide the button. Also the migration path: a save made
+// before parts were bought keeps riding, it just falls back where it has not paid.
+function ridableBuild(b) {
+  const out = {};
   for (const [slot] of Sim.SLOTS) {
-    const list = Sim.PARTS[slot], want = list.find(x => x.id === p[slot]);
-    out[slot] = (want && partUnlocked(want)) ? want.id : (list.find(x => x.neutral) || list[0]).id;
+    const list = Sim.PARTS[slot], want = list.find(x => x.id === (b || {})[slot]);
+    const ok = want && partUnlocked(want) && partOwned(want);
+    out[slot] = ok ? want.id : (list.find(x => x.neutral) || list[0]).id;
   }
   return out;
 }
@@ -7998,7 +8024,8 @@ function renderBuild() {
     const top = document.createElement("div"); top.className = "top";
     const nb = document.createElement("b"); nb.textContent = part.name; top.appendChild(nb);
     const tag = document.createElement("span"); tag.className = "pips";
-    tag.textContent = chosen ? "fitted" : locked ? "locked" : ""; top.appendChild(tag);
+    tag.textContent = chosen ? "fitted" : locked ? "locked" : !partOwned(part) ? "for sale" : "";
+    top.appendChild(tag);
     card.appendChild(top);
     const note = document.createElement("div"); note.className = "note"; note.textContent = part.note; card.appendChild(note);
     const btns = document.createElement("div"); btns.className = "btns";
@@ -8006,6 +8033,18 @@ function renderBuild() {
       const note2 = document.createElement("div"); note2.className = "fx";
       note2.innerHTML = '<span class="lead">Unlocks at Division ' + part.unlockDiv + '</span>';
       card.appendChild(note2);
+    } else if (!partOwned(part)) {
+      // Unlocked by racing, not yet bought. Money buys the part; it can never buy the unlock.
+      const cost = partCost(part);
+      const afford = (ladder.money || 0) >= cost;
+      const buy = document.createElement("button");
+      buy.textContent = afford ? "Buy · " + cost : cost + " prize money";
+      buy.disabled = !afford;
+      buy.addEventListener("click", ev => {
+        ev.stopPropagation();
+        if (buyPart(part)) { buildDraft[buildSlot] = part.id; renderBuild(); refreshMenu(); }
+      });
+      btns.appendChild(buy);
     } else {
       const fit = document.createElement("button");
       fit.textContent = chosen ? "Fitted" : "Fit"; fit.className = chosen ? "on" : "";
@@ -8124,8 +8163,54 @@ const MUSCLES = [
     d: { gut: +0.200, sweatRate: +0.030, fuelUse: +0.015, kick: +0.015 } }
 ];
 function physique(list, id) {
-  const pick = list.find(x => x.id === id) || list.find(x => x.neutral);
-  return pick || list[0];
+  const pick = list.find(x => x.id === id);
+  // An option you have not bought cannot be worn, so a save that loses its purchases (or
+  // is edited) quietly falls back to the free neutral rather than racing something unpaid.
+  if (pick && physOwned(pick)) return pick;
+  return list.find(x => x.neutral) || list[0];
+}
+// Earned by racing the dimension it belongs to, then bought. Neutral is always free.
+const PHYS_REQ = {
+  lean:    { dim: "climb",  lvl: 2, cost: 800 },
+  solid:   { dim: "sprint", lvl: 2, cost: 800 },
+  feather: { dim: "climb",  lvl: 4, cost: 2400 },
+  power:   { dim: "sprint", lvl: 4, cost: 2400 },
+  slow:    { dim: "endur",  lvl: 2, cost: 1200 },
+  fast:    { dim: "sprint", lvl: 2, cost: 1200 },
+  metro:   { dim: "endur",  lvl: 3, cost: 1600 },
+  furnace: { dim: "durab",  lvl: 3, cost: 1600 }
+};
+function physOwned(opt) {
+  if (buildAllUnlocked || opt.neutral) return true;
+  return (ladder.physique || []).indexOf(opt.id) >= 0;
+}
+function physUnlocked(opt) {
+  if (buildAllUnlocked || opt.neutral) return true;
+  const r = PHYS_REQ[opt.id]; if (!r) return true;
+  return dimLevel(r.dim, (ladder.career || {})[r.dim]) >= r.lvl;
+}
+function buyPhysique(opt) {
+  const r = PHYS_REQ[opt.id]; if (!r) return false;
+  if (physOwned(opt) || !physUnlocked(opt) || (ladder.money || 0) < r.cost) return false;
+  ladder.money -= r.cost;
+  ladder.physique = (ladder.physique || []).concat([opt.id]);
+  Store.save(ladder);
+  return true;
+}
+// Training blocks are bought the same way, priced by how many points they carry.
+function trainReq(t) { return { dim: t.dim, lvl: t.pts, cost: t.pts * 700 }; }
+function trainOwned(t) { return buildAllUnlocked || (ladder.trainOwned || []).indexOf(t.id) >= 0; }
+function trainUnlocked(t) {
+  const r = trainReq(t);
+  return buildAllUnlocked || dimLevel(r.dim, (ladder.career || {})[r.dim]) >= r.lvl;
+}
+function buyTraining(t) {
+  const r = trainReq(t);
+  if (trainOwned(t) || !trainUnlocked(t) || (ladder.money || 0) < r.cost) return false;
+  ladder.money -= r.cost;
+  ladder.trainOwned = (ladder.trainOwned || []).concat([t.id]);
+  Store.save(ladder);
+  return true;
 }
 // ★ TRAINING: the pure-positive half, balanced by a BUDGET rather than by a downside on
 // each item. Making every single choice a trade-off means you can never simply feel
@@ -8163,7 +8248,9 @@ function fittedTraining() {
   const out = []; let spent = 0;
   for (const id of owned) {
     const t = TRAINING.find(x => x.id === id);
-    if (!t || spent + t.pts > budget) continue;          // over budget simply does not ride
+    // Unbought or over budget simply does not ride, so neither an edited save nor a
+    // division drop (which shrinks the budget) can put an illegal rider on the road.
+    if (!t || !trainOwned(t) || !trainUnlocked(t) || spent + t.pts > budget) continue;
     out.push(t); spent += t.pts;
   }
   return out;
@@ -8235,15 +8322,24 @@ function renderPhysique() {
       const b = document.createElement("button");
       b.textContent = opt.name;
       b.title = opt.note;
+      const owned = physOwned(opt), unl = physUnlocked(opt);
+      const req = PHYS_REQ[opt.id];
       b.setAttribute("aria-pressed", String(opt.id === cur.id));
+      if (!unl) { b.disabled = true; b.title = opt.name + " — needs " + req.dim + " " + ROMAN[req.lvl]; }
+      else if (!owned) b.title = opt.name + " — " + req.cost + " prize money";
       b.addEventListener("click", () => {
-        row.set(opt.id); Store.save(ladder); renderBuild();
+        if (!unl) return;
+        if (!owned && !buyPhysique(opt)) return;      // cannot afford it yet
+        row.set(opt.id); Store.save(ladder); renderBuild(); refreshMenu();
       });
       seg.appendChild(b);
     }
     host.appendChild(seg);
     const sub = document.createElement("div"); sub.className = "fx";
-    sub.innerHTML = '<span class="lead">' + cur.name + " — " + cur.note + "</span>";
+    const shop = row.list.filter(o => !physOwned(o) && physUnlocked(o))
+      .map(o => o.name + " " + PHYS_REQ[o.id].cost);
+    sub.innerHTML = '<span class="lead">' + cur.name + " — " + cur.note
+      + (shop.length ? "  ·  for sale: " + shop.join(", ") : "") + "</span>";
     host.appendChild(sub);
   }
 }
@@ -8263,7 +8359,8 @@ function renderTraining() {
   for (const t of TRAINING) {
     const dim = DIMS.find(d => d.key === t.dim);
     const lvl = dimLevel(t.dim, (ladder.career || {})[t.dim]);
-    const earned = lvl >= t.pts;                 // a 3-point block wants that dimension at III
+    const earned = trainUnlocked(t);             // a 3-point block wants that dimension at III
+    const bought = trainOwned(t);
     const on = fitted.indexOf(t.id) >= 0;
     const card = document.createElement("div"); card.className = "card" + (earned ? "" : " locked");
     const top = document.createElement("div"); top.className = "top";
@@ -8276,6 +8373,12 @@ function renderTraining() {
     const btns = document.createElement("div"); btns.className = "btns";
     const b = document.createElement("button");
     if (!earned) { b.textContent = "Needs " + (dim ? dim.name : t.dim) + " " + ROMAN[t.pts]; b.disabled = true; }
+    else if (!bought) {
+      const cost = trainReq(t).cost, afford = (ladder.money || 0) >= cost;
+      b.textContent = afford ? "Buy · " + cost : cost + " prize money";
+      b.disabled = !afford;
+      b.addEventListener("click", () => { if (buyTraining(t)) { renderBuild(); refreshMenu(); } });
+    }
     else {
       const room = on || spent + t.pts <= budget;
       b.textContent = on ? "Carrying" : room ? "Carry" : "No room";
@@ -8401,6 +8504,9 @@ $("bLock").addEventListener("click", () => {
   }
   committedBuild = Object.assign({}, buildDraft);
   playerType = "rouleur";                      // build fully overrides stats; keep a valid base
+  // Sanitised on the way in, so a build can never carry an unowned part even if the UI
+  // let one through.
+  committedBuild = ridableBuild(committedBuild);
   ladder.build = committedBuild; Store.save(ladder);
   showProfile(null);                            // refresh the menu radar to the new build
   if (buildFrom === "tour") showBriefing();     // committing the build starts the tour
@@ -9252,7 +9358,7 @@ function showProfile(ghostKey) {
 }
 requestAnimationFrame(() => { showProfile(null); renderKits(); });
 refreshMenu();
-Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); if (ladder.steer === "tilt") { ladder.steer = "drag"; armTiltOnFirstTap(); } ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build || null; pracBuild = ladder.pracBuild || null; refreshMenu(); renderKits(); showProfile(null); } });
+Store.load().then(v => { if (v) { ladder = Object.assign(ladder, v); if (ladder.steer === "tilt") { ladder.steer = "drag"; armTiltOnFirstTap(); } ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); committedBuild = ladder.build ? ridableBuild(ladder.build) : null; pracBuild = ladder.pracBuild ? ridableBuild(ladder.pracBuild) : null; refreshMenu(); renderKits(); showProfile(null); } });
 Store.loadData().then(v => { history = v || []; });   // PORT: a @Query, not a blob read
 $("rollBtn").addEventListener("click", () => { hideAll(); startStage(); });
 $("nextBtn").addEventListener("click", () => {

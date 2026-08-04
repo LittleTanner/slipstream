@@ -104,6 +104,38 @@ archetype" actually meant.
   order). Strictly-better ladders make money equal strength, turn the game into a grind,
   and put every purchase outside what the dominance harness can certify.
 
+### The economy, as shipped (2026-08, phase 4)
+
+**Racing UNLOCKS, prize money BUYS, and money can never skip an unlock.** Every purchasable
+thing has two gates and they are not interchangeable: a division or a dimension level opens
+it, and only then will money take it. Kevin's rule, in his words: "You have to play and
+earn/unlock everything but then you use prize money or real money to buy it after you have
+unlocked it."
+
+| layer | unlocked by | price | free neutral |
+|---|---|---|---|
+| Bike part | the part's `unlockDiv` | flat 1,000 (`UNLOCK_COST`) | the neutral part in each slot |
+| Physique | a dimension level (`PHYS_REQ`) | 800 to 2,400 by how far it swings | Balanced weight, All-round muscle |
+| Training | a dimension level (`trainReq`) | 700 per point of cost | none needed; an empty budget is legal |
+
+Consequences worth keeping straight:
+
+- **A broke rider is never illegal.** `ridableBuild()` sanitises the build at lock-in AND at
+  save load, so an unowned part falls back to its slot's neutral rather than racing. Same
+  for physique. `career.py` case 7 asserts it: strip the wallet and the bike is still
+  complete.
+- **The points budget is EARNED only.** Money buys a training block; it never buys the
+  points to ride it. Owning more than you can fit is the intended end state, because the
+  choice of what to carry is the mechanic.
+- **The daily is unaffected.** It runs `raceStats(build, null, true)` with a full career and
+  full tactics for everyone, so the shared leaderboard never reads a wallet.
+- **The ceiling is identical for a free player.** Only breadth (how many answers you own for
+  a given parcours) and grind differ. This is what "the ladder is never pay-to-skip" has to
+  mean once money buys anything at all.
+- **Prices are read off the route-pack ladder**, which is the only price scale the game had:
+  a route pack is 3,000 and a three-week tour pays about 6,000, so a part at 1,000 is a
+  couple of good stages and a top physique at 2,400 is a campaign.
+
 - **Four bike parts, written and cut in the same session** (2026-08, phase 3). An AERO
   FRAME and a SEMI-DEEP wheel: aero is the most crowded axis in the game, traded by
   wheels, position AND tires, so a fourth way to buy it is not a new decision, and the
@@ -168,8 +200,9 @@ Consequences:
 
 Free download, never ads. One **$4.99 unlock** granting the ABILITY to earn the career
 (divisions, rider growth, gear) rather than handing any of it over. **$2.99 route packs**.
-Prize money buys routes; real money buys them faster. The daily is free. The ladder is
-never pay-to-skip.
+Prize money buys routes, bike parts, physique and training; real money buys them faster.
+The daily is free. The ladder is never pay-to-skip, which now means specifically that money
+never skips an UNLOCK (see "The economy, as shipped").
 
 Route packs get dearer as you collect them: **3,000 / 6,000 / 12,000, capped at 18,000**
 (the price of three three-week tours). Priced by how many you own, not which pack, so
