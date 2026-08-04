@@ -109,6 +109,17 @@
   .card .fx .lead{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;
     font-weight:700;opacity:.5;margin-bottom:2px}
   .card .fx b{color:var(--you)}
+  /* ★ THE BODY CAPTIONS WERE UNSTYLED. `.fx` only ever had rules under `.card`, and
+     #bPhysique / #bTraining are bare divs, so the line that now carries the whole "why can
+     you not pick this" explanation rendered at inherited 16px, full opacity, no rule above
+     it — the largest text on the build screen, shouting the least important thing. Same
+     rules as a card's, scoped to the two body sections. */
+  #bPhysique .fx, #bTraining .fx{font-size:11px;line-height:1.5;margin:6px 0 14px;
+    padding-top:8px;border-top:1px solid rgba(46,49,47,.14);color:rgba(46,49,47,.62)}
+  #bPhysique .fx .lead, #bTraining .fx .lead{display:block;font-size:9.5px;letter-spacing:.06em;
+    color:rgba(46,49,47,.62)}
+  #bPhysique .fx b, #bTraining .fx b{color:var(--you)}
+  #bPhysique .note, #bTraining .note{font-size:11px;color:rgba(46,49,47,.55);margin-top:10px}
   .card .btns{display:flex;gap:8px;margin-top:auto;padding-top:13px}
   .card .btns button{flex:1;font:inherit;font-size:10.5px;font-weight:700;letter-spacing:.06em;
     text-transform:uppercase;padding:9px 0;border-radius:9px;border:1.5px solid rgba(46,49,47,.25);
@@ -190,6 +201,25 @@
     color:var(--ink);opacity:.5;cursor:pointer;white-space:nowrap}
   .segmented button:last-child{border-right:0}
   .segmented button[aria-pressed="true"]{background:var(--ink);color:var(--paper);opacity:1}
+  /* ★ A SEGMENT THAT SAYS WHY IT CANNOT BE PICKED. The physique rows put "needs Climbing IV"
+     and the price in `title` — a TOOLTIP, which a touch screen never shows, and this game is
+     going to iOS. So the whole row read as five dead buttons and Kevin filed it as a bug.
+     The sub-line carries the same words training already puts on its buttons. Nothing is
+     disabled any more either: a locked segment stays tappable and answers in the caption,
+     because a control that explains itself is not a broken control. */
+  .segmented button i{display:block;font-style:normal;font-size:8.5px;font-weight:700;
+    letter-spacing:.08em;opacity:.72;margin-top:2px}
+  .segmented button.locked{opacity:.32}
+  .segmented button.buy i{color:var(--spot);opacity:.9}
+  .segmented button.short{opacity:.4}
+  .segmented button.short i{opacity:.6}
+  /* The body rows are five LONG names across ("Featherweight", "Powerhouse"), and the base
+     segment is nowrap inside an overflow:hidden strip — so the last option was sliced in
+     half at the right edge, before any of this was added. These rows wrap instead. */
+  .segmented.body button{white-space:normal;font-size:9.5px;line-height:1.25;padding:9px 2px;
+    letter-spacing:0;overflow-wrap:normal}
+  .segmented.body button i{font-size:7.5px;letter-spacing:.03em;margin-top:3px}
+  .segmented button[aria-pressed="true"] i{opacity:.85}
   #tcSkip{margin-top:7px}
   /* 118px put this exactly on top of the THROW / HOP button, which draws at the same height.
      Raised clear of it so a lesson never covers the control it is teaching. */
@@ -313,7 +343,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 18</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 19</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -8508,6 +8538,9 @@ function growCareer(you, spec, tourDone) {
 }
 // Physique: two rows of pro/con choices. Rendered as the same segmented control the
 // presets use, because it IS the same kind of choice: one of a short list, no cost.
+// Which physique option is armed for purchase, so the second tap is the one that spends.
+// Cleared whenever the build screen is rebuilt, so it never survives leaving the screen.
+let armedPhys = null;
 function renderPhysique() {
   const host = $("bPhysique"); if (!host) return; host.innerHTML = "";
   const rows = [
@@ -8519,30 +8552,90 @@ function renderPhysique() {
   for (const row of rows) {
     const head = document.createElement("div"); head.className = "note";
     head.textContent = row.name + " · " + row.note; host.appendChild(head);
-    const seg = document.createElement("div"); seg.className = "segmented";
+    const seg = document.createElement("div"); seg.className = "segmented body";
     const cur = physique(row.list, row.cur);
+    const sub = document.createElement("div"); sub.className = "fx";
+    // The caption answers whatever you last touched. Declared before the buttons so their
+    // handlers can write to it: tapping a locked segment used to `return` with no feedback
+    // at all, which is what made the whole row read as broken.
+    const say = html => { sub.innerHTML = '<span class="lead">' + html + "</span>"; };
     for (const opt of row.list) {
       const b = document.createElement("button");
-      b.textContent = opt.name;
-      b.title = opt.note;
       const owned = physOwned(opt), unl = physUnlocked(opt);
       const req = PHYS_REQ[opt.id];
+      const dimName = req ? (DIMS.find(d => d.key === req.dim) || {}).name : null;
+      // Name on top, STATE underneath, in the same words training puts on its buttons:
+      // what it needs, or what it costs. Owned options carry no sub-line, so the ones you
+      // can actually switch between read as the clean, plain row they always were.
+      // "NEEDS CLIMBING IV", not "IV CLIMBING": under a body attribute a bare level reads
+      // as a rating the option HAS rather than a gate it is behind. Training already says
+      // "Needs Climbing III" on its buttons, so the three sections now say the same words.
+      // And affordable is distinguished from not, exactly as training distinguishes
+      // "Buy · 2100" from "2100 prize money" — otherwise the two are pixel-identical and
+      // the only way to discover you are broke is to tap and be refused.
+      const afford = req && (ladder.money || 0) >= req.cost;
+      const state = !req || owned ? ""
+        : !unl ? "NEEDS " + req.dim.toUpperCase() + " " + ROMAN[req.lvl]
+        : afford ? (armedPhys === opt.id ? "TAP TO BUY" : "BUY " + req.cost)
+        : req.cost + " SHORT";
+      b.innerHTML = "";
+      b.appendChild(document.createTextNode(opt.name));
+      if (state) { const i = document.createElement("i"); i.textContent = state; b.appendChild(i); }
+      // Colour is not the only signal: the words differ too ("BUY 800" against "800 SHORT"),
+      // because a player who cannot tell orange from grey still has to be able to tell an
+      // affordable option from one they have not earned the money for.
+      if (!unl) b.className = "locked";
+      else if (!owned) b.className = afford ? "buy" : "short";
       b.setAttribute("aria-pressed", String(opt.id === cur.id));
-      if (!unl) { b.disabled = true; b.title = opt.name + " — needs " + req.dim + " " + ROMAN[req.lvl]; }
-      else if (!owned) b.title = opt.name + " — " + req.cost + " prize money";
+      // NOT disabled, on purpose. A disabled button does not even fire a click, so the
+      // player taps it, nothing happens anywhere on screen, and they conclude it is broken.
       b.addEventListener("click", () => {
-        if (!unl) return;
-        if (!owned && !buyPhysique(opt)) return;      // cannot afford it yet
+        if (!unl) {
+          say("<b>" + opt.name + "</b> is not yours yet — reach <b>" + (dimName || req.dim)
+            + " " + ROMAN[req.lvl] + "</b> by racing, then it costs " + req.cost + ".");
+          return;
+        }
+        if (!owned) {
+          if (!afford) {
+            say("<b>" + opt.name + "</b> costs " + req.cost + " and you have "
+              + (ladder.money || 0) + ". Win " + (req.cost - (ladder.money || 0))
+              + " more in prize money.");
+            return;
+          }
+          // ★ ONE TAP MUST NOT SPEND 2,400. A segmented control's whole convention is free,
+          // reversible selection, and the same gesture that harmlessly picks Balanced was
+          // irreversibly buying Powerhouse with no confirm, no undo and no balance anywhere
+          // on this screen. Arm first, buy second, same as the Abandon button.
+          if (armedPhys !== opt.id) {
+            // renderPhysique() rebuilds this whole host, so `say` after it would write to a
+            // detached node. The re-render owns the message instead (see the caption block).
+            armedPhys = opt.id;
+            renderPhysique();
+            return;
+          }
+          armedPhys = null;
+          if (!buyPhysique(opt)) return;
+        }
+        armedPhys = null;
         row.set(opt.id); Store.save(ladder); renderBuild(); refreshMenu();
       });
       seg.appendChild(b);
     }
     host.appendChild(seg);
-    const sub = document.createElement("div"); sub.className = "fx";
-    const shop = row.list.filter(o => !physOwned(o) && physUnlocked(o))
-      .map(o => o.name + " " + PHYS_REQ[o.id].cost);
-    sub.innerHTML = '<span class="lead">' + cur.name + " — " + cur.note
-      + (shop.length ? "  ·  for sale: " + shop.join(", ") : "") + "</span>";
+    // Default caption: what you are WEARING, plus the plain-language rule for the rest and
+    // the balance those prices are measured against — the build screen showed prices in
+    // three sections and your money in none of them.
+    const owns = row.list.filter(o => physOwned(o)).length;
+    const armed = row.list.find(o => o.id === armedPhys);
+    if (armed) {
+      say("<b>" + armed.name + "</b> costs <b>" + PHYS_REQ[armed.id].cost
+        + "</b>, and you have <b>" + (ladder.money || 0) + "</b>. Tap it again to buy it, "
+        + "or tap anything else to leave it.");
+    } else say(cur.name + " — " + cur.note
+      + (owns < row.list.length
+        ? "  ·  Race to unlock, then buy with prize money. You have <b>" + (ladder.money || 0)
+          + "</b>. Tap any one to see what it wants."
+        : "  ·  All yours."));
     host.appendChild(sub);
   }
 }
@@ -8556,7 +8649,8 @@ function renderTraining() {
   const spent = fittedTraining().reduce((a, t) => a + t.pts, 0);
   const head = document.createElement("div"); head.className = "note";
   head.textContent = "Carrying " + spent + " of " + budget
-    + " points. Race more, and you can carry more.";
+    + " points. Race more, and you can carry more. You have " + (ladder.money || 0)
+    + " prize money to spend.";
   host.appendChild(head);
   const strip = document.createElement("div"); strip.className = "strip";
   for (const t of TRAINING) {
@@ -8575,19 +8669,43 @@ function renderTraining() {
     note.textContent = dim ? dim.name : t.dim; card.appendChild(note);
     const btns = document.createElement("div"); btns.className = "btns";
     const b = document.createElement("button");
-    if (!earned) { b.textContent = "Needs " + (dim ? dim.name : t.dim) + " " + ROMAN[t.pts]; b.disabled = true; }
+    // ★ NOTHING HERE IS DISABLED ANY MORE. A disabled button does not fire a click, so
+    // three of these states were controls that did nothing and said nothing further when
+    // pressed — the same "it seems like a bug" Kevin filed against physique. Each one now
+    // answers in the card's own hint line.
+    const hint = document.createElement("div"); hint.className = "fx";
+    const say = html => { hint.innerHTML = '<span class="lead">' + html + "</span>"; };
+    const inList = (ladder.training || []).indexOf(t.id) >= 0;
+    if (!earned) {
+      b.textContent = "Needs " + (dim ? dim.name : t.dim) + " " + ROMAN[t.pts];
+      b.addEventListener("click", () => say("Reach <b>" + (dim ? dim.name : t.dim) + " "
+        + ROMAN[t.pts] + "</b> by racing to unlock this, then it costs " + trainReq(t).cost + "."));
+    }
     else if (!bought) {
       const cost = trainReq(t).cost, afford = (ladder.money || 0) >= cost;
       b.textContent = afford ? "Buy · " + cost : cost + " prize money";
-      b.disabled = !afford;
-      b.addEventListener("click", () => { if (buyTraining(t)) { renderBuild(); refreshMenu(); } });
+      b.addEventListener("click", () => {
+        if (!afford) { say("Costs <b>" + cost + "</b> and you have " + (ladder.money || 0)
+          + ". Win " + (cost - (ladder.money || 0)) + " more."); return; }
+        if (buyTraining(t)) { renderBuild(); refreshMenu(); }
+      });
     }
     else {
+      // ★ AN OVER-BUDGET BLOCK MUST BE DROPPABLE. `fittedTraining` skips a block that no
+      // longer fits, so `on` goes false, `room` goes false, the button read "No room" and
+      // was DISABLED — and the only code that removes an id from ladder.training is the
+      // click handler on that very button. Drop a division (which shrinks the budget) while
+      // carrying blocks and one of them was stuck in your save forever. Now it says so and
+      // lets go.
       const room = on || spent + t.pts <= budget;
-      b.textContent = on ? "Carrying" : room ? "Carry" : "No room";
-      b.disabled = !room;
+      b.textContent = on ? "Carrying" : inList ? "Over budget · drop" : room ? "Carry" : "No room";
       b.className = on ? "on" : "";
       b.addEventListener("click", () => {
+        if (!on && !inList && !room) {
+          say("Needs <b>" + t.pts + (t.pts === 1 ? " pt" : " pts") + "</b> and you have "
+            + Math.max(0, budget - spent) + " free. Drop something, or race to earn a bigger budget.");
+          return;
+        }
         const cur = (ladder.training || []).slice();
         const at = cur.indexOf(t.id);
         if (at >= 0) cur.splice(at, 1); else cur.push(t.id);
@@ -8595,6 +8713,7 @@ function renderTraining() {
       });
     }
     btns.appendChild(b); card.appendChild(btns);
+    card.appendChild(hint);          // empty until the button is pressed, then it answers
     strip.appendChild(card);
   }
   host.appendChild(strip);

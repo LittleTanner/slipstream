@@ -373,6 +373,123 @@ async def main():
         finally:
             await ctx.close()
 
+        # ---- 5c. the body UI must SAY why you cannot change it ---------------
+        # Kevin: "it seems like a bug that you can't change anything. It needs to be
+        # designed better so people know they need to unlock it first."
+        # The physique rows put "needs Climbing IV" and the price in `title`, a TOOLTIP,
+        # which a touch screen never shows — so the row read as dead buttons. Every state
+        # must now be VISIBLE TEXT, and a locked segment must answer when tapped instead of
+        # being disabled and inert. Asserted on rendered text only, never on title.
+        ladder = {"tutorialDone": True, "div": 6, "tours": 2, "money": 0,
+                  "career": {"climb": 0, "sprint": 0, "endur": 0, "durab": 0}}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            await pg.click("#buildBtn")
+            await pg.locator("#build").wait_for(state="visible")
+            segs = await pg.evaluate(
+                "[...document.querySelectorAll('#bPhysique .segmented button')].map(b => ({"
+                " text: b.innerText, cls: b.className, disabled: b.disabled }))")
+            locked = [s for s in segs if "locked" in (s["cls"] or "")]
+            check("physique: a new rider's unearned options are visibly locked",
+                  bool(locked), "segments %r" % (segs,))
+            # The state has to be in the rendered text, not an attribute nobody can see.
+            check("physique: every locked segment SHOWS what it needs, in text",
+                  locked and all(len(s["text"].strip().splitlines()) > 1 for s in locked),
+                  "locked segments %r" % ([s["text"] for s in locked],))
+            check("physique: locked segments stay tappable, never disabled",
+                  segs and not any(s["disabled"] for s in segs),
+                  "disabled: %r" % ([s["text"] for s in segs if s["disabled"]],))
+            # Tapping one must produce an explanation on screen.
+            before = await pg.evaluate("document.querySelector('#bPhysique .fx').innerText")
+            await pg.locator("#bPhysique .segmented button.locked").first.click()
+            await pg.wait_for_timeout(150)
+            after = await pg.evaluate("document.querySelector('#bPhysique .fx').innerText")
+            check("physique: tapping a locked option explains itself",
+                  after != before and ("not yours yet" in after or "reach" in after),
+                  "caption went %r -> %r" % (before[:40], after[:80]))
+        finally:
+            await ctx.close()
+
+        # Affordable and unaffordable must not be pixel-identical, and one tap must never
+        # spend: a segmented control's whole convention is free, reversible selection, and
+        # the same gesture that picks Balanced was irreversibly buying Powerhouse.
+        ladder = {"tutorialDone": True, "div": 4, "tours": 6, "money": 900,
+                  "career": {"climb": 40, "sprint": 40, "endur": 40, "durab": 20}}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            await pg.click("#buildBtn")
+            await pg.locator("#build").wait_for(state="visible")
+            segs = await pg.evaluate(
+                "[...document.querySelectorAll('#bPhysique .segmented button')].map(b => ({"
+                " text: b.innerText, cls: b.className }))")
+            buys = [s for s in segs if "buy" in (s["cls"] or "").split()]
+            shorts = [s for s in segs if "short" in (s["cls"] or "").split()]
+            check("physique: affordable and unaffordable read differently",
+                  buys and shorts
+                  and all("BUY" in s["text"] for s in buys)
+                  and all("SHORT" in s["text"] for s in shorts),
+                  "buy %r / short %r" % ([s["text"] for s in buys], [s["text"] for s in shorts]))
+
+            money_before = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).money)")
+            await pg.locator("#bPhysique .segmented button.buy").first.click()
+            await pg.wait_for_timeout(150)
+            mid = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).money)")
+            check("physique: the first tap on a price arms, it does not spend",
+                  mid == money_before, "money %r -> %r" % (money_before, mid))
+            armed = await pg.evaluate("document.querySelector('#bPhysique .fx').innerText")
+            check("physique: arming says what the second tap will cost",
+                  "Tap it again" in armed, "caption %r" % (armed[:90],))
+            await pg.locator("#bPhysique .segmented button.buy").first.click()
+            await pg.wait_for_timeout(200)
+            after_money = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).money)")
+            check("physique: the second tap buys it",
+                  after_money < money_before, "money %r -> %r" % (money_before, after_money))
+        finally:
+            await ctx.close()
+
+        # A training block that no longer fits the budget was rendered "No room" AND
+        # disabled, while the only code that removes an id from ladder.training is that
+        # button's own click handler. Drop a division and a block was stuck in the save.
+        ladder = {"tutorialDone": True, "div": 8, "tours": 6, "money": 5000,
+                  "career": {"climb": 90, "sprint": 90, "endur": 90, "durab": 90},
+                  # trainOwned reads `trainOwned`; `training` is only what you CARRY. All
+                  # four are in seeded dimensions so they are genuinely earned and bought,
+                  # and three 3-pointers exhaust a Division 8 budget, so `gut` overflows —
+                  # which used to render "No room", disabled, unremovable forever.
+                  "trainOwned": ["altitude", "leadout", "gtblock", "gut"],
+                  "training": ["altitude", "leadout", "gtblock", "gut"]}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            await pg.click("#buildBtn")
+            await pg.locator("#build").wait_for(state="visible")
+            cards = await pg.evaluate(
+                "[...document.querySelectorAll('#bTraining .card')].map(c => ({"
+                " name: c.querySelector('b') ? c.querySelector('b').textContent : '',"
+                " text: c.querySelector('.btns button') ? c.querySelector('.btns button').textContent : '',"
+                " disabled: c.querySelector('.btns button') ? c.querySelector('.btns button').disabled : null }))")
+            check("training: no button is ever disabled and inert",
+                  cards and not any(c["disabled"] for c in cards),
+                  "disabled: %r" % ([c["name"] for c in cards if c["disabled"]],))
+            over = [c for c in cards if "drop" in (c["text"] or "")]
+            check("training: an over-budget block offers to be dropped",
+                  bool(over), "buttons %r" % ([c["text"] for c in cards][:8],))
+            if over:
+                saved_before = await pg.evaluate(
+                    "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).training)")
+                await pg.locator("#bTraining .card", has_text=over[0]["name"]).locator(
+                    ".btns button").first.click()
+                await pg.wait_for_timeout(200)
+                saved_after = await pg.evaluate(
+                    "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).training)")
+                check("training: dropping it actually clears it from the save",
+                      len(saved_after or []) < len(saved_before or []),
+                      "%r -> %r" % (saved_before, saved_after))
+        finally:
+            await ctx.close()
+
         # ---- 6. earned, then bought: parts, physique and training ------------
         # Racing UNLOCKS, prize money BUYS, and money can never skip the unlock. Neutral
         # options stay free so a rider who has bought nothing is still legal.
@@ -401,8 +518,12 @@ async def main():
         check("bought part is owned and fitted", await saved("parts") == ["disc"],
               "owned parts %r" % (await saved("parts"),))
 
-        await pg.locator("#bPhysique .segmented").first.locator(
-            "button", has_text="Featherweight").click()
+        # Two taps now: arm, then buy. A single tap on a segmented control must never spend.
+        feather = pg.locator("#bPhysique .segmented").first.locator(
+            "button", has_text="Featherweight")
+        await feather.click()
+        await pg.wait_for_timeout(150)
+        await feather.click()
         await pg.wait_for_timeout(200)
         check("buying physique spends and is worn",
               await saved("money") == 2600 and await saved("weight") == "feather",
