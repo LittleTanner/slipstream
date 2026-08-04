@@ -19,9 +19,11 @@ const P = require('./parts.js');
 
 // Parts are now a ~35% tune on top of a grown body, so test each part on a DEVELOPED rider
 // matched to the terrain (a climber on the queen), not a bodyless one. Mirrors view DIM_BODY.
-const DIM_BODY = { climb:{climbCost:-0.22}, sprint:{kick:0.14,attack:0.07}, endur:{recover:0.12,fuelUse:-0.04}, durab:{resilience:0.10,fatigueResist:-0.24,gut:0.30,sweatRate:-0.14} };
+const DIM_BODY = { climb:{climbCost:-0.22}, sprint:{kick:0.14,attack:0.07}, endur:{recover:0.12,fuelUse:-0.04}, durab:{resilience:0.10,fatigueResist:-0.24,gut:0.30,sweatRate:-0.14}, aero:{windTax:-0.13,draft:0.08}, handle:{handling:0.14,descend:0.10} };
 function body(dims){ const s={}; for(const d of dims) for(const k in DIM_BODY[d]) s[k]=(s[k]||0)+DIM_BODY[d][k]; return s; }
-const TERRAIN_BODY = [ ['sprint','endur','durab'], ['climb','sprint','endur'], ['climb','endur','durab'], ['sprint','endur','durab'], ['climb','endur','durab'] ];
+// Six dimensions now, so a terrain-matched rider carries the two that road asks for as
+// well: a windy flat day wants aero, a mountain day wants handling for the descents.
+const TERRAIN_BODY = [ ['sprint','endur','durab','aero'], ['climb','sprint','endur','handle'], ['climb','endur','durab','handle'], ['sprint','endur','durab','aero'], ['climb','endur','durab','handle'] ];
 
 const TEMPLATES = [0, 1, 2, 3, 4];
 const TNAME = ['flat', 'hills', 'mtn', 'panflat', 'queen'];

@@ -37,16 +37,23 @@ for (const sc of G.schedules) {
   sc.stages = S.tourSchedule(sc.seed, sc.len);
 }
 G.note = 'Slipstream golden master. Regenerated ' + new Date().toISOString().slice(0, 10)
-  + ' after the build-6 batch, four deliberate sim changes: ROTATION COHESION (the working '
-  + 'rotation is the cohesive chain at the head of the break, gaps > 10 m break it, so cues '
-  + 'and trainBoost stop for a rider functionally alone); FINISH ROLL-OUT (finished riders '
-  + 'coast past the line instead of parking on it, are excluded from the collision speed cap, '
-  + 'and race.over waits ~4 s after the player crosses); BOTTLE DROPS AFTER THE FIRST FEED '
-  + '(addLitter and its fallback reject candidates before any bottle could exist, which '
-  + 'shifts course PRNG on courses that previously drew an early-climb drop; the '
-  + 'after-last-feed guarantee also gained a relaxed second pass so it can no longer '
-  + 'silently give up when furniture blocks every strict candidate); MUSETTE HAND-UP '
-  + 'at 0.60 of the zone (was 0.42) so the bag is ridden to, not dived for. Litter events now '
-  + 'name the fine.';
+  + ' after THE BODY LAYER (phase 2 of the three-layer rider). Deliberate changes: '
+  + 'RIVALS HARDEN ON EVERY DIMENSION rather than durability alone, each leaning into the '
+  + 'dimensions their archetype implies and taking a 0.45 share of the rest, so the field '
+  + 'stays competitive at whatever division you are in instead of a developed player edge '
+  + 'compounding at the top. Measured: a fully developed rider averages 3.87 at Division 1, '
+  + 'an undeveloped one 6.87, a brand new rider 3.60 at Division 8. '
+  + 'TWO NEW BODY DIMENSIONS, aero and handling, so no radar axis is bike-only any more. '
+  + 'THE ENGINE SLOT LEAVES THE BIKE for the body as muscle type, stat for stat, taking the '
+  + 'bike from six slots to five. PHYSIQUE (race weight, muscle type) and TRAINING (a points '
+  + 'budget) layer onto the player only, never the daily. '
+  + 'BOX WHEELS REWORKED: once the body could grow a handling dimension of its own, box had '
+  + 'nothing uniquely its and dominance read it DEAD (the canary DEV-LOOP names), so it is '
+  + 'now what a shallow rim really is: lighter uphill (climbCost -0.045), less extreme in '
+  + 'handling (0.16 to 0.09, which was a bigger swing than a whole career of growth) and a '
+  + 'little slower through the air. Dominance back to 0 dominant, 0 dead. '
+  + 'The field time spread collapses from 9900s to 175s because rivals no longer blow up in '
+  + 'the top divisions. Previous round: the build-6 batch (rotation cohesion, finish '
+  + 'roll-out, bottle drops after the first feed, musette hand-up at 0.60).';
 fs.writeFileSync(GOLDEN_PATH, JSON.stringify(G, null, 0));
 console.log('regenerated', G.cases.length, 'cases,', G.schedules.length, 'schedules');

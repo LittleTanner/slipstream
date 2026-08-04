@@ -72,7 +72,9 @@ Revisit only if fields grow beyond 8.
 | Food (fuel) and stomach (absorb) | Eating fills a stomach that feeds you slowly; a full stomach climbs badly | `THE MUSETTE` | `stomach.test.js`, `feedzone.test.js` |
 | Fluids and sweat | Dry riders fade and cannot attack | `dryPen` | `hydration.test.js` |
 | Thin air | Above ~1200m altitude costs recovery and water, never raw power | `How thin the air is here` | `thin-air.test.js` |
-| Rider growth / divisions | Rivals get sharper and better-equipped by division; the player's ceiling does not scale | `race.D` | dominance (body-aware) |
+| Rider growth / divisions | SIX dimensions grown by terrain (climb, sprint, endurance, durability, aero, handling); rivals harden on EVERY dimension by division, leaning into their archetype's and taking a 0.45 share of the rest, so the field stays competitive wherever you are | `race.D`, `rivalBody` | dominance (body-aware) |
+| Physique | Pro/con body traits: race weight (light climbs, heavy descends and sprints, and mass costs aero and food too) and muscle type. Neutral options are free, so a rider who owns nothing is still legal | `WEIGHTS`, `MUSCLES` | dominance + `career.py` |
+| Training | Pure-positive blocks on an EARNED points budget rather than pro/con, because a career should let you simply get stronger; better blocks cost more points and what does not fit does not ride | `TRAINING`, `trainingBudget` | dominance + `career.py` |
 
 ## Terrain and handling
 

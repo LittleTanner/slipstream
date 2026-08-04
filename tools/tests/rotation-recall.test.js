@@ -6,6 +6,14 @@ const Sim = require('../sim.js');
 const { CFG } = Sim;
 const gc = {}; for (const n of ['YOU', ...Sim.FIELD.map(f => f.name)]) gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
 const race = Sim.createRace({ seed: 7, stageIndex: 0, playerType: 'rouleur', gc, leaders: {}, div: 4 });
+// MATCH THE PLAYER TO THE FIELD. Rivals harden with the division across every dimension,
+// so an undeveloped rider dropped into a Division 4 break is simply outmatched and what
+// this measures becomes the mismatch rather than the rotation. Give the player the same
+// division-appropriate body their mates have, so the rotation is tested between peers.
+for (const k in Sim.rivalBody('rouleur', race.D.t)) {
+  const v = Sim.rivalBody('rouleur', race.D.t)[k];
+  race.you.stats[k] = (race.you.stats[k] === undefined ? 0 : race.you.stats[k]) + v;
+}
 race.course.winds = [{ d: -1e6, dir: 0, str: 0 }, { d: 1e9, dir: 0, str: 0 }];
 const c = race.course;
 for (let i = 0; i < c.grades.length; i++) c.grades[i] = 0;
@@ -73,7 +81,14 @@ for (let g = 0; g < 120 * 200; g++) {
       // The bug being tested: a call arriving soon after my pull, mid-drift or before
       // the others have rotated. A call a full cycle later with a shirking mate is the
       // anti-dodge waiver working as designed (someone must work), not the bug.
-      if (calls > 1 && (t - myTurnEndedAt) < 25 && (race.youWasBack === false || pulledSinceMyTurn.size < 2))
+      // THE PROMISE IS THE wasBack RULE: you are called again only once you have been to
+      // the BACK since your last pull (a shirking mate waives it after a full cycle).
+      // Requiring BOTH mates to have held the front >=1.5s was a proxy for that, and a
+      // rider who is RELIEVED early takes a genuinely short turn that the proxy misses:
+      // it read one call in ten as a mate skipping the rotation when the rotation was
+      // correct and the player had been to the back. Assert the promise, and keep a floor
+      // of one mate so "called twice with nobody else pulling" is still caught.
+      if (calls > 1 && (t - myTurnEndedAt) < 25 && (race.youWasBack === false || pulledSinceMyTurn.size < 1))
         fails.push('called at ' + t + 's only ' + (t - myTurnEndedAt).toFixed(1) + 's after my pull (wasBack=' + race.youWasBack + ', pulledSince=[' + [...pulledSinceMyTurn] + '])');
       mode = 'through';
     }

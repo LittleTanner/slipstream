@@ -5,6 +5,14 @@ const Sim = require('../sim.js');
 const { CFG } = Sim;
 const gc = {}; for (const n of ['YOU', ...Sim.FIELD.map(f => f.name)]) gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
 const race = Sim.createRace({ seed: 7, stageIndex: 0, playerType: 'rouleur', gc, leaders: {}, div: 4 });
+// MATCH THE PLAYER TO THE FIELD. Rivals harden with the division across every dimension,
+// so an undeveloped rider dropped into a Division 4 break is simply outmatched and what
+// this measures becomes the mismatch rather than the rotation. Give the player the same
+// division-appropriate body their mates have, so the rotation is tested between peers.
+for (const k in Sim.rivalBody('rouleur', race.D.t)) {
+  const v = Sim.rivalBody('rouleur', race.D.t)[k];
+  race.you.stats[k] = (race.you.stats[k] === undefined ? 0 : race.you.stats[k]) + v;
+}
 race.course.winds = [{ d: -1e6, dir: 0, str: 0 }, { d: 1e9, dir: 0, str: 0 }];
 const c = race.course;
 for (let i = 0; i < c.grades.length; i++) c.grades[i] = 0;

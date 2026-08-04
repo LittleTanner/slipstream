@@ -313,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 11</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 12</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -431,6 +431,10 @@
   <div class="secthead">Tune each part</div>
   <div class="segmented" id="bSlots"></div>
   <div id="bList"></div>
+  <div class="secthead">Your body</div>
+  <div id="bPhysique"></div>
+  <div class="secthead">Training</div>
+  <div id="bTraining"></div>
   <div class="secthead">Rider career</div>
   <div id="bTactics"></div>
   <button class="go" id="bLock">Lock in this build</button>
@@ -742,16 +746,45 @@ const ARCHETYPES = {
     blurb: "Flies uphill, suffers in the wind, recovers fast. Win on the summits.",
     stats: { attack: 1.19, climbCost: 0.68, fuelUse: 0.92, recover: 1.16, windTax: 1.06, kick: 0.95, descend: 1.00 } }
 };
-// Rivals toughen with the division: their durability (which archetypes leave at baseline)
-// climbs toward a fully-developed rider's by Division 1, so a player's grown durability is
-// an edge that shrinks as the field hardens rather than a permanent grand-tour advantage.
-// Mirrors the player's full durability dimension (view DIM_BODY.durab).
-const RIVAL_DURAB = { resilience: 0.10, fatigueResist: -0.24, gut: 0.30, sweatRate: -0.14 };
+// ★ RIVALS HARDEN ON EVERY DIMENSION, NOT JUST DURABILITY. They used to toughen only in
+// durability, so a developed player's climbing, sprinting, aero and handling were all
+// permanent edges that compounded at the top of the ladder. Kevin: "the rivals should be
+// competitive in whatever division you are in." Each rival now leans into the dimensions
+// their archetype implies and picks up a share of the rest, which is what a professional
+// field actually is: specialists who are also good everywhere. Scaled by D.t, so Division
+// 8 is a soft field and Division 1 is full of finished riders.
+// MIRRORS the view's DIM_BODY. The two drift silently; change them together.
+const DIM_STATS = {
+  climb:  { climbCost: -0.22 },
+  sprint: { kick: 0.14, attack: 0.07 },
+  endur:  { recover: 0.12, fuelUse: -0.04 },
+  durab:  { resilience: 0.10, fatigueResist: -0.24, gut: 0.30, sweatRate: -0.14 },
+  aero:   { windTax: -0.13, draft: 0.08 },
+  handle: { handling: 0.14, descend: 0.10 }
+};
+const RIVAL_DIMS = {
+  climber:  ["climb", "endur", "durab", "handle"],
+  sprinter: ["sprint", "endur", "durab", "aero"],
+  rouleur:  ["endur", "durab", "aero", "handle"]
+};
+const RIVAL_SPREAD = 0.45;      // share of the dimensions their archetype does NOT imply
+function rivalBody(type, t) {
+  const own = RIVAL_DIMS[type] || RIVAL_DIMS.rouleur;
+  const out = {};
+  for (const dim in DIM_STATS) {
+    const w = (own.indexOf(dim) >= 0 ? 1 : RIVAL_SPREAD) * t;
+    for (const k in DIM_STATS[dim]) out[k] = (out[k] || 0) + DIM_STATS[dim][k] * w;
+  }
+  return out;
+}
 
 // ===== Rider build model (build-from-scratch redesign). Six slots, three trade parts
 // each; a build's stats are BASE_STATS plus every chosen part's deltas, so the archetype
 // is derived from the shape, not chosen. Balanced headless to 0 dominant / 0 dead. =====
-const SLOTS = [["frame", "Frame"], ["wheels", "Wheels"], ["gearing", "Gearing"], ["position", "Position"], ["tires", "Tires"], ["engine", "Engine"]];
+// ENGINE IS GONE FROM THE BIKE. Diesel legs are physiology, not equipment; the slot only
+// lived here because this is where the build system was. Its parts are now MUSCLES in
+// the body, stat for stat, so no rider loses anything.
+const SLOTS = [["frame", "Frame"], ["wheels", "Wheels"], ["gearing", "Gearing"], ["position", "Position"], ["tires", "Tires"]];
 const PARTS = {
   frame: [
     { id: "steel",  name: "Steel",  note: "Heavy, but soaks up the road and never lets go", d: { resilience: +0.035, recover: +0.014, climbCost: +0.017 } },
@@ -759,7 +792,14 @@ const PARTS = {
     { id: "carbon", name: "Carbon", note: "Feathery and stiff uphill, punishing when it turns rough",extreme: true, unlockDiv: 7,  d: { climbCost: -0.066, resilience: -0.025 } }
   ],
   wheels: [
-    { id: "box",  name: "Box section", note: "Light and sure-footed, but no shelter from the wind", d: { handling: +0.16, descend: +0.14, windTax: 0 } },
+    // ★ BOX IS THE LIGHT WHEEL. It used to be pure handling and descending, which is not
+    // what a shallow rim actually buys you, and once the body could grow a handling
+    // dimension of its own the wheel had nothing left that was uniquely its: dominance
+    // read it DEAD, the canary DEV-LOOP names. It is now what a box-section wheel really
+    // is: lighter uphill, still surer in the wind's hands than a deep rim, and a little
+    // slower through the air. The handling figure also comes down from 0.16, which was a
+    // bigger swing on that axis than an entire career of growth.
+    { id: "box",  name: "Box section", note: "Light uphill and sure-footed, but it gives away the flat", d: { climbCost: -0.045, handling: +0.09, descend: +0.08, windTax: +0.02 } },
     { id: "mid",  name: "Mid depth",   neutral: true, note: "A bit of everything, nothing to fear", d: { windTax: -0.03 } },
     { id: "disc", name: "Deep / disc", note: "Slippery in a straight line, a handful when it blows across",extreme: true, unlockDiv: 6,  d: { windTax: -0.13, draft: +0.07, handling: -0.13, descend: -0.05 } }
   ],
@@ -781,17 +821,12 @@ const PARTS = {
     { id: "allround", name: "All-round",       neutral: true, note: "Grip and speed in fair measure", d: {} },
     { id: "grip",     name: "Grippy tubeless", note: "Sticks to anything, drags a little on smooth tar",extreme: true, unlockDiv: 3,  d: { descend: +0.09, handling: +0.07, windTax: +0.05 } }
   ],
-  engine: [
-    { id: "diesel",   name: "Diesel legs",    note: "Rolls all day and recovers, with no explosive kick", d: { recover: +0.028, resilience: +0.021, kick: -0.017, fuelUse: -0.01 } },
-    { id: "allround", name: "All-round legs", neutral: true, note: "A balanced engine", d: {} },
-    { id: "punch",    name: "Fast twitch",    note: "A vicious kick and attack, but it burns fuel and fades", d: { kick: +0.035, attack: +0.025, fuelUse: +0.021, recover: -0.014 } }
-  ]
 };
 const PRESETS = {
-  Climber:  { frame: "carbon", wheels: "box",  gearing: "compact",  position: "upright", tires: "slick", engine: "diesel" },
-  Sprinter: { frame: "steel",  wheels: "disc", gearing: "big",      position: "slammed", tires: "slick", engine: "punch"  },
-  Rouleur:  { frame: "alloy",  wheels: "disc", gearing: "standard", position: "slammed", tires: "slick", engine: "diesel" },
-  Puncheur: { frame: "carbon", wheels: "box",  gearing: "standard", position: "endur",   tires: "grip",  engine: "punch"  }
+  Climber:  { frame: "carbon", wheels: "box",  gearing: "compact",  position: "upright", tires: "slick" },
+  Sprinter: { frame: "steel",  wheels: "disc", gearing: "big",      position: "slammed", tires: "slick" },
+  Rouleur:  { frame: "alloy",  wheels: "disc", gearing: "standard", position: "slammed", tires: "slick" },
+  Puncheur: { frame: "carbon", wheels: "box",  gearing: "standard", position: "endur",   tires: "grip" }
 };
 const UNLOCK_COST = 1000;   // prize money to unlock one extreme specialist part
 function buildStats(build) {
@@ -1763,8 +1798,9 @@ function createRace(opts) {
     // whoever owned the chosen colour inherits the one the player gave up
     const cf = f.c === kit ? Object.assign({}, f, { c: YOU.c }) : f;
     const type = sharp.has(k) ? parcoursArch : f.type;   // specialists become the terrain archetype
-    const durb = {};                                     // durability grows toward a developed rider by division
-    for (const st in RIVAL_DURAB) durb[st] = BASE_STATS[st] + RIVAL_DURAB[st] * D.t;
+    const durb = {};                                     // their body grows toward a developed rider by division
+    const rb = rivalBody(type, D.t);
+    for (const st in rb) durb[st] = BASE_STATS[st] + rb[st];
     const r = makeRider(Object.assign({}, cf, { D }), k + 1, false, type, R, durb);
     r.plan = pickPlan(k + 1, R);
     r.strength += D.strength;
@@ -3789,7 +3825,7 @@ return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
-  createRace, snapshot, restore, step, tick, preRoll, settle, secondChance, ROUTES, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
+  createRace, snapshot, restore, step, tick, preRoll, settle, secondChance, DIM_STATS, rivalBody, ROUTES, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
   danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
   surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
@@ -3834,7 +3870,8 @@ let playerType = "rouleur";
 let committedBuild = null;
 let playerKit = "magenta";
 let dailyRun = false;
-let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio"], daily: null,
+let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio"],
+  weight: "balanced", muscle: "allround", training: [], daily: null,
   owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0, packs: [], req: {} };
 
 // ---------------------------------------------------------------- tilt steering
@@ -7335,7 +7372,9 @@ function finishStage() {
   const oneDay = tour.schedule.length === 1;
   const words = ["Stage win", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Last"];
   const gcPlace = gc.indexOf(you) + 1;
-  growCareer(you, specAt(tour.stage).type, lastStage);   // the rider's body grows from how this stage went
+  // The whole spec, not just its type: aero growth needs to know it was a time trial or a
+  // windy day, which the type alone cannot say.
+  growCareer(you, specAt(tour.stage), lastStage);        // the rider's body grows from how this stage went
   Store.save(ladder);
   let earned = you.money;                    // per-race total; each stage banks its own
   if (lastStage) {
@@ -7949,7 +7988,7 @@ function renderBuild() {
   }
   list.appendChild(strip);
   const career = buildAllUnlocked ? FULL_CAREER : (ladder.career || {});
-  const body = bodyStats(career, buildAllUnlocked ? null : ladder.div);
+  const body = fullBody(career, ladder.div, buildAllUnlocked);
   const addBody = (s) => { for (const k in body) s[k] = (s[k] === undefined ? 0 : s[k]) + body[k]; return s; };
   const now = addBody(Sim.buildStats(buildDraft));
   const bodyOnly = addBody(Sim.buildStats(Sim.neutralBuild()));
@@ -7959,6 +7998,7 @@ function renderBuild() {
   // neutral rider there, which taught two different visual languages for one idea.
   drawRadar($("bRadar"), now, riderProfile(Sim.buildStats(Sim.neutralBuild())), riderProfile(bodyOnly));
   renderMeters(now, bodyOnly, false, $("bMeters"));
+  renderPhysique(); renderTraining();
   $("bPrev").textContent = "Green is your body on a neutral bike, earned by racing. Solid is that body on THIS bike, so the space between them is what the bike tunes. The dashed line is a neo-pro. Parts unlock as you climb divisions.";
   renderTactics();
 }
@@ -7989,29 +8029,115 @@ function toggleTactic(key) {
   else { f.push(key); while (f.length > FIT_TACTICS) f.shift(); }   // oldest drops out
   ladder.tactics = f; Store.save(ladder);
 }
-// The rider's body has FOUR identity dimensions that grow from how you race — climbing
-// from contesting mountains, sprinting from contesting flats, endurance from front
-// finishes, durability from surviving tours. Each is ~65% of a specialist's edge; the bike
-// tunes the other ~35%. Milestone-based (levels 0-5), so each step is a career goal, and
-// you are never locked in: race a new terrain and that dimension starts to grow.
+// The rider's body has SIX identity dimensions that grow from how you race — climbing from
+// contesting mountains, sprinting from contesting flats, endurance from front finishes,
+// durability from surviving tours, aero from time trials and windy days, handling from
+// descents and technical roads. Milestone-based (levels 0-5), so each step is a career
+// goal, and you are never locked in: race a new terrain and that dimension starts to grow.
 const DIMS = [
   { key: "climb",  name: "Climbing",   ident: "Climber",    grow: "Top finishes on mountain stages" },
   { key: "sprint", name: "Sprinting",  ident: "Sprinter",   grow: "Top finishes on flat stages" },
   { key: "endur",  name: "Endurance",  ident: "Rouleur",    grow: "Finishing near the front, any terrain" },
-  { key: "durab",  name: "Durability", ident: "Hard rider", grow: "Finishing tours without cracking" }
+  { key: "durab",  name: "Durability", ident: "Hard rider", grow: "Finishing tours without cracking" },
+  // ★ THE TWO AXES THE BODY COULD NOT REACH. Aero and handling were pure bike: a whole
+  // career moved them 0.00 while one wheel swap moved handling 0.48, which is why the
+  // bike looked like the only thing that mattered. Now every radar axis is a mix.
+  { key: "aero",   name: "Aerodynamics", ident: "Tester",    grow: "Time trials and riding the wind" },
+  { key: "handle", name: "Bike handling", ident: "Descender", grow: "Descents, corners and technical roads" }
 ];
 const DIM_MILES = {   // cumulative progress for levels I-V; front-loaded so early progress is quick, mastery is a grind (tunable)
   climb:  [12, 30, 55, 85, 120],
   sprint: [12, 30, 55, 85, 120],
   endur:  [8, 20, 36, 56, 80],
-  durab:  [6, 16, 30, 48, 70]
+  durab:  [6, 16, 30, 48, 70],
+  aero:   [10, 26, 48, 75, 105],
+  handle: [10, 26, 48, 75, 105]
 };
+// MIRRORS the sim's DIM_STATS, which hardens the rivals. Change them together.
 const DIM_BODY = {
   climb:  { climbCost: -0.22 },
   sprint: { kick: +0.14, attack: +0.07 },
   endur:  { recover: +0.12, fuelUse: -0.04 },
-  durab:  { resilience: +0.10, fatigueResist: -0.24, gut: +0.30, sweatRate: -0.14 }
+  durab:  { resilience: +0.10, fatigueResist: -0.24, gut: +0.30, sweatRate: -0.14 },
+  aero:   { windTax: -0.13, draft: +0.08 },
+  handle: { handling: +0.14, descend: +0.10 }
 };
+// ★ PHYSIQUE: the pro/con half of the body. Training makes you better at something without
+// making you worse elsewhere, so training is a pure positive on a budget (below). A BODY
+// cannot do that: you cannot be light and powerful at once. Weight is the oldest trade in
+// the sport, and because mass carries momentum downhill and frontal area costs watts, it
+// touches descending, aero and food as well as the obvious climbing and sprinting.
+// Balanced and All-round are FREE, so a rider who has bought nothing still has a complete
+// legal setup; the rest are earned then bought (Phase 4).
+const WEIGHTS = [
+  { id: "feather",  name: "Featherweight", note: "Floats uphill, blows about and has nothing in a sprint",
+    d: { climbCost: -0.100, descend: -0.060, kick: -0.050, attack: -0.020, windTax: -0.020, resilience: -0.030, fuelUse: -0.020 } },
+  { id: "lean",     name: "Lean",          note: "A climber's build without the fragility",
+    d: { climbCost: -0.050, descend: -0.030, kick: -0.025, attack: -0.010, windTax: -0.010, resilience: -0.015, fuelUse: -0.010 } },
+  { id: "balanced", name: "Balanced", neutral: true, note: "No gift and no penalty on any road", d: {} },
+  { id: "solid",    name: "Solid",         note: "Carries speed down and through, pays for it on the way up",
+    d: { climbCost: +0.050, descend: +0.035, kick: +0.030, attack: +0.015, windTax: +0.015, resilience: +0.020, fuelUse: +0.012 } },
+  { id: "power",    name: "Powerhouse",    note: "A sprinter's engine and a sprinter's mountains",
+    d: { climbCost: +0.100, descend: +0.070, kick: +0.060, attack: +0.030, windTax: +0.030, resilience: +0.040, fuelUse: +0.025 } }
+];
+// Muscle type: the old `engine` BIKE slot, moved to the body where it always belonged.
+// Diesel legs are physiology, not equipment.
+const MUSCLES = [
+  { id: "slow",     name: "Slow twitch",  note: "Rolls all day and recovers, with no explosive kick",
+    d: { recover: +0.028, resilience: +0.021, kick: -0.017, fuelUse: -0.010 } },
+  { id: "allround", name: "All-round", neutral: true, note: "A balanced engine", d: {} },
+  { id: "fast",     name: "Fast twitch",  note: "A vicious kick and attack, but it burns fuel and fades",
+    d: { kick: +0.035, attack: +0.025, fuelUse: +0.021, recover: -0.014 } },
+  { id: "metro",    name: "Metronome",    note: "Sips fuel and never quite explodes",
+    d: { fuelUse: -0.032, recover: +0.012, attack: -0.022 } },
+  { id: "furnace",  name: "Furnace",      note: "Takes on food like nobody else, and sweats it out",
+    d: { gut: +0.200, sweatRate: +0.030, fuelUse: +0.015, kick: +0.015 } }
+];
+function physique(list, id) {
+  const pick = list.find(x => x.id === id) || list.find(x => x.neutral);
+  return pick || list[0];
+}
+// ★ TRAINING: the pure-positive half, balanced by a BUDGET rather than by a downside on
+// each item. Making every single choice a trade-off means you can never simply feel
+// stronger, which is the point of having a career. Better blocks cost more points, and the
+// budget is EARNED by racing and can never be bought.
+const TRAINING = [
+  { id: "hills",    dim: "climb",  name: "Hill repeats",        pts: 1, d: { climbCost: -0.050 } },
+  { id: "thresh",   dim: "climb",  name: "Threshold block",     pts: 2, d: { climbCost: -0.070, fatigueResist: -0.050 } },
+  { id: "altitude", dim: "climb",  name: "Altitude camp",       pts: 3, d: { climbCost: -0.120, recover: +0.020 } },
+  { id: "gym",      dim: "sprint", name: "Gym block",           pts: 1, d: { kick: +0.040 } },
+  { id: "sprints",  dim: "sprint", name: "Sprint work",         pts: 2, d: { kick: +0.080, attack: +0.030 } },
+  { id: "leadout",  dim: "sprint", name: "Leadout drills",      pts: 3, d: { kick: +0.100, attack: +0.050, draft: +0.030 } },
+  { id: "long",     dim: "endur",  name: "Long rides",          pts: 1, d: { recover: +0.040 } },
+  { id: "base",     dim: "endur",  name: "Aerobic base",        pts: 2, d: { recover: +0.070, fuelUse: -0.015 } },
+  { id: "gtblock",  dim: "endur",  name: "Grand tour block",    pts: 3, d: { recover: +0.100, fatigueResist: -0.080 } },
+  { id: "core",     dim: "durab",  name: "Core work",           pts: 1, d: { resilience: +0.030 } },
+  { id: "fit",      dim: "durab",  name: "Bike fit",            pts: 1, d: { fatigueResist: -0.060 } },
+  { id: "gut",      dim: "durab",  name: "Gut training",        pts: 2, d: { gut: +0.180 } },
+  { id: "heat",     dim: "durab",  name: "Heat acclimatisation", pts: 2, d: { sweatRate: -0.070 } },
+  { id: "suck",     dim: "aero",   name: "Wheel sucking",       pts: 1, d: { draft: +0.050 } },
+  { id: "tunnel",   dim: "aero",   name: "Wind tunnel session", pts: 2, d: { windTax: -0.050 } },
+  { id: "posn",     dim: "aero",   name: "Position work",       pts: 3, d: { windTax: -0.090 } },
+  { id: "corners",  dim: "handle", name: "Cornering drills",    pts: 1, d: { handling: +0.050 } },
+  { id: "descamp",  dim: "handle", name: "Descending camp",     pts: 2, d: { descend: +0.070 } },
+  { id: "technic",  dim: "handle", name: "Technical block",     pts: 3, d: { handling: +0.080, descend: +0.050 } }
+];
+// Earned only, never purchasable: racing widens what you can carry at once.
+function trainingBudget(career, div) {
+  let lv = 0; for (const d of DIMS) lv += dimLevel(d.key, (career || {})[d.key]);
+  return 3 + (8 - (div || 8)) + Math.floor(lv / 3);
+}
+function fittedTraining() {
+  const owned = ladder.training || [];
+  const budget = trainingBudget(ladder.career, ladder.div);
+  const out = []; let spent = 0;
+  for (const id of owned) {
+    const t = TRAINING.find(x => x.id === id);
+    if (!t || spent + t.pts > budget) continue;          // over budget simply does not ride
+    out.push(t); spent += t.pts;
+  }
+  return out;
+}
 const ROMAN = ["", "I", "II", "III", "IV", "V"];
 const FULL_CAREER = { climb: 999, sprint: 999, endur: 999, durab: 999 };
 const RUST_FULL = 12;   // uncontested stages for form to fade one full level (tunable)
@@ -8036,9 +8162,11 @@ function riderIdentity(career) {
 // Grow the dimensions from a finished stage — terrain-tied so you can't farm one to raise
 // another, and rewarding contesting (top 8) not just winning, so a developing rider climbs out.
 // Also track rust: every stage dulls each discipline's form a little; contesting one wipes its rust.
-function growCareer(you, type, tourDone) {
-  const c = ladder.career = ladder.career || { climb: 0, sprint: 0, endur: 0, durab: 0 };
-  const rz = ladder.rust = ladder.rust || { climb: 0, sprint: 0, endur: 0, durab: 0 };
+function growCareer(you, spec, tourDone) {
+  const type = spec && spec.type ? spec.type : spec;    // tolerates the old type-only call
+  const blank = () => ({ climb: 0, sprint: 0, endur: 0, durab: 0, aero: 0, handle: 0 });
+  const c = ladder.career = Object.assign(blank(), ladder.career);
+  const rz = ladder.rust = Object.assign(blank(), ladder.rust);
   for (const k in rz) rz[k]++;                          // a stage passes; form dulls a touch everywhere
   const top = Math.max(0, 8 - (you.place || 8));       // 7 for a win, 0 for 8th+
   const cl = type === "mountain" ? top : type === "hills" ? top * 0.5 : 0;
@@ -8048,6 +8176,92 @@ function growCareer(you, type, tourDone) {
   if (en > 0) { c.endur += en; rz.endur = 0; }
   const du = (!you.bonk && !you.dry ? 1.5 : 0) + (tourDone ? 3 : 0);
   if (du > 0) { c.durab += du; rz.durab = 0; }
+  // AERO comes from riding against the air on purpose: a time trial is nothing else, and
+  // a windy road is the other place position is worth real time.
+  const windy = spec && spec.wind !== undefined ? spec.wind : 0;
+  const ae = (spec && spec.tt) ? Math.max(2, top) : windy > 0.6 ? top * 0.5 : 0;
+  if (ae > 0) { c.aero += ae; rz.aero = 0; }
+  // HANDLING comes from roads that ask for it. Mountains are the descending school, and
+  // hills are twistier than a pan-flat sprinters' day.
+  const hd = type === "mountain" ? top * 0.7 : type === "hills" ? top * 0.4 : 0;
+  if (hd > 0) { c.handle += hd; rz.handle = 0; }
+}
+// Physique: two rows of pro/con choices. Rendered as the same segmented control the
+// presets use, because it IS the same kind of choice: one of a short list, no cost.
+function renderPhysique() {
+  const host = $("bPhysique"); if (!host) return; host.innerHTML = "";
+  const rows = [
+    { list: WEIGHTS, cur: ladder.weight, name: "Race weight",
+      set: v => { ladder.weight = v; }, note: "Light climbs. Heavy descends and sprints." },
+    { list: MUSCLES, cur: ladder.muscle, name: "Muscle type",
+      set: v => { ladder.muscle = v; }, note: "What your legs are made for." }
+  ];
+  for (const row of rows) {
+    const head = document.createElement("div"); head.className = "note";
+    head.textContent = row.name + " · " + row.note; host.appendChild(head);
+    const seg = document.createElement("div"); seg.className = "segmented";
+    const cur = physique(row.list, row.cur);
+    for (const opt of row.list) {
+      const b = document.createElement("button");
+      b.textContent = opt.name;
+      b.title = opt.note;
+      b.setAttribute("aria-pressed", String(opt.id === cur.id));
+      b.addEventListener("click", () => {
+        row.set(opt.id); Store.save(ladder); renderBuild();
+      });
+      seg.appendChild(b);
+    }
+    host.appendChild(seg);
+    const sub = document.createElement("div"); sub.className = "fx";
+    sub.innerHTML = '<span class="lead">' + cur.name + " — " + cur.note + "</span>";
+    host.appendChild(sub);
+  }
+}
+// Training: pure positives on an earned budget. Better blocks cost more points, and what
+// does not fit simply does not ride, so the budget is the balance rather than a downside
+// bolted onto each block.
+function renderTraining() {
+  const host = $("bTraining"); if (!host) return; host.innerHTML = "";
+  const budget = trainingBudget(ladder.career, ladder.div);
+  const fitted = fittedTraining().map(t => t.id);
+  const spent = fittedTraining().reduce((a, t) => a + t.pts, 0);
+  const head = document.createElement("div"); head.className = "note";
+  head.textContent = "Carrying " + spent + " of " + budget
+    + " points. Race more, and you can carry more.";
+  host.appendChild(head);
+  const strip = document.createElement("div"); strip.className = "strip";
+  for (const t of TRAINING) {
+    const dim = DIMS.find(d => d.key === t.dim);
+    const lvl = dimLevel(t.dim, (ladder.career || {})[t.dim]);
+    const earned = lvl >= t.pts;                 // a 3-point block wants that dimension at III
+    const on = fitted.indexOf(t.id) >= 0;
+    const card = document.createElement("div"); card.className = "card" + (earned ? "" : " locked");
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = t.name; top.appendChild(nb);
+    const pips = document.createElement("span"); pips.className = "pips";
+    pips.textContent = t.pts + (t.pts === 1 ? " pt" : " pts"); top.appendChild(pips);
+    card.appendChild(top);
+    const note = document.createElement("div"); note.className = "note";
+    note.textContent = dim ? dim.name : t.dim; card.appendChild(note);
+    const btns = document.createElement("div"); btns.className = "btns";
+    const b = document.createElement("button");
+    if (!earned) { b.textContent = "Needs " + (dim ? dim.name : t.dim) + " " + ROMAN[t.pts]; b.disabled = true; }
+    else {
+      const room = on || spent + t.pts <= budget;
+      b.textContent = on ? "Carrying" : room ? "Carry" : "No room";
+      b.disabled = !room;
+      b.className = on ? "on" : "";
+      b.addEventListener("click", () => {
+        const cur = (ladder.training || []).slice();
+        const at = cur.indexOf(t.id);
+        if (at >= 0) cur.splice(at, 1); else cur.push(t.id);
+        ladder.training = cur; Store.save(ladder); renderBuild();
+      });
+    }
+    btns.appendChild(b); card.appendChild(btns);
+    strip.appendChild(card);
+  }
+  host.appendChild(strip);
 }
 function renderTactics() {
   const host = $("bTactics"); if (!host) return; host.innerHTML = "";
@@ -8110,9 +8324,24 @@ function renderTactics() {
 }
 // A build's stats with the rider's grown body (the four dimensions) and race-craft tactics
 // layered on. The daily gives a fully-developed body and full tactics.
+// ★ ONE SOURCE FOR "EVERYTHING THAT IS BODY": grown dimensions, physique and training.
+// The radar and the race MUST agree, and the way that breaks is two places assembling the
+// rider slightly differently. Both call this.
+// The daily hands out a developed body but a NEUTRAL physique and no training, so everyone
+// rides the same rider and the shared board stays fair.
+function fullBody(career, div, daily) {
+  const out = daily ? bodyStats(FULL_CAREER, null) : bodyStats(career || {}, div);
+  if (!daily) {
+    for (const p of [physique(WEIGHTS, ladder.weight), physique(MUSCLES, ladder.muscle)])
+      for (const k in p.d) out[k] = (out[k] === undefined ? 0 : out[k]) + p.d[k];
+    for (const t of fittedTraining())
+      for (const k in t.d) out[k] = (out[k] === undefined ? 0 : out[k]) + t.d[k];
+  }
+  return out;
+}
 function raceStats(build, career, daily) {
   const s = Sim.buildStats(build || Sim.neutralBuild());
-  const body = daily ? bodyStats(FULL_CAREER, null) : bodyStats(career || {}, ladder.div);
+  const body = fullBody(career, ladder.div, daily);
   for (const k in body) s[k] = (s[k] === undefined ? 0 : s[k]) + body[k];
   const w = daily ? 99 : (ladder.wins || 0);
   // Fitted decides IF, career decides HOW GOOD (floor 1, so fitting always buys you
@@ -8975,7 +9204,7 @@ function showProfile(ghostKey) {
   // his career growth because it was folded into a single line the bike also moved; now
   // the green ring IS the growth and the space beyond it is what the bike tunes.
   const neutral = Sim.buildStats(Sim.neutralBuild());
-  const body = bodyStats(ladder.career || {}, ladder.div);
+  const body = fullBody(ladder.career || {}, ladder.div, false);
   const bodyOnly = Object.assign({}, neutral);
   for (const k in body) bodyOnly[k] = (bodyOnly[k] === undefined ? 0 : bodyOnly[k]) + body[k];
   const stats = Sim.buildStats(committedBuild || Sim.neutralBuild());
