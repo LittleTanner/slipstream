@@ -243,6 +243,63 @@ async def main():
               "balance figure shows %r" % r["big"])
         await ctx.close()
 
+        # ---- 4b. abandoning a tour must not lock you out of racing -----------
+        # Kevin: "When you abandon a tour, when you try to start a tour again it says you
+        # need to finish the other one first, but you abandoned it so you can't."
+        # renderPick greys a card when `held.len !== r.len`, and the abandon handler wrote
+        # heldTour WITHOUT a len, so `undefined !== 1/3/5/7` was true for every card and
+        # every button was disabled. A permanent, save-killing lockout with no way out.
+        async def pick_buttons(lad):
+            ctx, pg = await open_case(browser, url, lad, [], errs)
+            try:
+                await pg.click("#startBtn")
+                await pg.wait_for_selector("#pick:not(.hide)")
+                return await pg.evaluate(
+                    "[...document.querySelectorAll('#pickBody .card')].map(c => ({"
+                    " name: c.querySelector('b').textContent,"
+                    " text: c.querySelector('.btns button').textContent,"
+                    " disabled: c.querySelector('.btns button').disabled }))")
+            finally:
+                await ctx.close()
+
+        base = {"tutorialDone": True, "div": 8, "tours": 2, "money": 500}
+        rows = await pick_buttons(dict(base, heldTour={"seed": 12345, "len": 3}))
+        three = [r for r in rows if r["name"] == "Three-day tour"]
+        others = [r for r in rows if r["name"] != "Three-day tour"]
+        check("held tour: the held LENGTH is rideable",
+              bool(three) and not three[0]["disabled"],
+              "three-day card %r" % (three,))
+        check("held tour: the other lengths are held back",
+              bool(others) and all(r["disabled"] for r in others),
+              "others %r" % ([r["name"] for r in others if not r["disabled"]],))
+
+        # The save-recovery half: a heldTour with NO len is a pre-fix save, and it must not
+        # lock every option. Without this, an already-abandoned save is bricked forever.
+        rows = await pick_buttons(dict(base, heldTour={"seed": 12345}))
+        stuck = [r["name"] for r in rows if r["disabled"]]
+        check("held tour with no length recorded never locks the player out",
+              rows and not stuck,
+              "still disabled: %r" % (stuck,))
+
+        # A length the picker cannot offer holds NOTHING. 14 is the Grand Tour's length,
+        # which a resumed-then-abandoned grand tour used to write into heldTour, and no
+        # RACE_MENU row is 14 — so the lock had nothing to point at and disabled everything.
+        rows = await pick_buttons(dict(base, heldTour={"seed": 12345, "len": 14}))
+        stuck = [r["name"] for r in rows if r["disabled"]]
+        check("a held length the picker cannot offer holds nothing",
+              rows and not stuck,
+              "still disabled: %r" % (stuck,))
+
+        # Relegation must not withdraw the race you are holding. Hold the 21 (minDiv 3) and
+        # sit at Division 4: the row used to be filtered out while still locking every other
+        # row, which is the same dead end reached a third way.
+        rows = await pick_buttons(dict(base, div=4, heldTour={"seed": 12345, "len": 21}))
+        names = [r["name"] for r in rows]
+        three_week = [r for r in rows if r["name"] == "Three-week tour"]
+        check("relegation cannot withdraw the tour you are holding",
+              bool(three_week) and not three_week[0]["disabled"],
+              "cards rendered %r" % (names,))
+
         # ---- 5. race craft: carry TWO of three -------------------------------
         # The pool grew to three (radio / power meter / feed craft) and the limit to
         # two, so a free slot must FILL and a full one must EVICT the oldest. Two of
