@@ -201,25 +201,9 @@
     color:var(--ink);opacity:.5;cursor:pointer;white-space:nowrap}
   .segmented button:last-child{border-right:0}
   .segmented button[aria-pressed="true"]{background:var(--ink);color:var(--paper);opacity:1}
-  /* ★ A SEGMENT THAT SAYS WHY IT CANNOT BE PICKED. The physique rows put "needs Climbing IV"
-     and the price in `title` — a TOOLTIP, which a touch screen never shows, and this game is
-     going to iOS. So the whole row read as five dead buttons and Kevin filed it as a bug.
-     The sub-line carries the same words training already puts on its buttons. Nothing is
-     disabled any more either: a locked segment stays tappable and answers in the caption,
-     because a control that explains itself is not a broken control. */
-  .segmented button i{display:block;font-style:normal;font-size:8.5px;font-weight:700;
-    letter-spacing:.08em;opacity:.72;margin-top:2px}
-  .segmented button.locked{opacity:.32}
-  .segmented button.buy i{color:var(--spot);opacity:.9}
-  .segmented button.short{opacity:.4}
-  .segmented button.short i{opacity:.6}
-  /* The body rows are five LONG names across ("Featherweight", "Powerhouse"), and the base
-     segment is nowrap inside an overflow:hidden strip — so the last option was sliced in
-     half at the right edge, before any of this was added. These rows wrap instead. */
-  .segmented.body button{white-space:normal;font-size:9.5px;line-height:1.25;padding:9px 2px;
-    letter-spacing:0;overflow-wrap:normal}
-  .segmented.body button i{font-size:7.5px;letter-spacing:.03em;margin-top:3px}
-  .segmented button[aria-pressed="true"] i{opacity:.85}
+  /* The physique rows were segments carrying a state sub-line; they are CARDS now, like
+     the bike parts, so all of that CSS went with them. What is left is the group selector,
+     an ordinary two-up segmented control that needs nothing special. */
   #tcSkip{margin-top:7px}
   /* 118px put this exactly on top of the THROW / HOP button, which draws at the same height.
      Raised clear of it so a lesson never covers the control it is teaching. */
@@ -8536,108 +8520,94 @@ function growCareer(you, spec, tourDone) {
   const hd = type === "mountain" ? top * 0.7 : type === "hills" ? top * 0.4 : 0;
   if (hd > 0) { c.handle += hd; rz.handle = 0; }
 }
-// Physique: two rows of pro/con choices. Rendered as the same segmented control the
-// presets use, because it IS the same kind of choice: one of a short list, no cost.
-// Which physique option is armed for purchase, so the second tap is the one that spends.
-// Cleared whenever the build screen is rebuilt, so it never survives leaving the screen.
-let armedPhys = null;
+// Physique: TWO ROWS OF CARDS, exactly like the bike parts. It used to be a segmented
+// control, which was the wrong widget twice over: a segment is too narrow to hold "needs
+// Climbing IV" so the explanation lived in a `title` tooltip that a touch screen never
+// shows, and a segment's whole convention is free, reversible selection while these cost
+// real prize money. Cards carry the words, and a card's Buy button is already a deliberate
+// press — so the arm-then-buy step the segmented version needed is gone with it. Same
+// group-selector-then-strip shape the bike uses, so ten options do not fill the screen.
+const PHYS_GROUPS = [
+  { key: "weight", name: "Race weight", list: () => WEIGHTS, cur: () => ladder.weight,
+    set: v => { ladder.weight = v; }, note: "Light climbs. Heavy descends and sprints." },
+  { key: "muscle", name: "Muscle type", list: () => MUSCLES, cur: () => ladder.muscle,
+    set: v => { ladder.muscle = v; }, note: "What your legs are made for." }
+];
+let physGroup = "weight";
 function renderPhysique() {
   const host = $("bPhysique"); if (!host) return; host.innerHTML = "";
-  const rows = [
-    { list: WEIGHTS, cur: ladder.weight, name: "Race weight",
-      set: v => { ladder.weight = v; }, note: "Light climbs. Heavy descends and sprints." },
-    { list: MUSCLES, cur: ladder.muscle, name: "Muscle type",
-      set: v => { ladder.muscle = v; }, note: "What your legs are made for." }
-  ];
-  for (const row of rows) {
-    const head = document.createElement("div"); head.className = "note";
-    head.textContent = row.name + " · " + row.note; host.appendChild(head);
-    const seg = document.createElement("div"); seg.className = "segmented body";
-    const cur = physique(row.list, row.cur);
-    const sub = document.createElement("div"); sub.className = "fx";
-    // The caption answers whatever you last touched. Declared before the buttons so their
-    // handlers can write to it: tapping a locked segment used to `return` with no feedback
-    // at all, which is what made the whole row read as broken.
-    const say = html => { sub.innerHTML = '<span class="lead">' + html + "</span>"; };
-    for (const opt of row.list) {
-      const b = document.createElement("button");
-      const owned = physOwned(opt), unl = physUnlocked(opt);
-      const req = PHYS_REQ[opt.id];
-      const dimName = req ? (DIMS.find(d => d.key === req.dim) || {}).name : null;
-      // Name on top, STATE underneath, in the same words training puts on its buttons:
-      // what it needs, or what it costs. Owned options carry no sub-line, so the ones you
-      // can actually switch between read as the clean, plain row they always were.
-      // "NEEDS CLIMBING IV", not "IV CLIMBING": under a body attribute a bare level reads
-      // as a rating the option HAS rather than a gate it is behind. Training already says
-      // "Needs Climbing III" on its buttons, so the three sections now say the same words.
-      // And affordable is distinguished from not, exactly as training distinguishes
-      // "Buy · 2100" from "2100 prize money" — otherwise the two are pixel-identical and
-      // the only way to discover you are broke is to tap and be refused.
-      const afford = req && (ladder.money || 0) >= req.cost;
-      const state = !req || owned ? ""
-        : !unl ? "NEEDS " + req.dim.toUpperCase() + " " + ROMAN[req.lvl]
-        : afford ? (armedPhys === opt.id ? "TAP TO BUY" : "BUY " + req.cost)
-        : req.cost + " SHORT";
-      b.innerHTML = "";
-      b.appendChild(document.createTextNode(opt.name));
-      if (state) { const i = document.createElement("i"); i.textContent = state; b.appendChild(i); }
-      // Colour is not the only signal: the words differ too ("BUY 800" against "800 SHORT"),
-      // because a player who cannot tell orange from grey still has to be able to tell an
-      // affordable option from one they have not earned the money for.
-      if (!unl) b.className = "locked";
-      else if (!owned) b.className = afford ? "buy" : "short";
-      b.setAttribute("aria-pressed", String(opt.id === cur.id));
-      // NOT disabled, on purpose. A disabled button does not even fire a click, so the
-      // player taps it, nothing happens anywhere on screen, and they conclude it is broken.
-      b.addEventListener("click", () => {
-        if (!unl) {
-          say("<b>" + opt.name + "</b> is not yours yet — reach <b>" + (dimName || req.dim)
-            + " " + ROMAN[req.lvl] + "</b> by racing, then it costs " + req.cost + ".");
+  const grp = PHYS_GROUPS.find(g => g.key === physGroup) || PHYS_GROUPS[0];
+  const seg = document.createElement("div"); seg.className = "segmented";
+  for (const g of PHYS_GROUPS) {
+    const s = document.createElement("button");
+    s.textContent = g.name;
+    s.setAttribute("aria-pressed", g.key === grp.key ? "true" : "false");
+    s.addEventListener("click", () => { physGroup = g.key; renderPhysique(); });
+    seg.appendChild(s);
+  }
+  host.appendChild(seg);
+  const head = document.createElement("div"); head.className = "note";
+  head.textContent = grp.note + " You have " + (ladder.money || 0) + " prize money.";
+  host.appendChild(head);
+  const list = grp.list();
+  const cur = physique(list, grp.cur());
+  const strip = document.createElement("div"); strip.className = "strip";
+  for (const opt of list) {
+    const worn = opt.id === cur.id;
+    const owned = physOwned(opt), unl = physUnlocked(opt);
+    const req = PHYS_REQ[opt.id];
+    const dimName = req ? (DIMS.find(d => d.key === req.dim) || {}).name : null;
+    const card = document.createElement("div");
+    card.className = "card" + (worn ? " sel" : "") + (unl ? "" : " locked");
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = opt.name; top.appendChild(nb);
+    const tag = document.createElement("span"); tag.className = "pips";
+    tag.textContent = worn ? "worn" : !unl ? "locked" : !owned ? "for sale" : "";
+    top.appendChild(tag); card.appendChild(top);
+    const note = document.createElement("div"); note.className = "note";
+    note.textContent = opt.note; card.appendChild(note);
+    const btns = document.createElement("div"); btns.className = "btns";
+    if (!unl) {
+      // Same shape as a part's "Unlocks at Division 3": the requirement is a line on the
+      // card, in words, never an attribute nobody on a phone can read.
+      const fx = document.createElement("div"); fx.className = "fx";
+      fx.innerHTML = '<span class="lead">Reach ' + (dimName || req.dim) + " " + ROMAN[req.lvl]
+        + " by racing · then " + req.cost + "</span>";
+      card.appendChild(fx);
+    } else if (!owned) {
+      const afford = (ladder.money || 0) >= req.cost;
+      const buy = document.createElement("button");
+      buy.textContent = afford ? "Buy \u00b7 " + req.cost : req.cost + " prize money";
+      // Not disabled: a dead button that says nothing further when pressed is what made
+      // this screen read as broken in the first place.
+      buy.addEventListener("click", ev => {
+        ev.stopPropagation();
+        if (!afford) {
+          const fx = document.createElement("div"); fx.className = "fx";
+          fx.innerHTML = '<span class="lead">Win ' + (req.cost - (ladder.money || 0))
+            + " more prize money</span>";
+          card.appendChild(fx); buy.disabled = false;
           return;
         }
-        if (!owned) {
-          if (!afford) {
-            say("<b>" + opt.name + "</b> costs " + req.cost + " and you have "
-              + (ladder.money || 0) + ". Win " + (req.cost - (ladder.money || 0))
-              + " more in prize money.");
-            return;
-          }
-          // ★ ONE TAP MUST NOT SPEND 2,400. A segmented control's whole convention is free,
-          // reversible selection, and the same gesture that harmlessly picks Balanced was
-          // irreversibly buying Powerhouse with no confirm, no undo and no balance anywhere
-          // on this screen. Arm first, buy second, same as the Abandon button.
-          if (armedPhys !== opt.id) {
-            // renderPhysique() rebuilds this whole host, so `say` after it would write to a
-            // detached node. The re-render owns the message instead (see the caption block).
-            armedPhys = opt.id;
-            renderPhysique();
-            return;
-          }
-          armedPhys = null;
-          if (!buyPhysique(opt)) return;
-        }
-        armedPhys = null;
-        row.set(opt.id); Store.save(ladder); renderBuild(); refreshMenu();
+        if (buyPhysique(opt)) { grp.set(opt.id); Store.save(ladder); renderBuild(); refreshMenu(); }
       });
-      seg.appendChild(b);
+      btns.appendChild(buy);
+    } else {
+      const wear = document.createElement("button");
+      wear.textContent = worn ? "Worn" : "Wear"; wear.className = worn ? "on" : "";
+      wear.addEventListener("click", ev => {
+        ev.stopPropagation();
+        grp.set(opt.id); Store.save(ladder); renderBuild(); refreshMenu();
+      });
+      btns.appendChild(wear);
+      card.addEventListener("click", () => {
+        grp.set(opt.id); Store.save(ladder); renderBuild(); refreshMenu();
+      });
     }
-    host.appendChild(seg);
-    // Default caption: what you are WEARING, plus the plain-language rule for the rest and
-    // the balance those prices are measured against — the build screen showed prices in
-    // three sections and your money in none of them.
-    const owns = row.list.filter(o => physOwned(o)).length;
-    const armed = row.list.find(o => o.id === armedPhys);
-    if (armed) {
-      say("<b>" + armed.name + "</b> costs <b>" + PHYS_REQ[armed.id].cost
-        + "</b>, and you have <b>" + (ladder.money || 0) + "</b>. Tap it again to buy it, "
-        + "or tap anything else to leave it.");
-    } else say(cur.name + " — " + cur.note
-      + (owns < row.list.length
-        ? "  ·  Race to unlock, then buy with prize money. You have <b>" + (ladder.money || 0)
-          + "</b>. Tap any one to see what it wants."
-        : "  ·  All yours."));
-    host.appendChild(sub);
+    card.appendChild(btns);
+    strip.appendChild(card);
   }
+  host.appendChild(strip);
 }
 // Training: pure positives on an earned budget. Better blocks cost more points, and what
 // does not fit simply does not ride, so the budget is the balance rather than a downside

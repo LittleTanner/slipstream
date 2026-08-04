@@ -333,10 +333,14 @@ The rules that came out of it, applied to both sections:
   tappable and answers in a caption: what it needs, what it costs, how short you are.
 - **Every state is text, never colour or opacity alone.** "BUY 800" against "1200 SHORT",
   not orange against grey.
-- **One tap must not spend money.** A segmented control's whole convention is free,
-  reversible selection, and the same gesture that harmlessly picks Balanced was
-  irreversibly buying Powerhouse for 2,400 with no confirm and no undo. Arm first, buy
-  second, like the Abandon button.
+- **Physique is CARDS, the same as the bike parts** (Kevin's call, and it is the right one).
+  A segment was the wrong widget twice over: too narrow to hold "needs Climbing IV", so the
+  explanation ended up in a tooltip; and its whole convention is free, reversible selection
+  while these cost real prize money. A first pass tried to rescue the segment with a state
+  sub-line and an arm-then-buy tap. Cards make both unnecessary — the words fit, and a
+  card's own Buy button is already a deliberate press. Group selector then a strip, exactly
+  the shape the bike uses, so ten options do not fill the screen. **One state language
+  across the whole build screen now: `locked` / `for sale` / `worn` / `fitted`.**
 - **Show the balance where the prices are.** The build screen showed prices in three
   sections and your money in none of them, so every number was unanchored.
 
