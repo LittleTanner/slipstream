@@ -387,8 +387,20 @@ async def main():
             check("debug: the shortcut is invisible until the gesture",
                   await pg.locator("#debugBtn").is_hidden(), "")
             pg.on("dialog", lambda d: asyncio.ensure_future(d.accept("developer_debug!")))
+            # SCROLL IT INTO VIEW FIRST. #verLine is the LAST element of a screen that
+            # overflows (scrollHeight 749 against a 720 viewport), so its centre sits at
+            # y=711 with nine pixels to spare. bounding_box() does not scroll, and a few
+            # pixels of font-metric difference between Chromium builds is enough to push
+            # that centre past the fold: mouse.move then aims outside the viewport, the
+            # pointerdown never reaches the build number, and the whole gesture silently
+            # does nothing. That is exactly how this passed locally and failed on CI.
+            await pg.locator("#verLine").scroll_into_view_if_needed()
             box = await pg.locator("#verLine").bounding_box()
-            await pg.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            cy = box["y"] + box["height"] / 2
+            vh = await pg.evaluate("innerHeight")
+            check("debug: the build number is reachable by pointer",
+                  0 <= cy <= vh, "centre y %.0f in a %d viewport" % (cy, vh))
+            await pg.mouse.move(box["x"] + box["width"] / 2, cy)
             await pg.mouse.down()
             await pg.wait_for_timeout(5600)
             await pg.mouse.up()
