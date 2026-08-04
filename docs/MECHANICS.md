@@ -46,6 +46,12 @@ One hard-won rule for tier 4: **whatever weakens the mid-ladder field re-tunes t
 chance**, whose balance is calibrated against the bunch's pace. Re-measure that chase
 across seeds and BOTH wheel-change qualities before believing any ladder change is free.
 
+And one for tier 1: **the mechanics suite does NOT guard the swing constants.** `swingCut`
+0.09 to 0.12 leaves all 38 tests green and breaks the golden, money included, because the
+drill's `hold()` clamps a swinging AI to 90% of your speed and four test files copy that
+clamp verbatim. Verify `swingCut`, `swingLen` and `turnLen` against the GOLDEN. See
+DECISIONS.md, "The mechanics suite gives a false green on the swing constants".
+
 ---
 
 ## Aerodynamics

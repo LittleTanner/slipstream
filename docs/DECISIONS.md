@@ -257,7 +257,13 @@ Two knock-ons, both measured and worth knowing:
 - **Drop-back is slower.** Median steady-state GOOD TURN to at-the-back went 3.3s to 5.9s,
   because a train that is no longer given free speed takes longer to ride away from you.
   Still inside the promise, but it moves toward the thing Kevin complained about
-  originally. `CFG.swingCut` is the knob if it feels sluggish in the hand.
+  originally. ~~`CFG.swingCut` is the knob if it feels sluggish in the hand.~~ **That advice
+  was wrong twice over and is superseded by `CFG.easeCut`** (see "Your deliberate soft-pedal
+  drop-back has its OWN constant"). Raising `swingCut` applies SYMMETRICALLY to the AI, so
+  the wheel you are falling behind recedes as fast as you do and the metric goes BACKWARDS
+  (measured: 4.5s at 0.09 rising to 6.2s at 0.28). And changing it is not guarded by the
+  suite you would naturally run: see "The mechanics suite gives a false green on the swing
+  constants" below.
 - **Relaxed reach had to be rebalanced.** Its virtue was almost entirely `fatigueResist`,
   which is next-day value, and dominance rides ONE stage so it could never see it. Alive by
   a whisker on the old terrain, dead on both seed sets once days lengthened. It now also
@@ -307,6 +313,48 @@ of 7, 1.15 measured 3 of 7).
 which supersedes this one). Note that the first phrasing of that recommendation was wrong:
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
+
+## The mechanics suite gives a FALSE GREEN on the swing constants
+
+Verified, build 17. Set `CFG.swingCut` to 0.12 (from 0.09) and **all 38 mechanics tests
+pass while the golden master fails** — finishing order, times, points and MONEY, so the
+economy moves silently. Anyone who changes a swing constant and runs only
+`node tools/tests/run.js` will ship that.
+
+The mechanism is a hardcoded clamp. The tutorial drill (`index.html:8896`) pins a swinging
+AI to `y.speed * 0.90`, and FOUR test files replicate that `hold()` verbatim
+(rotation-dropback, rotation-recall, rotation-rejoin, refusal), because DEV-LOOP tells you
+to copy it. Measured with the clamp, the deepest swinger speed is 0.836 / 0.836 / 0.834 of
+the front's across `swingCut` 0.09 / 0.16 / 0.28 — essentially INSENSITIVE across a 3x
+change. Free of the clamp the same values are 0.440 / 0.410 / 0.362. The drill and the
+tests both mask it, which is the "both halves exist, check they are in the same scope"
+failure in CLAUDE.md wearing a different hat.
+
+**So: any change to `swingCut`, `swingLen` or `turnLen` must be verified against the
+GOLDEN, not the mechanics suite.** Related, also measured: `swingLen` feeds the rotation
+cycle formula at `index.html:2324`, which derives `grace`, `warnAt` and `giveAt` — so it
+silently moves the elbow flick and the break sit-up. The refusal test asserts ORDERING but
+not TIMING, so the flick drifted 76.0s to 110.6s while staying green.
+
+`CFG.easeCut` is exempt from all of this: it is read on ONE line, only for the player, only
+while returning after a pull, and the golden's cases never put the player in that state
+(verify passes 1590/1590 with no regen at 0.45, while the drop-back test moves 5.9s to 3.2s).
+
+## Coasting is not soft-pedalling, and that may be the sluggishness you feel
+
+Also verified in build 17, and NOT changed, because changing it means touching the drafting
+model. `CFG.easeCut` only engages when `effVal < CFG.tempo * 0.85` (0.731). Holding BOTH
+PADS sets `ev = CFG.ease` (0.58), so it fires. Simply STOPPING TAPPING sets
+`ev = carried = CFG.idle + (tempo - idle) * draft`, which is 0.815 to 0.86 — **above the
+gate, so nothing happens at all.**
+
+That is the drafting model working as designed: sitting in is cheap, so coasting on a wheel
+costs about what holding it costs, and going BACKWARDS has to be an active gesture. The
+drill teaches exactly this ("Both pads at once is soft pedalling"). But it does mean a
+player who expects "stop pedalling and drift back" gets nothing, which is word for word the
+original "it's like it's capping you from slowing down" complaint. If that is still the
+feel after build 17, the fix is the gate or the idle floor, not `easeCut`, and it touches
+how drafting works for everyone.
 
 ## Design pillars
 
