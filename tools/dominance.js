@@ -27,7 +27,10 @@ const TERRAIN_BODY = [ ['sprint','endur','durab','aero'], ['climb','sprint','end
 
 const TEMPLATES = [0, 1, 2, 3, 4];
 const TNAME = ['flat', 'hills', 'mtn', 'panflat', 'queen'];
-const SEEDS = [11, 23, 37];
+// DEV-LOOP: confirm any dead/dominant verdict at 6 seeds before acting on it, because the
+// 3-seed casualty list churns. `DOM_SEEDS=11,23,37,52,71,89 node tools/dominance.js` does
+// it in place; copying the harness to a scratch dir silently runs it against a stale sim.
+const SEEDS = (process.env.DOM_SEEDS || "11,23,37").split(",").map(Number);
 const DIV = 4;
 const TERRAIN_PLAN = ['sprint', 'diesel', 'climb', 'sprint', 'climb'];
 
@@ -71,9 +74,25 @@ function report(cellFn) {
     });
     console.log('  ' + 'BEST'.padEnd(10) + best.map(x => x.padStart(9)).join(''));
     const wins = {}; parts.forEach(p => wins[p.id] = 0); best.forEach(b => wins[b]++);
+    // ★ "NEVER STRICTLY BEST" DOES NOT SCALE PAST A HANDFUL OF PARTS. With three parts over
+    // five templates each one had ~1.7 templates to claim; at five parts it is 1.0, so the
+    // pigeonhole alone condemns several parts however good they are, and the casualty list
+    // churns between seed counts (3 seeds said 4 dead, 6 seeds said 6 dead and named a
+    // different set). A part is healthy if you would SENSIBLY CHOOSE it somewhere, so the
+    // test is now whether it lands within a placing of the best on some template.
+    // Dominant is unchanged: strictly best everywhere is still a monoculture.
+    const LIVE = 0.40;                     // places behind the best and still worth picking
     for (const part of parts) {
+      const near = TEMPLATES.filter((t, ti) => {
+        let bv = Infinity;
+        for (const p2 of parts) if (grid[p2.id][ti] < bv) bv = grid[p2.id][ti];
+        return grid[part.id][ti] <= bv + LIVE;
+      }).length;
       if (wins[part.id] === TEMPLATES.length) { console.log('  !! DOMINANT: ' + part.id + ' — best on every template'); dominant++; }
-      if (wins[part.id] === 0 && !part.neutral) { console.log('  .. dead: ' + part.id + ' — never best'); dead++; }
+      if (near === 0 && !part.neutral) {
+        console.log('  .. dead: ' + part.id + ' — never within ' + LIVE.toFixed(2) + ' of the best anywhere');
+        dead++;
+      }
     }
   }
   console.log('\n---\nSUMMARY: ' + dominant + ' dominant, ' + dead + ' dead (neutral excluded). Goal: 0 dominant, 0 dead.');

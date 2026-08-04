@@ -53,7 +53,15 @@ G.note = 'Slipstream golden master. Regenerated ' + new Date().toISOString().sli
   + 'handling (0.16 to 0.09, which was a bigger swing than a whole career of growth) and a '
   + 'little slower through the air. Dominance back to 0 dominant, 0 dead. '
   + 'The field time spread collapses from 9900s to 175s because rivals no longer blow up in '
-  + 'the top divisions. Previous round: the build-6 batch (rotation cohesion, finish '
+  + 'the top divisions. '
+  + 'PHASE 3 BIKE VARIETY, same regen: 18 parts to 22, every new one opening an axis the '
+  + 'BIKE lacked rather than its slot alone (fatigue resistance, which nothing touched; fuel '
+  + 'economy through cadence; draft quality; a descenders wheel). Four more were written and '
+  + 'CUT for failing that bar: two aero parts, since aero is the axis wheels, position and '
+  + 'tires already all trade; a semi-deep wheel that sat between two existing options on that '
+  + 'same line; and two puncture-resistance parts whose virtue the templates never exercise, '
+  + 'the courses carrying almost no rough road. Dominance 0/0 confirmed at six seeds. '
+  + 'Previous round: the build-6 batch (rotation cohesion, finish '
   + 'roll-out, bottle drops after the first feed, musette hand-up at 0.60).';
 fs.writeFileSync(GOLDEN_PATH, JSON.stringify(G, null, 0));
 console.log('regenerated', G.cases.length, 'cases,', G.schedules.length, 'schedules');

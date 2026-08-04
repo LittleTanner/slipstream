@@ -104,6 +104,22 @@ archetype" actually meant.
   order). Strictly-better ladders make money equal strength, turn the game into a grind,
   and put every purchase outside what the dominance harness can certify.
 
+- **Four bike parts, written and cut in the same session** (2026-08, phase 3). An AERO
+  FRAME and a SEMI-DEEP wheel: aero is the most crowded axis in the game, traded by
+  wheels, position AND tires, so a fourth way to buy it is not a new decision, and the
+  semi-deep sat literally between two existing options on that same line. An ARMOURED
+  TIRE and a tough TUBULAR wheel: their whole virtue was puncture resistance, and the
+  stage templates carry almost no rough road (measured: zero hazards on four of five
+  templates), so the harness read them dead and they would have been dead in play. The
+  rule that came out of it: **a new part must open an axis the BIKE lacks, not merely one
+  its own slot lacks.** The tubular survived by being rewritten as a descender's wheel,
+  which every mountain template exercises.
+- **"Never strictly best" as the dead-part test.** It does not scale past a handful of
+  options: with three parts over five templates each had ~1.7 templates to claim, at five
+  parts it is 1.0, so the pigeonhole alone condemns parts however good they are, and the
+  casualty list churned between seed counts. Dominance now asks whether a part lands
+  within 0.40 of a place of the best somewhere, which is the real question ("would you
+  ever sensibly pick this?"). Dominant is unchanged: strictly best everywhere.
 - **A presence-percentage rule for the musette** ("in the lane 90% of the line").
   A hidden meter: failing a grab at 85% reads as a random denial. Same intent, readable
   rule instead: the hand-up sits at 0.60 of the zone, and the pass is LATCHED — be in

@@ -313,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 12</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 13</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -789,7 +789,14 @@ const PARTS = {
   frame: [
     { id: "steel",  name: "Steel",  note: "Heavy, but soaks up the road and never lets go", d: { resilience: +0.035, recover: +0.014, climbCost: +0.017 } },
     { id: "alloy",  name: "Alloy",  neutral: true, note: "The honest all-rounder: good everywhere, best nowhere", d: {} },
-    { id: "carbon", name: "Carbon", note: "Feathery and stiff uphill, punishing when it turns rough",extreme: true, unlockDiv: 7,  d: { climbCost: -0.066, resilience: -0.025 } }
+    { id: "carbon", name: "Carbon", note: "Feathery and stiff uphill, punishing when it turns rough",extreme: true, unlockDiv: 7,  d: { climbCost: -0.066, resilience: -0.025 } },
+    // FATIGUE RESISTANCE enters the bike at all for the first time: no part touched it
+    // before, so no build could ever be about lasting.
+    // An "aero frame" was written here and CUT. Aero is the most crowded axis in the
+    // game already (wheels, position AND tires all trade it against handling), so a
+    // fourth way to buy it is not a new decision, and the harness read it dead at six
+    // seeds. A new part has to open an axis the BIKE lacks, not just one its slot lacks.
+    { id: "endurgeo",  name: "Endurance geometry", note: "Still fresh in the third week, never quick", d: { fatigueResist: -0.100, recover: +0.010, windTax: +0.025 } }
   ],
   wheels: [
     // ★ BOX IS THE LIGHT WHEEL. It used to be pure handling and descending, which is not
@@ -801,17 +808,35 @@ const PARTS = {
     // bigger swing on that axis than an entire career of growth.
     { id: "box",  name: "Box section", note: "Light uphill and sure-footed, but it gives away the flat", d: { climbCost: -0.045, handling: +0.09, descend: +0.08, windTax: +0.02 } },
     { id: "mid",  name: "Mid depth",   neutral: true, note: "A bit of everything, nothing to fear", d: { windTax: -0.03 } },
-    { id: "disc", name: "Deep / disc", note: "Slippery in a straight line, a handful when it blows across",extreme: true, unlockDiv: 6,  d: { windTax: -0.13, draft: +0.07, handling: -0.13, descend: -0.05 } }
+    { id: "disc", name: "Deep / disc", note: "Slippery in a straight line, a handful when it blows across",extreme: true, unlockDiv: 6,  d: { windTax: -0.13, draft: +0.07, handling: -0.13, descend: -0.05 } },
+    // A DESCENDER'S WHEEL, and a semi-deep that is stable in a crosswind rather than fast
+    // in a straight line, so aero stops being one single "go deep and hold on" decision.
+    // These were first written around puncture RESILIENCE, which the harness measured as
+    // dead: the five templates carry almost no hazards or rough surface at all, so a
+    // tough wheel has no road to be good on. Rewritten onto descending, which every
+    // mountain template exercises.
+    { id: "tub",  name: "Tubular, glued", note: "Glued on and utterly sure of itself pointing downhill", d: { descend: +0.100, handling: +0.040, climbCost: +0.015, windTax: +0.010 } }
+    // A "semi-deep" wheel was written here and CUT for the same reason, and for a worse
+    // one: it sat BETWEEN mid and disc on the very axis the slot already had, which is a
+    // finer version of a choice you were already making rather than a new one.
   ],
   gearing: [
     { id: "compact",  name: "Compact",   note: "Spins up the steep stuff, gives away the top end", d: { climbCost: -0.09, kick: -0.01 } },
     { id: "standard", name: "Standard",  neutral: true, note: "Ratios for any road", d: {} },
-    { id: "big",      name: "Big block", note: "A monster sprint, a millstone on the climbs",extreme: true, unlockDiv: 5,  d: { kick: +0.042, attack: +0.017, climbCost: +0.056 } }
+    { id: "big",      name: "Big block", note: "A monster sprint, a millstone on the climbs",extreme: true, unlockDiv: 5,  d: { kick: +0.042, attack: +0.017, climbCost: +0.056 } },
+    // FUEL ECONOMY through cadence: spinning a sensible gear all day burns less than
+    // grinding one. Nothing on the bike touched food before.
+    { id: "wide",     name: "Wide range", note: "A gear for everything, and no sprint to speak of", d: { climbCost: -0.035, fuelUse: -0.015, kick: -0.030 } },
+    { id: "close",    name: "Close ratio", note: "Always the right cadence on the flat, nothing left for a wall", d: { fuelUse: -0.022, recover: +0.014, climbCost: +0.025, kick: +0.010 } }
   ],
   position: [
     { id: "upright", name: "Upright",       note: "Comfortable and in control, but it catches the wind", d: { handling: +0.09, recover: +0.014, windTax: +0.05 } },
     { id: "endur",   name: "Endurance fit", neutral: true, note: "A sane compromise between fast and rideable", d: { windTax: -0.02 } },
-    { id: "slammed", name: "Slammed",       note: "Knifes the wind, murder on the back and the handling",extreme: true, unlockDiv: 4,  d: { windTax: -0.12, handling: -0.07, recover: -0.017 } }
+    { id: "slammed", name: "Slammed",       note: "Knifes the wind, murder on the back and the handling",extreme: true, unlockDiv: 4,  d: { windTax: -0.12, handling: -0.07, recover: -0.017 } },
+    // DRAFT QUALITY, which only deep wheels touched: how well you actually sit in a
+    // wheel is a position, not a rim. And fatigue resistance on the other end.
+    { id: "tuck",    name: "Trained aero tuck", note: "Sits in a wheel like it is glued there",extreme: true, unlockDiv: 3, d: { draft: +0.070, windTax: -0.050, recover: -0.012 } },
+    { id: "relaxed", name: "Relaxed reach",     note: "Comfortable enough to still be here tomorrow", d: { fatigueResist: -0.080, handling: +0.050, windTax: +0.040 } }
   ],
   tires: [
     // windTax -0.07 -> -0.09: crisper rotations (shorter front spells) shrank total wind
@@ -819,7 +844,12 @@ const PARTS = {
     // on 3- and 6-seed runs alike. A deeper aero edge restores its terrain.
     { id: "slick",    name: "Race slick",      note: "Fast and light, but nothing in reserve when it gets loose", d: { windTax: -0.09, climbCost: -0.007, descend: -0.05, handling: -0.04 } },
     { id: "allround", name: "All-round",       neutral: true, note: "Grip and speed in fair measure", d: {} },
-    { id: "grip",     name: "Grippy tubeless", note: "Sticks to anything, drags a little on smooth tar",extreme: true, unlockDiv: 3,  d: { descend: +0.09, handling: +0.07, windTax: +0.05 } }
+    { id: "grip",     name: "Grippy tubeless", note: "Sticks to anything, drags a little on smooth tar",extreme: true, unlockDiv: 3,  d: { descend: +0.09, handling: +0.07, windTax: +0.05 } },
+    // NOTE: an "armoured casing" tire was written here and CUT. Its whole virtue was
+    // puncture resistance, and the stage templates carry almost no rough road, so the
+    // harness read it dead and it would have been dead in play too. Four tires is
+    // better than five with one that never earns a ride.
+    { id: "cotton",   name: "Supple cotton",   note: "Fast, light and made of paper",extreme: true, unlockDiv: 2, d: { windTax: -0.040, climbCost: -0.015, descend: +0.020, resilience: -0.030 } }
   ],
 };
 const PRESETS = {
