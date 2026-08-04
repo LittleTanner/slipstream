@@ -14,7 +14,11 @@
 // report() printer, so their stdout is byte-identical.
 const { Worker, isMainThread, parentPort } = require('worker_threads');
 const os = require('os');
-const Sim = require('./sim.js');
+// DOM_SIM points at an alternate extracted sim, so a "did MY change do this?" comparison
+// runs without swapping tools/sim.js under the harness's feet. Balance verdicts move with
+// terrain and difficulty changes, and the only way to attribute one is to run the same
+// grid against the sim before and after.
+const Sim = require(process.env.DOM_SIM || './sim.js');
 const P = require('./parts.js');
 
 // Parts are now a ~35% tune on top of a grown body, so test each part on a DEVELOPED rider
@@ -142,7 +146,7 @@ function runParallel() {
 }
 
 if (!isMainThread) {
-  // WORKER: this thread required sim.js/parts.js itself (fresh module state); it
+  // WORKER: this thread required the sim/parts.js itself (fresh module state); it
   // builds each race from scratch, so no race object ever crosses a thread boundary.
   parentPort.on('message', (m) => {
     if (m === null) { parentPort.close(); return; }

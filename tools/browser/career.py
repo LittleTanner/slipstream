@@ -72,11 +72,20 @@ def build_throwaway(scratch):
         # unreachable from evaluate, and "a readout that should be hidden is showing"
         # is exactly the class the sim tests cannot see. Inert otherwise: it only
         # writes to a window object.
-        ("  gap = leader === you ? 0 : leader.dist - you.dist;\n"
-         "  if ((you.stats.radio || 0) >= 2) {",
-         "  gap = leader === you ? 0 : leader.dist - you.dist;\n"
+        # Init at the TOP of drawHud, not inside the road-race branch: a time trial never
+        # enters that branch, and the POWER gauge is now asserted on a TT.
+        ("  const c = C(), you = race.you, pad = Math.max(14, W * 0.045);",
+         "  const c = C(), you = race.you, pad = Math.max(14, W * 0.045);\n"
          "  (window.__hud = window.__hud || { pips: 0 }).radio = (you.stats.radio || 0);\n"
-         "  if ((you.stats.radio || 0) >= 2) { window.__hud.leader = 1;"),
+         "  window.__hud.tt = (race.spec && race.spec.tt) ? 1 : 0;"),
+        ("  if ((you.stats.radio || 0) >= 2) {\n"
+         "    label(leader === you ? \"LEADING\"",
+         "  if ((you.stats.radio || 0) >= 2) {\n"
+         "    window.__hud.leader = 1;\n"
+         "    label(leader === you ? \"LEADING\""),
+        ("    const lvl = you.stats.powerMeter;",
+         "    window.__hud.power = 1;\n"
+         "    const lvl = you.stats.powerMeter;"),
         ("  const pips = [];\n"
          "  if ((you.stats.radio || 0) >= 3) for (const r of race.riders) {",
          "  const pips = [];\n"
@@ -220,11 +229,11 @@ async def main():
               "balance figure shows %r" % r["big"])
         await ctx.close()
 
-        # ---- 5. race craft is a CHOICE, not a win-count drip -----------------
-        # Both items used to arrive automatically on career wins, so the build was
-        # choiceless. Fitting decides whether you carry it; the career decides how
-        # good it is. The limit is 1 while the pool is 2, so carrying one must
-        # DROP the other, which is the whole point.
+        # ---- 5. race craft: carry TWO of three -------------------------------
+        # The pool grew to three (radio / power meter / feed craft) and the limit to
+        # two, so a free slot must FILL and a full one must EVICT the oldest. Two of
+        # two was not a decision and one of three would have left the power meter
+        # permanently unfitted once the radio absorbed every rival readout.
         ladder = {"tutorialDone": True, "div": 4, "tours": 3, "wins": 5,
                   "money": 1500, "tactics": ["radio"]}
         ctx, pg = await open_case(browser, url, ladder, [], errs)
@@ -239,20 +248,59 @@ async def main():
                 " c.querySelector('.btns button').textContent]))")
 
         st = await craft()
-        check("race craft: seeded fit shows as carried",
-              st.get("Race radio") == "Carrying" and st.get("Power meter") == "Carry this",
-              "seeded radio, cards read %r" % st)
+        check("race craft: the pool is three and one seeded fit shows as carried",
+              len(st) == 3 and st.get("Race radio") == "Carrying"
+              and st.get("Power meter") == "Carry this" and st.get("Feed craft") == "Carry this",
+              "cards read %r" % st)
         await pg.locator("#bTactics .card", has_text="Power meter").locator(".btns button").click()
         await pg.wait_for_timeout(150)
         st = await craft()
-        check("race craft: carrying one drops the other",
-              st.get("Power meter") == "Carrying" and st.get("Race radio") == "Carry this",
-              "after carrying the power meter, cards read %r" % st)
+        check("race craft: a free second slot fills without evicting",
+              st.get("Race radio") == "Carrying" and st.get("Power meter") == "Carrying"
+              and st.get("Feed craft") == "Carry this",
+              "cards read %r" % st)
+        await pg.locator("#bTactics .card", has_text="Feed craft").locator(".btns button").click()
+        await pg.wait_for_timeout(150)
+        st = await craft()
+        carried = sorted(k for k, v in st.items() if v == "Carrying")
+        check("race craft: a third choice evicts the oldest, never exceeds two",
+              carried == ["Feed craft", "Power meter"],
+              "carrying %r" % (carried,))
         saved = await pg.evaluate(
             "window.storage.get('slipstream:ladder').then(r => r ? JSON.parse(r.value).tactics : null)")
-        check("race craft: the choice persists", saved == ["powerMeter"],
+        check("race craft: the choice persists", saved == ["powerMeter", "feedcraft"],
               "saved tactics %r" % (saved,))
         await ctx.close()
+
+        # ---- 5b. the power meter draws in a TIME TRIAL -----------------------
+        # It was suppressed on the one day a real rider lives by power, which fell out
+        # of "a time trial shows ONE thing" rather than any decision. Practice can ride
+        # the race of truth directly, so this asserts it without needing a long tour.
+        ladder = {"tutorialDone": True, "div": 4, "tours": 3, "wins": 5,
+                  "money": 500, "tactics": ["powerMeter"]}
+        ctx, pg = await open_case(browser, url, ladder, [], errs, rand_seed=42)
+        try:
+            await pg.click("#pracBtn")
+            await pg.locator("#practice").wait_for(state="visible")
+            await pg.locator("#pStages button", has_text="Time trial").click()
+            await pg.click("#pRide")
+            await pg.wait_for_selector("#build:not(.hide)")
+            await pg.click("#bLock")
+            # startPractice() goes through showBriefing(), same as a real race; skipping
+            # the roll-out button meant the race never started and the HUD never drew.
+            await pg.wait_for_selector("#brief:not(.hide)")
+            await pg.click("#rollBtn")
+            side = 0
+            for _ in range(20):
+                await pg.keyboard.press("z" if side == 0 else "x")
+                side ^= 1
+                await pg.wait_for_timeout(320)
+            h = await pg.evaluate("window.__hud || null")
+            check("power meter draws on the race of truth",
+                  h is not None and h.get("tt") == 1 and h.get("power") == 1,
+                  "hud reported %r" % (h,))
+        finally:
+            await ctx.close()
 
         # ---- 6. earned, then bought: parts, physique and training ------------
         # Racing UNLOCKS, prize money BUYS, and money can never skip the unlock. Neutral

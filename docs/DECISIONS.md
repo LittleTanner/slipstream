@@ -95,6 +95,28 @@ archetype" actually meant.
   legal, competitive setup.
 - **`engine` moves from the bike to the body.** Diesel legs are physiology, not equipment;
   it only sat in the bike list because that is where the build system happened to live.
+- **Three tactics, three subjects, carry two.** The pool is the radio (everything THEY are
+  doing), the power meter (everything YOU are doing) and Feed craft (everything your
+  RESOURCES are doing), and leaving one out has to hurt differently each time. A fourth
+  information tactic would have been the wrong addition for the same reason wheels, position
+  and tires all buying aero was: two ways to read the race is one decision made twice.
+  Widening the pool alone would NOT have saved the power meter — you would take the radio
+  plus whatever else and drop it anyway — so it also got the time trial (below). Both halves
+  or neither.
+- **Feed craft is code that already existed and no rider could reach.** `carbMix` (a bottle
+  feeding you as well as watering you) and `feedSmooth` (no stumble taking one wide) are
+  implemented in `stepRider`, sit in `BASE_STATS` and `FLAG_KEYS`, and were reachable only
+  through the dead `UPGRADES` catalog that nothing calls. Its levels are spelled out
+  explicitly rather than ramped per level, because the two stats are COUPLED in the sim:
+  extra `reach` lets you grab beyond 0.95 and `feedSmooth < 2` stumbles you for doing it, so
+  a flat ramp measured level I as **worse than carrying nothing** (6.50 against 4.03 places
+  on the mountain template). Level I now carries `feedSmooth 2` outright. Whole tactic is
+  worth under half a place, so it is a choice and not a must-pick.
+- **The power meter draws in a time trial.** It was suppressed there, which was never a
+  decision: it fell out of "a time trial shows ONE thing" when the rhythm bar replaced the
+  gauges, and swept the power meter out with the three resource bars. A real time triallist
+  rides to numbers and nothing else. This is also what stops the power meter being a slot
+  nobody spends, because on a TT it is the only tactic that does anything.
 - **Every piece of RIVAL information on the HUD belongs to the race radio.** Where the
   leader is, how far clear of the bunch you are, whether it is chasing, and the rail of
   riders off the top of the screen were all free and permanently on screen for everyone,
@@ -180,7 +202,51 @@ Consequences worth keeping straight:
   this field size; documented as a known gap in MECHANICS.md. Revisit (as "peloton =
   group with most GC riders" or "rearmost large group") if fields ever grow beyond 8.
 
-## The ladder's downward escalator, and why nothing was changed yet
+## The ladder: the day gets harder, the riders do not get faster (RESOLVED, build 16)
+
+The escalator described in the next section is fixed. `tierProfile().strength` is gone, and
+`len` (0.18 to 0.40) and `hilly` (0.14 to 0.32) went up to replace what it was doing.
+
+**Deleting the speed ramp alone does not work, and that is the whole finding.** It was
+carrying two jobs: an unearnable handicap (bad) and mountain selectivity (good), because
+what shatters a field on a climb is ABSOLUTE PACE. Take it out and the queen-stage margin
+for a climbing rider over a sprinting one goes from +20 places to **-11** — sprinters
+winning mountain stages. Longer, hillier days put the selection back a different way: you
+arrive at the decisive climb with less in the legs, which is why the Alpe at the end of
+200 km is a different mountain from the Alpe after 60.
+
+| gate | before | after |
+|---|---|---|
+| ladder drift, Division 8 to 1 | +2.16 | **+1.11** |
+| worst rung's payoff for a career of growth | 0.88 | **1.46 places** |
+| queen: climber over sprinter, summed | +20 | **+49** |
+| second chance, clean / fumbled wheel change | 5 of 7, 5 of 7 | **7 of 7, 6 of 7** |
+
+**And it had to be the DAY, not the CLIMB.** Kevin's question ("how does harder terrain and
+playing real routes work") is what forced this. A named route stamps its REAL gradient and
+length into the road and must keep them, or Alpe d'Huez stops reading HC off its own
+figures. Steepen climbs by division and **a $2.99 route pack becomes the way to buy an
+easier Division 1**, which breaks "the ladder is never pay-to-skip". Stage length and the
+preamble scale on route stages too, so this lever cannot be bought around.
+
+Two knock-ons, both measured and worth knowing:
+
+- **Drop-back is slower.** Median steady-state GOOD TURN to at-the-back went 3.3s to 5.9s,
+  because a train that is no longer given free speed takes longer to ride away from you.
+  Still inside the promise, but it moves toward the thing Kevin complained about
+  originally. `CFG.swingCut` is the knob if it feels sluggish in the hand.
+- **Relaxed reach had to be rebalanced.** Its virtue was almost entirely `fatigueResist`,
+  which is next-day value, and dominance rides ONE stage so it could never see it. Alive by
+  a whisker on the old terrain, dead on both seed sets once days lengthened. It now also
+  buys same-day handling and recovery, which is what a relaxed reach actually gives a rider.
+
+**The dead-part gate is not stable at six seeds, on either sim.** The previously shipped
+build measures 0 dead on one seed set and 1 on another; this one measures 2 and 1, with no
+part dead on both. Phase 3's "0/0 confirmed at six seeds" was seed-specific. Treat a
+casualty as real only if it repeats across seed SETS, as `relaxed` did. `DOM_SIM` now lets
+dominance run against an alternate extracted sim so before/after is attributable.
+
+## The ladder's downward escalator (the diagnosis, kept for the reasoning)
 
 Kevin, 2026-08: "It shouldn't feel like when you improve that nothing changed compared to
 your rivals." He proposed making the rivals weaker in the easy divisions and equal at the
@@ -214,14 +280,10 @@ pace — a fumbled wheel change becoming a near-certain DNF is the exact outcome
 already records as rejected once. Gentler curve exponents do not escape it (1.25 measured 1
 of 7, 1.15 measured 3 of 7).
 
-**The untried lever, and the recommendation: make the TERRAIN harder with division rather
-than the RACING faster.** Steeper and longer climbs shatter the field for everyone equally,
-including you, and your climbing development is the honest answer to them. That would let
-the speed ramp come down without flattening the mountains. It is a bigger change than a
-constant, it re-tunes the second chance again, and it is Kevin's call.
-
-Until then the sim is untouched, verify passes 1590/1590 with no regen, and the harness that
-found this is in the tree so the next attempt starts from measurement.
+**The lever that worked was making the DAY harder, not the CLIMB** (see the section above,
+which supersedes this one). Note that the first phrasing of that recommendation was wrong:
+"steeper and longer climbs" would have made route packs pay-to-win, and only the length and
+preamble of the day are safe to scale.
 
 ## Design pillars
 

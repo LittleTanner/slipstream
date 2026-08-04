@@ -14,8 +14,14 @@ way to check you have not broken it.
    change fails it by design; regenerate with `tools/golden-gen.js` + a note.
 3. **`node tools/dominance.js` — parts balance (~1.5 min on worker threads).** 0
    dominant, 0 dead is the goal; `DOM_SERIAL=1` forces the byte-identical serial
-   reference. Sensitive: the 3-seed casualty list can flip on tiny changes, so confirm
-   a dead/dominant verdict at 6 seeds before acting on it (edit SEEDS in a scratch copy).
+   reference. **The dead-count is not stable even at six seeds**, on any sim: the same
+   build measures 0 dead on one six-seed set and 1 on another, and casualty lists barely
+   overlap between sets. So treat a dead verdict as real only if it REPEATS ACROSS SEED
+   SETS (`DOM_SEEDS=11,23,37,52,71,89` then `DOM_SEEDS=13,29,41,58,77,91`), and use
+   `DOM_SIM=/path/to/other-sim.js` to run the same grid against the sim before your
+   change so the verdict is attributable rather than assumed. Structural blind spot: it
+   rides ONE stage, so a part whose value is "you are fresher tomorrow"
+   (`fatigueResist`) cannot register at all.
 4. **`node tools/ladder.js` — the ladder's shape (~4 min on worker threads).** Grids
    DIVISION against PLAYER DEVELOPMENT. Two numbers matter: **GAIN** (places won by
    growing, at a fixed division — no column should be flat, or the career is decoration)
@@ -85,7 +91,7 @@ Revisit only if fields grow beyond 8.
 | Fluids and sweat | Dry riders fade and cannot attack | `dryPen` | `hydration.test.js` |
 | Thin air | Above ~1200m altitude costs recovery and water, never raw power | `How thin the air is here` | `thin-air.test.js` |
 | Rider growth / divisions | SIX dimensions grown by terrain (climb, sprint, endurance, durability, aero, handling); rivals harden on EVERY dimension by division, leaning into their archetype's and taking a 0.45 share of the rest, so the field stays competitive wherever you are | `race.D`, `rivalBody` | dominance (body-aware), `ladder.js` |
-| The ladder's shape | Growing your body wins you places at every division (no rung is flat) AND the ladder stays the same contest from Division 8 to Division 1. **The second half is currently NOT met** and it is measured, not suspected: on-path place slides 4.11 to 6.27. See DECISIONS.md, "The ladder's downward escalator" | `tierProfile` | `node tools/ladder.js` |
+| The ladder's shape | Growing your body wins you places at every division (worst rung 1.46) AND the ladder stays roughly the same contest from Division 8 to Division 1 (on-path 4.11 to 5.22, drift +1.11). Difficulty is the DAY getting longer and hillier, never the rivals getting free speed, because free speed is something the player can never earn AND steepening the climbs themselves would make a route pack the way to buy an easier Division 1 | `tierProfile` | `node tools/ladder.js` |
 | Physique | Pro/con body traits: race weight (light climbs, heavy descends and sprints, and mass costs aero and food too) and muscle type. Neutral options are free, so a rider who owns nothing is still legal | `WEIGHTS`, `MUSCLES` | dominance + `career.py` |
 | Training | Pure-positive blocks on an EARNED points budget rather than pro/con, because a career should let you simply get stronger; better blocks cost more points and what does not fit does not ride | `TRAINING`, `trainingBudget` | dominance + `career.py` |
 
@@ -121,7 +127,8 @@ Revisit only if fields grow beyond 8.
 | Course generation | Integer PRNG, deterministic per seed; DERIVE values, never add an R() call mid-generation | `course feature factories` | `course-gen.test.js` (+ golden per-case fields) |
 | Tours / GC / jerseys | Stage times sum into GC, points into green/polka, leaders derived and fed back per stage, fatigue carries | view glue: `finishStage` | `tour.test.js` |
 | Parts and builds | FIVE slots (engine moved to the body), 4-5 trade parts each, 22 in all; balance enforced by the harness, never by hand | `const PARTS` | dominance |
-| Race craft (tactics) | Carry ONE of two, and they are about different subjects: the RADIO is everything the rivals are doing, the POWER METER is everything you are doing. Every piece of rival information on the HUD is tiered behind the radio (I: attacks and the chase, II: the leader gap and how far clear you are, III: the rail of riders off the top of the screen). Carry the power meter and you race what you can see | `you.stats.radio` in `drawHud` | `career.py` (radio gating, 3 cases) |
+| Race craft (tactics) | Carry TWO of three, each about a different subject: the RADIO is everything the rivals are doing, the POWER METER is everything you are doing, FEED CRAFT is everything your resources are doing. Every piece of rival information on the HUD is tiered behind the radio (I: attacks and the chase, II: the leader gap and how far clear you are, III: the rail of riders off the top of the screen). Carry no radio and you race what you can see. The power meter is the only tactic that does anything in a time trial | `TACTICS`, `you.stats.radio` in `drawHud` | `career.py` (radio gating, carry-two, TT power) |
+| Feed craft's levels | Spelled out per level, NOT ramped, because `reach` and `feedSmooth` are coupled in the sim: extra reach lets you grab past 0.95 and `feedSmooth < 2` stumbles you for it, so a flat ramp made level I worse than carrying nothing. Level I carries `feedSmooth 2` outright. Whole tactic worth under half a place | `TACTICS` `levels`, `st.carbMix` / `st.feedSmooth` in `stepRider` | dominance + the note in DECISIONS.md |
 | The economy | Racing UNLOCKS, prize money BUYS, and money can never skip an unlock, so a free rider's ceiling is identical and only adaptability and grind differ. Every layer keeps a free neutral, so a rider who owns nothing is still legal. Applies to specialist bike parts, physique and training | `partOwned`, `physOwned`, `trainOwned`, `ridableBuild` | `career.py` (24 checks) |
 
 ---

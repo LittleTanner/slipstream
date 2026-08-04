@@ -313,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 15</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 16</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -777,8 +777,10 @@ const RIVAL_SPREAD = 0.45;      // share of the dimensions their archetype does 
 // the near-certain-DNF failure mode DECISIONS.md already records as rejected once.
 // Exponent 1.25 measured 1 of 7 and 1.15 measured 3 of 7, so it is not a matter of
 // finding a gentler value. Whatever weakens the mid-ladder field re-tunes that chase.
-// If this is revisited, re-measure the chase FIRST (tools/tests/second-chance.test.js
-// across seeds, both wheel-change qualities), not last.
+// The problem it was aimed at was fixed a different way, in tierProfile: the day gets
+// harder rather than the rivals getting faster, which lifted the worst rung to 1.46 and
+// IMPROVED the chase. If this is revisited anyway, re-measure the chase FIRST
+// (tools/tests/second-chance.test.js across seeds, both wheel-change qualities), not last.
 function rivalBody(type, t) {
   const own = RIVAL_DIMS[type] || RIVAL_DIMS.rouleur;
   const out = {};
@@ -847,7 +849,14 @@ const PARTS = {
     // DRAFT QUALITY, which only deep wheels touched: how well you actually sit in a
     // wheel is a position, not a rim. And fatigue resistance on the other end.
     { id: "tuck",    name: "Trained aero tuck", note: "Sits in a wheel like it is glued there",extreme: true, unlockDiv: 3, d: { draft: +0.070, windTax: -0.050, recover: -0.012 } },
-    { id: "relaxed", name: "Relaxed reach",     note: "Comfortable enough to still be here tomorrow", d: { fatigueResist: -0.080, handling: +0.050, windTax: +0.040 } }
+    // ★ NEEDED SAME-DAY VALUE, BECAUSE THE HARNESS CANNOT SEE TOMORROW. Its virtue was
+    // almost entirely `fatigueResist`, which is "you carry less damage into the next
+    // stage" — and dominance rides ONE stage, so that was invisible by construction. It
+    // survived on today's terrain by a whisker and went dead on both seed sets once the
+    // days got longer. Rather than tune the measurement, give a relaxed reach what it
+    // actually gives a rider on the day as well: you can hold a line and keep eating on a
+    // long one. Wind penalty trimmed to match, since it is no longer the only cost.
+    { id: "relaxed", name: "Relaxed reach",     note: "Comfortable enough to still be here tomorrow, and steady enough to eat on the move", d: { fatigueResist: -0.090, handling: +0.060, recover: +0.012, windTax: +0.032 } }
   ],
   tires: [
     // windTax -0.07 -> -0.09: crisper rotations (shorter front spells) shrank total wind
@@ -1004,36 +1013,44 @@ function tourSchedule(seed, len) {
 // from the race being harder to read, not from rivals being faster: sparser feeding,
 // stronger wind, longer and hillier stages, and an AI that stops making mistakes.
 //
-// ★ KNOWN, MEASURED, AND OPEN. `strength` below is a raw speed bonus added to every
-// RIVAL and to nobody else; the player's strength is pinned at 1.0 with no way to earn
-// any. Measured with tools/ladder.js (a body-matched player on a neutral bike, 5
-// templates x 3 seeds): arrive at each division developed exactly for it and you finish
-// 4.11 at Division 8 sliding to 6.27 at Division 1 — second to last in an eight-rider
-// field, having done everything right. Not a treadmill, a DOWNWARD ESCALATOR.
+// ★ THE DAY GETS HARDER, THE RIDERS DO NOT GET FASTER. There used to be a
+// `strength: 0.035 * t` here, a raw speed bonus of up to 3.5% added to every RIVAL and to
+// nobody else — the player's strength is pinned at 1.0 with no way on earth to earn any.
+// Measured with tools/ladder.js: arrive at each division developed exactly for it and you
+// finished 4.11 at Division 8 sliding to 6.27 at Division 1, second to last in an
+// eight-rider field having done everything right. Not a treadmill, a downward escalator.
 //
-// Three fixes were built and measured, and every one of them broke something else:
-//   * delete it            -> ladder drift +2.16 to +0.32, but MOUNTAINS STOP SELECTING.
-//                             What shatters a field on a climb is absolute pace: the
-//                             queen-stage margin for a climbing rider over a sprinting
-//                             one goes from +20 places to -11, i.e. sprinters start
-//                             winning mountain stages.
-//   * share it with you    -> the second chance's fumbled wheel change goes from
-//                             catching the bunch on 5 of 7 seeds to 2 of 7.
-//   * curve the rival body -> best mountains of anything tried (+73), and the same
-//                             fumble goes to 1 of 7. See rivalBody.
-// The near-certain-DNF outcome is the exact failure DECISIONS.md already records as
-// rejected once, so none of the three shipped. The untried lever is making the TERRAIN
-// harder with division rather than the RACING faster, which would let the speed ramp
-// come down without flattening the climbs. That is a bigger change than a constant.
+// Deleting it ALONE was tried and was worse: mountains stopped selecting, because what
+// shatters a field on a climb is absolute pace, and the queen-stage margin for a climbing
+// rider over a sprinting one went from +20 places to -11. Sprinters winning mountain
+// stages. Two other fixes (giving the player the same ramp, curving the rivals' growth)
+// each turned the second chance's fumbled wheel change into a near-certain DNF, which is
+// the exact outcome DECISIONS.md records as rejected once already.
+//
+// What works is deleting the speed ramp AND making the DAY that leads to the climb
+// harder: `len` 0.18 -> 0.40 and `hilly` 0.14 -> 0.32, so a top-division stage is longer
+// with more climbing in the legs before the decisive climb. You arrive at the foot of it
+// with less left, which is exactly why a real mountain stage is harder in a Grand Tour
+// than in a one-day race. Measured against all three gates at once:
+//
+//              ladder drift   worst GAIN   queen margin   2nd chance clean/fumbled
+//   before        +2.16          0.88          +20              5/7 , 5/7
+//   now           +1.11          1.46          +49              7/7 , 6/7
+//
+// AND IT HAD TO BE THE DAY, NOT THE CLIMB — that is Kevin's question answered. A named
+// route stamps its REAL gradient and length into the road (see buildStage) and must keep
+// them, or Alpe d'Huez stops reading HC off its own figures. Steepen climbs by division
+// and a $2.99 route pack becomes the way to buy an easier Division 1, which breaks
+// "the ladder is never pay-to-skip". Length and preamble scale on a route stage too, so
+// this lever cannot be bought around.
 function tierProfile(div) {
   const t = Math.max(0, Math.min(1, (8 - div) / 7));
   return {
     t,
-    len: 1 + 0.18 * t,        // longer stages
-    hilly: 0.14 * t,          // more climbing
+    len: 1 + 0.40 * t,        // longer stages: the main lever, and routes cannot dodge it
+    hilly: 0.32 * t,          // more GENERATED climbing before the decisive climb
     wind: 0.75 + 0.70 * t,    // stronger crosswinds
     items: 1 - 0.42 * t,      // less on the road
-    strength: 0.035 * t,      // the whole race is faster up here, you included
     spread: 0.035 - 0.021 * t, // the field gets far more ALIKE: one mistake costs places
     ai: t                     // rivals much sharper
   };
@@ -1830,9 +1847,6 @@ function createRace(opts) {
   const riders = [];
   const kitId = (KITS.find(k => k.id === opts.kit) || KITS[0]).id;
   const kit = (KITS.find(k => k.id === kitId) || KITS[0]).c;
-  // NOTE: the player is built WITHOUT D on purpose (see tierProfile's note on the
-  // division speed ramp). Passing it here is a one-word change that hands you the
-  // division's pace as well, and it was measured: it costs the second chance.
   const you = makeRider(Object.assign({}, YOU, { c: kit }), 0, true, opts.playerType, R, opts.playerStats);
   // ROLLING START. A road stage does not begin from a standstill: the bunch rolls out behind
   // the car and the flag drops with everyone already moving. A time trial genuinely does start
@@ -1869,7 +1883,6 @@ function createRace(opts) {
     for (const st in rb) durb[st] = BASE_STATS[st] + rb[st];
     const r = makeRider(Object.assign({}, cf, { D }), k + 1, false, type, R, durb);
     r.plan = pickPlan(k + 1, R);
-    r.strength += D.strength;
     r.speed = rollIn;
     if (!gone.has(r.name)) riders.push(r);       // draws already made; only the rider is dropped
   });
@@ -3936,7 +3949,7 @@ let playerType = "rouleur";
 let committedBuild = null;
 let playerKit = "magenta";
 let dailyRun = false;
-let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio"],
+let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio", "feedcraft"],
   weight: "balanced", muscle: "allround", training: [], parts: [], physique: [], daily: null,
   owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0, packs: [], req: {} };
 
@@ -5716,7 +5729,15 @@ function drawHud(dt) {
   gauge(gx, gy, gw, gh, you.fluid, you.dry ? PAL.spot : PAL.water, "FLUID");
   // Power meter (a tactic, only if fitted): reads your effort so you can pace it.
   }
-  if (!ttOnly && (you.stats.powerMeter || 0) > 0) {
+  // ★ AND IT DRAWS IN A TIME TRIAL, WHICH IS THE ONE DAY IT SHOULD MATTER MOST. It used to
+  // be suppressed here, which was never a decision: it fell out of "a time trial shows ONE
+  // thing" when the rhythm bar replaced the gauges, and swept the power meter out with the
+  // three resource bars. A real time triallist rides to numbers and nothing else, so
+  // hiding it on the race of truth was backwards. The other three stay hidden; that
+  // reasoning still holds, because legs, food and fluid look after themselves once you
+  // hold the rhythm. This is also what stops the power meter being a slot nobody spends:
+  // on a TT it is the only tactic that does anything at all.
+  if ((you.stats.powerMeter || 0) > 0) {
     const lvl = you.stats.powerMeter;
     const target = you.eff === "ease" ? 16 : you.eff === "attack" ? 92 : 52;
     pmVal += (target - pmVal) * Math.min(1, dt * 6);
@@ -5728,7 +5749,10 @@ function drawHud(dt) {
     // pace car that read as food (DECISIONS.md). Charcoal belongs to no resource; amber
     // and orange stay, because those two carry meaning.
     const col = redline ? PAL.spot : pmVal > 60 ? PAL.fuel : "#4A4E4B";
-    gx += gstep;
+    // On a TT the three gauges never drew, so gx is still at the left margin where the
+    // rhythm bar is about to go. Clear it deliberately rather than by one gauge step, or
+    // the POWER column lands on the rhythm bar's shoulder.
+    gx = ttOnly ? pad + Math.max(20, gw * 2.1) + 20 : gx + gstep;
     gauge(gx, gy, gw, gh, pmVal, col, "POWER");
     if (lvl >= 2) label(redline ? "REDLINE" : pmVal < 30 ? "EASY" : pmVal > 60 ? "HARD" : "STEADY",
       gx + gw / 2, gy + gh + 14, 8, 700, col, "center", 0.5);
@@ -8136,21 +8160,54 @@ function renderBuild() {
 // Tactics are a layer on top of the build (a separate progression, kept on the ladder,
 // not per-build). They don't change raw speed — they give you information in the race.
 const TACTICS = [
-  // The two tactics are deliberately about DIFFERENT SUBJECTS: the radio is everything
-  // THEY are doing, the power meter is everything YOU are doing. Carrying one means
-  // racing the other half blind, which is the whole point of a choice.
+  // ★ THREE TACTICS, THREE DIFFERENT SUBJECTS, AND YOU CARRY TWO. The radio is everything
+  // THEY are doing, the power meter is everything YOU are doing, feed craft is everything
+  // your RESOURCES are doing. Leaving one out has to hurt in a different way each time,
+  // which is why a fourth information tactic would have been the wrong addition: two ways
+  // to read the race is one decision made twice, the same mistake wheels, position and
+  // tires were making with aero.
   { key: "radio", name: "Race radio", note: "Everything the race is doing around you. I: attacks, and whether the bunch is chasing. II: how far back the leader is, and how far clear you are. III: every rider off the top of the screen, and by how much. Carry nothing and you race what you can see." },
-  { key: "powerMeter", name: "Power meter", note: "Everything your own body is doing. Reads your effort live, so you can pace a climb instead of finding out you overcooked it when the legs go." }
+  { key: "powerMeter", name: "Power meter", note: "Everything your own body is doing. Reads your effort live, so you can pace a climb instead of finding out you overcooked it when the legs go. The one thing that helps in a time trial." },
+  // ★ THE SIM ALREADY DID ALL OF THIS AND NO RIDER COULD EVER HAVE IT. carbMix (a bottle
+  // feeding you as well as watering you) and feedSmooth (no stumble when you take one
+  // wide) are implemented in stepRider, sit in BASE_STATS and in FLAG_KEYS, and were
+  // reachable only through the dead UPGRADES catalog that nothing calls. Merged into ONE
+  // tactic at the ceilings that catalog gave them, because two separate feeding tactics
+  // would be the same decision twice.
+  // ★ REACH AND SMOOTH MUST ARRIVE TOGETHER, AND MEASUREMENT IS WHY. A flat per-level ramp
+  // (carbMix/feedSmooth +1, reach +0.25 each) made level I WORSE THAN CARRYING NOTHING:
+  // 6.50 against 4.03 finishing places on the mountain template. The reason is in the sim,
+  // two lines apart — `off > 0.95 * st.reach` decides whether you can grab at all, and
+  // `off > 0.95 && st.feedSmooth < 2` stumbles you for grabbing that wide. So extra reach
+  // with feedSmooth 1 buys you nothing but the wobble. Level I therefore carries feedSmooth
+  // 2 outright, and the ceilings are below the old catalog's (carbMix 2, reach 1.50) because
+  // the full ramp measured 1.32 places, which is a must-pick and not a choice.
+  { key: "feedcraft", name: "Feed craft", note: "Everything your bottles are doing. You can take a bidon from further off your line without the wobble that costs you a wheel, and higher up the drink starts carrying calories as well as water.",
+    levels: [
+      { feedSmooth: 2, reach: 0.20 },
+      { feedSmooth: 2, reach: 0.35, carbMix: 1 },
+      { feedSmooth: 3, reach: 0.50, carbMix: 2 }
+    ] }
 ];
-const WIN_STEPS = { radio: [1, 4, 8], powerMeter: [2, 6, 11] };   // career wins to reach lvl 1/2/3 (tunable)
+// Career wins to reach lvl 1/2/3 (tunable). Feed craft comes early, because eating badly
+// is a beginner's mistake and the tactic that fixes it should be available to a beginner.
+const WIN_STEPS = { radio: [1, 4, 8], powerMeter: [2, 6, 11], feedcraft: [1, 5, 10] };
 function tacticLevel(kind, wins) { return (WIN_STEPS[kind] || []).reduce((n, x) => n + (wins >= x ? 1 : 0), 0); }
 // ★ YOU CHOOSE YOUR RACE CRAFT. Both of these used to arrive on a win-count drip and you
 // simply had whatever your career had handed you, which Kevin called out as the thing
 // that made the build feel choiceless. Now FITTING decides whether you carry it at all and
 // the career decides how good it is, with a floor of level 1 so fitting is never a wasted
-// slot for a new rider. The limit is deliberately ONE while the pool is two, because
-// "fit 2 of 2" is not a decision; it rises as the pool grows.
-const FIT_TACTICS = 1;
+// slot for a new rider. The limit rises with the pool: it was ONE of two, because "fit 2
+// of 2" is not a decision, and it is now TWO of three, which is three real combinations.
+//
+// Two of three exists because of what build 15 did. Moving every piece of rival
+// information behind the radio made the radio carry five things against the power meter's
+// one, and one slot for that pool means nobody ever fits the power meter — a dead option
+// by the same standard the dominance harness holds parts to. Widening the pool alone would
+// not have fixed it (you would take radio plus whatever else, and the power meter is still
+// the one dropped), so the power meter also got the time trial, which is a day it wins
+// outright. Both halves or neither.
+const FIT_TACTICS = 2;
 function fittedTactics() {
   const f = (ladder.tactics || []).filter(k => TACTICS.some(t => t.key === k));
   return f.slice(0, FIT_TACTICS);
@@ -8546,9 +8603,17 @@ function raceStats(build, career, daily) {
   // something). The daily still hands everyone the lot, which is what keeps the shared
   // leaderboard fair and must stay true whatever the economy does.
   for (const t of TACTICS) {
-    s[t.key] = daily ? 3
-      : isFitted(t.key) ? Math.max(1, tacticLevel(t.key, w))
-      : 0;
+    const lvl = daily ? 3 : isFitted(t.key) ? Math.max(1, tacticLevel(t.key, w)) : 0;
+    s[t.key] = lvl;
+    // A tactic whose key IS a sim flag (radio, powerMeter) just carries its level. One that
+    // drives SEVERAL stats spells out each level explicitly in `levels`, NOT as a per-level
+    // multiplier: Feed craft's stats are coupled in the sim (reach is a liability until
+    // feedSmooth reaches 2), so a linear ramp made its first level worse than nothing.
+    // Deltas ADD to the base, and an unfitted tactic contributes nothing at all.
+    if (t.levels && lvl > 0) {
+      const g = t.levels[Math.min(lvl, t.levels.length) - 1];
+      for (const k in g) s[k] = (s[k] === undefined ? 0 : s[k]) + g[k];
+    }
   }
   return s;
 }
