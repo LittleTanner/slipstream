@@ -117,6 +117,29 @@ archetype" actually meant.
   gauges, and swept the power meter out with the three resource bars. A real time triallist
   rides to numbers and nothing else. This is also what stops the power meter being a slot
   nobody spends, because on a TT it is the only tactic that does anything.
+- **The profile strip's rival ticks are Radio II, and missing them was a real failure
+  (build 17).** Build 15 gated the pip rail behind Radio III, shipped a browser test
+  proving the rail drew nothing without a radio, and left `drawProfile` painting every
+  rider in the field across the whole stage for free, four hundred lines away. The thing
+  left open was strictly MORE informative than the thing hidden: the rail reaches about a
+  screen, the strip shows the break, the bunch and the stragglers at a glance. Kevin found
+  it in ten minutes of play. The lesson is the one already in CLAUDE.md and I broke it
+  anyway: checking the half you just wrote is not the same as asking what ELSE draws
+  rivals. `career.py` now counts every rival-drawing surface separately, not just the rail.
+  Level II because the strip and the leader gap answer the same question (the SHAPE of the
+  race); level III still buys the exact metres.
+- **Your deliberate soft-pedal drop-back has its OWN constant, `CFG.easeCut` (0.45), and it
+  is not `swingCut`.** A rival's `swingOff` is an automatic 2.2s drift after their turn; a
+  human holding both pads is asking to go backwards now. Keeping them separate is what
+  makes the value safe to raise: `swingCut` is also read by the rival swing and by its cap
+  against the front, so lifting the shared constant would re-time every rotation and put
+  the rejoin at risk. Measured sweep of the player value alone: 0.09 gave a 5.9s median
+  (3.6-8.9), 0.22 gave 4.5s, **0.45 gives 3.2s (3.1-3.3)** which is the documented promise
+  with the tightest spread, and 0.60 got worse and noisier (3.5s, up to 10.2). At 0.45 all
+  38 mechanics tests pass and the second chance is untouched (7/7 and 6/7), because that
+  code path needs a `breakFront` and a convoy chase never has one. It is also
+  self-terminating: the cap only applies while `youWasBack` is false, so it switches off
+  the instant you are behind the last wheel and you cannot overshoot off the back.
 - **Every piece of RIVAL information on the HUD belongs to the race radio.** Where the
   leader is, how far clear of the bunch you are, whether it is chasing, and the rail of
   riders off the top of the screen were all free and permanently on screen for everyone,

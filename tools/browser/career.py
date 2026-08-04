@@ -86,6 +86,20 @@ def build_throwaway(scratch):
         ("    const lvl = you.stats.powerMeter;",
          "    window.__hud.power = 1;\n"
          "    const lvl = you.stats.powerMeter;"),
+        # COUNT THE RIVAL TICKS ON THE PROFILE STRIP. Build 15 gated the pip rail, shipped
+        # a passing test proving the rail was silent, and left this loop painting the whole
+        # field across the whole stage for free. Counting the rail alone is what let that
+        # through, so every rival-drawing surface is now counted separately.
+        ("  if ((you.stats.radio || 0) >= 2) for (const r of race.riders) {\n"
+         "    if (r === you) continue;\n"
+         "    ctx.fillStyle = r.c;",
+         "  window.__hud = window.__hud || { pips: 0 };\n"
+         "  window.__hud.stripGate = ((you.stats.radio || 0) >= 2) ? 1 : 0;\n"
+         "  window.__hud.strip = window.__hud.strip || 0;\n"
+         "  if ((you.stats.radio || 0) >= 2) for (const r of race.riders) {\n"
+         "    if (r === you) continue;\n"
+         "    window.__hud.strip++;\n"
+         "    ctx.fillStyle = r.c;"),
         ("  const pips = [];\n"
          "  if ((you.stats.radio || 0) >= 3) for (const r of race.riders) {",
          "  const pips = [];\n"
@@ -434,19 +448,31 @@ async def main():
         h = await hud_after_start(dict(base, tactics=["powerMeter"], wins=12))
         check("no radio: no rival information at all",
               h is not None and h.get("radio", 0) == 0
-              and not h.get("leader") and h.get("pipGate") == 0 and h.get("pips", 0) == 0,
+              and not h.get("leader") and h.get("pipGate") == 0 and h.get("pips", 0) == 0
+              and h.get("stripGate") == 0 and h.get("strip", 0) == 0,
               "hud reported %r" % (h,))
 
         h = await hud_after_start(dict(base, tactics=["radio"], wins=0))
-        check("radio I: hears the race, sees no numbers",
+        check("radio I: hears the race, sees no positions anywhere",
               h is not None and h.get("radio", 0) == 1
-              and not h.get("leader") and h.get("pipGate") == 0 and h.get("pips", 0) == 0,
+              and not h.get("leader") and h.get("pipGate") == 0 and h.get("pips", 0) == 0
+              and h.get("stripGate") == 0 and h.get("strip", 0) == 0,
+              "hud reported %r" % (h,))
+
+        # Radio II is the level that opens the SHAPE of the race: the leader gap, and the
+        # rivals on the profile strip. The rail (exact metres) is still III.
+        h = await hud_after_start(dict(base, tactics=["radio"], wins=5))
+        check("radio II: the strip shows rivals, the rail stays shut",
+              h is not None and h.get("radio", 0) == 2 and h.get("leader") == 1
+              and h.get("stripGate") == 1 and h.get("strip", 0) > 0
+              and h.get("pipGate") == 0 and h.get("pips", 0) == 0,
               "hud reported %r" % (h,))
 
         h = await hud_after_start(dict(base, tactics=["radio"], wins=12))
-        check("radio III: leader gap and the rider rail both open",
+        check("radio III: leader gap, the strip and the rider rail all open",
               h is not None and h.get("radio", 0) == 3
-              and h.get("leader") == 1 and h.get("pipGate") == 1,
+              and h.get("leader") == 1 and h.get("pipGate") == 1
+              and h.get("stripGate") == 1 and h.get("strip", 0) > 0,
               "hud reported %r" % (h,))
 
         # ---- 4. result recording: one shrunk one-day race -------------------
