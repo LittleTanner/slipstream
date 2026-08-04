@@ -314,6 +314,47 @@ which supersedes this one). Note that the first phrasing of that recommendation 
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
 
+## A locked control must say why, or it reads as a broken one (build 19)
+
+Kevin: "The body UI needs some updating because it seems like a bug that you can't change
+anything. It needs to be designed better so people know they need to unlock it first."
+
+**The root cause was `title`.** Physique put "needs Climbing IV" and the price in tooltip
+attributes, and a touch screen never shows a tooltip — and this game is going to iOS. So
+the row was five greyed, disabled, silent buttons, and reading that as a bug is the correct
+reading. Training, three inches below, had the same states as VISIBLE BUTTON LABELS all
+along ("Needs Climbing III", "Buy · 700"), which is why the fix was to make physique speak
+the language training already spoke rather than invent one.
+
+The rules that came out of it, applied to both sections:
+
+- **Nothing is `disabled`.** A disabled button does not fire a click, so the player taps it,
+  nothing happens anywhere on screen, and they conclude it is broken. Every state is now
+  tappable and answers in a caption: what it needs, what it costs, how short you are.
+- **Every state is text, never colour or opacity alone.** "BUY 800" against "1200 SHORT",
+  not orange against grey.
+- **Physique is CARDS, the same as the bike parts** (Kevin's call, and it is the right one).
+  A segment was the wrong widget twice over: too narrow to hold "needs Climbing IV", so the
+  explanation ended up in a tooltip; and its whole convention is free, reversible selection
+  while these cost real prize money. A first pass tried to rescue the segment with a state
+  sub-line and an arm-then-buy tap. Cards make both unnecessary — the words fit, and a
+  card's own Buy button is already a deliberate press. Group selector then a strip, exactly
+  the shape the bike uses, so ten options do not fill the screen. **One state language
+  across the whole build screen now: `locked` / `for sale` / `worn` / `fitted`.**
+- **Show the balance where the prices are.** The build screen showed prices in three
+  sections and your money in none of them, so every number was unanchored.
+
+Two real bugs fell out of the audit, both of the "inert control" family:
+
+- **A training block could get stuck in your save.** `fittedTraining` skips a block that no
+  longer fits the budget, so `on` went false, `room` went false, the button read "No room"
+  and was **disabled** — and the only code that removes an id from `ladder.training` is that
+  button's own click handler. Drop a division (which shrinks the budget) while carrying
+  blocks and one was stuck forever. It now says "Over budget · drop" and lets go.
+- **The segmented row was clipping.** Five long names ("Featherweight", "Powerhouse") in a
+  `nowrap` strip with `overflow:hidden` sliced the last option in half at the right edge,
+  before any of this was added. The body rows wrap and size to fit.
+
 ## Abandoning a tour locked you out of racing, three different ways (build 18)
 
 Kevin: "When you abandon a tour, when you try to start a tour again it says you need to

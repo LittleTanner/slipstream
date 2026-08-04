@@ -373,6 +373,119 @@ async def main():
         finally:
             await ctx.close()
 
+        # ---- 5c. the body UI must SAY why you cannot change it ---------------
+        # Kevin: "it seems like a bug that you can't change anything. It needs to be
+        # designed better so people know they need to unlock it first." The physique rows
+        # were a segmented control whose whole explanation lived in `title` — a TOOLTIP,
+        # which a touch screen never shows. They are CARDS now, the same as the bike parts,
+        # so the requirement and the price are ordinary words on the card. Asserted on
+        # rendered text only, never on an attribute.
+        async def phys_cards(lad, group=None):
+            ctx, pg = await open_case(browser, url, lad, [], errs)
+            try:
+                await pg.click("#buildBtn")
+                await pg.locator("#build").wait_for(state="visible")
+                if group:
+                    await pg.locator("#bPhysique .segmented button", has_text=group).click()
+                    await pg.wait_for_timeout(150)
+                return pg, ctx, await pg.evaluate(
+                    "[...document.querySelectorAll('#bPhysique .strip .card')].map(c => ({"
+                    " name: c.querySelector('b').textContent,"
+                    " tag: c.querySelector('.pips') ? c.querySelector('.pips').textContent : '',"
+                    " fx: c.querySelector('.fx') ? c.querySelector('.fx').innerText : '',"
+                    " btn: c.querySelector('.btns button') ? c.querySelector('.btns button').textContent : '',"
+                    " disabled: c.querySelector('.btns button') ? c.querySelector('.btns button').disabled : None_,"
+                    " cls: c.className }))".replace("None_", "null"))
+            except Exception:
+                await ctx.close()
+                raise
+
+        lad = {"tutorialDone": True, "div": 6, "tours": 2, "money": 0,
+               "career": {"climb": 0, "sprint": 0, "endur": 0, "durab": 0}}
+        pg, ctx, cards = await phys_cards(lad)
+        try:
+            check("physique renders as cards, like the bike parts",
+                  len(cards) == 5 and all(c["name"] for c in cards),
+                  "cards %r" % ([c["name"] for c in cards],))
+            locked = [c for c in cards if "locked" in (c["cls"] or "")]
+            # innerText comes back uppercased: `.card .fx .lead` is text-transform:uppercase,
+            # the same treatment a part's "Unlocks at Division 3" gets. Compare case-blind.
+            check("physique: a locked option is tagged and SAYS what it needs, in words",
+                  locked and all(c["tag"] == "locked" for c in locked)
+                  and all("reach" in c["fx"].lower() and "by racing" in c["fx"].lower()
+                          for c in locked),
+                  "locked %r" % ([(c["name"], c["tag"], c["fx"]) for c in locked],))
+            check("physique: the free neutral is wearable with no price",
+                  any(c["tag"] == "worn" and not c["fx"] for c in cards),
+                  "cards %r" % ([(c["name"], c["tag"], c["btn"]) for c in cards],))
+        finally:
+            await ctx.close()
+
+        # For sale, and never a dead button: unaffordable states the price and still answers.
+        lad = {"tutorialDone": True, "div": 4, "tours": 6, "money": 900,
+               "career": {"climb": 40, "sprint": 40, "endur": 40, "durab": 20}}
+        pg, ctx, cards = await phys_cards(lad)
+        try:
+            sale = [c for c in cards if c["tag"] == "for sale"]
+            check("physique: an unlocked-but-unbought option is for sale with a price",
+                  sale and all(("Buy" in c["btn"]) or ("prize money" in c["btn"]) for c in sale),
+                  "for sale %r" % ([(c["name"], c["btn"]) for c in sale],))
+            check("physique: no buy button is disabled and inert",
+                  not any(c["disabled"] for c in cards),
+                  "disabled %r" % ([c["name"] for c in cards if c["disabled"]],))
+            money_before = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).money)")
+            await pg.locator("#bPhysique .strip .card", has_text="Lean").locator(
+                ".btns button").first.click()
+            await pg.wait_for_timeout(250)
+            after = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value))")
+            check("physique: buying spends and wears it",
+                  after["money"] < money_before and after.get("weight") == "lean",
+                  "money %r -> %r, weight %r" % (money_before, after["money"], after.get("weight")))
+        finally:
+            await ctx.close()
+
+        # A training block that no longer fits the budget was rendered "No room" AND
+        # disabled, while the only code that removes an id from ladder.training is that
+        # button's own click handler. Drop a division and a block was stuck in the save.
+        ladder = {"tutorialDone": True, "div": 8, "tours": 6, "money": 5000,
+                  "career": {"climb": 90, "sprint": 90, "endur": 90, "durab": 90},
+                  # trainOwned reads `trainOwned`; `training` is only what you CARRY. All
+                  # four are in seeded dimensions so they are genuinely earned and bought,
+                  # and three 3-pointers exhaust a Division 8 budget, so `gut` overflows —
+                  # which used to render "No room", disabled, unremovable forever.
+                  "trainOwned": ["altitude", "leadout", "gtblock", "gut"],
+                  "training": ["altitude", "leadout", "gtblock", "gut"]}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            await pg.click("#buildBtn")
+            await pg.locator("#build").wait_for(state="visible")
+            cards = await pg.evaluate(
+                "[...document.querySelectorAll('#bTraining .card')].map(c => ({"
+                " name: c.querySelector('b') ? c.querySelector('b').textContent : '',"
+                " text: c.querySelector('.btns button') ? c.querySelector('.btns button').textContent : '',"
+                " disabled: c.querySelector('.btns button') ? c.querySelector('.btns button').disabled : null }))")
+            check("training: no button is ever disabled and inert",
+                  cards and not any(c["disabled"] for c in cards),
+                  "disabled: %r" % ([c["name"] for c in cards if c["disabled"]],))
+            over = [c for c in cards if "drop" in (c["text"] or "")]
+            check("training: an over-budget block offers to be dropped",
+                  bool(over), "buttons %r" % ([c["text"] for c in cards][:8],))
+            if over:
+                saved_before = await pg.evaluate(
+                    "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).training)")
+                await pg.locator("#bTraining .card", has_text=over[0]["name"]).locator(
+                    ".btns button").first.click()
+                await pg.wait_for_timeout(200)
+                saved_after = await pg.evaluate(
+                    "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).training)")
+                check("training: dropping it actually clears it from the save",
+                      len(saved_after or []) < len(saved_before or []),
+                      "%r -> %r" % (saved_before, saved_after))
+        finally:
+            await ctx.close()
+
         # ---- 6. earned, then bought: parts, physique and training ------------
         # Racing UNLOCKS, prize money BUYS, and money can never skip the unlock. Neutral
         # options stay free so a rider who has bought nothing is still legal.
@@ -401,9 +514,11 @@ async def main():
         check("bought part is owned and fitted", await saved("parts") == ["disc"],
               "owned parts %r" % (await saved("parts"),))
 
-        await pg.locator("#bPhysique .segmented").first.locator(
-            "button", has_text="Featherweight").click()
-        await pg.wait_for_timeout(200)
+        # Physique is cards now, same as the bike parts: one deliberate press on the card's
+        # own Buy button, no arming step needed.
+        await pg.locator("#bPhysique .strip .card", has_text="Featherweight").locator(
+            ".btns button").first.click()
+        await pg.wait_for_timeout(250)
         check("buying physique spends and is worn",
               await saved("money") == 2600 and await saved("weight") == "feather",
               "money %r, weight %r" % (await saved("money"), await saved("weight")))
