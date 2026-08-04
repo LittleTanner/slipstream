@@ -314,6 +314,78 @@ which supersedes this one). Note that the first phrasing of that recommendation 
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
 
+## Abandoning a tour locked you out of racing, three different ways (build 18)
+
+Kevin: "When you abandon a tour, when you try to start a tour again it says you need to
+finish the other one first, but you abandoned it so you can't."
+
+The blocking state is `ladder.heldTour`, not `savedTour` (abandon clears that correctly).
+`renderPick` greys a race card when `held.len !== r.len`, and the abandon handler wrote
+`{ seed, build }` with **no `len` at all** — so the test was `undefined !== 1`,
+`undefined !== 3` and so on, true for every row. Every button read "Finish the other one
+first" and was disabled, and the only code that clears `heldTour` lives inside `newTour`,
+behind those disabled buttons. A permanent, unrecoverable save.
+
+Two more routes to the same dead end were found while fixing it, and neither is exotic:
+
+- **Relegation.** Abandon a three-week tour (the only row with `minDiv: 3`) and the
+  abandonment itself can relegate you below Division 3, which filters that row off the
+  screen — while it still holds every other row hostage.
+- **A resumed Grand Tour.** `saveTour` dropped `grand`, so a resumed one had
+  `tour.grand === false` and abandoning it wrote `heldTour.len = 14`. No menu row is 14.
+
+The structural fix is one predicate, `heldLenOffered`, used by BOTH `renderPick` and
+`newTour`: **a held length the picker cannot offer holds nothing.** The seed and the build
+are still restored either way, so the no-reroll rule survives intact and only the length
+comes free, and only when the game itself withdrew the race. Using the same predicate in
+both places is what stops the button's LABEL and what the button DOES from drifting apart,
+which is how this was born.
+
+**`saveTour` was also dropping paid content.** It persisted seven of the tour's fields and
+skipped `grand`, `restAfter` and `routeMap`. `routeMap` drives `stageRoute`, so **the named
+climbs from a $2.99 route pack vanished from every stage after a resume** — silently. Rest
+days disappeared from resumed three-week tours for the same reason. All three are now saved
+and restored, and a pre-fix save rebuilds its rest days from its own length.
+
+The lesson, and it is the one already in CLAUDE.md: a producer and a consumer disagreed
+about the shape of one object, and the field they disagreed about was the one the lock keyed
+on. `career.py` now asserts all three lockout paths plus the ordinary held-tour case.
+
+## The AI's drop-back is slow, and `swingCut` cannot fix it (open, build 18)
+
+Kevin, after build 17 sped the player's drop-back to 3.3s: "the AI rivals seem to have been
+even slower to drop back." He is right, and by more than the code claims. The swing re-arm
+comment says "at full cut it is the four-to-six seconds a real drop-back takes". Measured in
+a pure-AI break with nothing clamped (the drill's `hold()` pins a swinger to 90% of your
+speed and hides this): **median 11.91s, worst case 44.8s.**
+
+Raising `swingCut` does not fix it, it breaks the rotation. Swept against the refusal
+mechanic, which is the one that notices:
+
+| swingCut | median swing | refusal |
+|---|---|---|
+| 0.09 (shipped) | 11.91s | passes |
+| 0.12 | 10.13s | passes |
+| 0.14 | 9.31s | break never sits up |
+| 0.18 | 8.41s | no elbow flick at all |
+| 0.22 | 7.43s | break never sits up |
+| 0.26 | 6.69s | no elbow flick |
+| 0.32 | 5.98s | no elbow flick |
+
+Traced at 0.32: the mates swing off, blow far past the last wheel and **never come back
+through**, sitting 2-4 m behind a rider who is merely holding a steady wheel. That rider
+leads by default, `sinceTurn` resets every frame, and the wheel-suck escalation can never
+fire. Not a faster rotation, a rotation that has stopped rotating. Note that the second
+chance (7/7 and 7/7) and dominance (1 dead, better than shipped) both PASSED at 0.32 — only
+refusal caught it, which is a reminder that the gate set is not the mechanic.
+
+**The real fix is structural, and it is a decision for Kevin.** The swing is a PACE CUT held
+until a distance is cleared, so making the cut bigger overshoots the distance instead of
+arriving sooner. It wants a DISTANCE BUDGET instead: drop back at whatever pace clears the
+last wheel in about four seconds and then stop, rather than riding 32% slower until you have
+gone too far. That is a rewrite of the swing, needs a golden regen, and should be measured
+against refusal FIRST, since it is the only gate that sees this.
+
 ## The mechanics suite gives a FALSE GREEN on the swing constants
 
 Verified, build 17. Set `CFG.swingCut` to 0.12 (from 0.09) and **all 38 mechanics tests

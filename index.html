@@ -313,7 +313,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 17</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 18</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -495,6 +495,30 @@ const CFG = {
                                       // latch on before the front changes again (2.5 stranded them)
   turnCall: 4,                        // ...and you are never called through again sooner than this after your turn
   swingLen: 2.2,                      // how long the swing-off lasts
+  // ★ THE AI'S DROP-BACK IS SLOW AND THIS CONSTANT CANNOT FIX IT. Kevin, after build 17
+  // sped the PLAYER up to 3.3s: "the AI rivals seem to have been even slower to drop
+  // back." He is right, and by more than the code claims: the swing re-arm in updateGroups
+  // says "at full cut it is the four-to-six seconds a real drop-back takes", but measured
+  // in a pure-AI break with nothing clamped (the drill's hold() pins a swinger to 90% of
+  // your speed and hides this) the median swing runs 11.91s, worst case 44.8s.
+  //
+  // Raising this does not fix it, it BREAKS THE ROTATION. Swept against the refusal
+  // mechanic, which is the one that notices:
+  //   0.09 (now)  11.91s  refusal PASSES      0.18  8.41s  no elbow flick at all
+  //   0.12        10.13s  refusal PASSES      0.22  7.43s  break never sits up
+  //   0.14         9.31s  break never sits up 0.26  6.69s  no elbow flick
+  // Traced at 0.32: the mates swing off, blow far past the last wheel and never come back
+  // through, sitting 2-4 m BEHIND a rider who is merely holding a steady wheel. That rider
+  // now leads by default, `sinceTurn` resets every frame, and the wheel-suck escalation can
+  // never fire. That is not a faster rotation, it is a rotation that has stopped rotating.
+  // 0.12 is the only value that survives and it buys 1.8s, which is not worth a golden
+  // regen. The real fix is structural (the swing needs a distance budget, not a pace cut)
+  // and is a design decision, recorded in DECISIONS.md.
+  //
+  // VERIFY ANY CHANGE TO THIS AGAINST THE GOLDEN, NOT THE MECHANICS SUITE: 0.09 to 0.12
+  // leaves all 38 tests green and breaks the golden's finishing orders, points and money.
+  // AI-ONLY since build 17: every swingOff setter is gated `!r.you`, and the player's
+  // drop-back is `easeCut` below.
   swingCut: 0.09,                     // how much of their pace a swinging rider gives up
   // ★ YOUR DELIBERATE SOFT-PEDAL IS ITS OWN NUMBER, NOT THE SWINGER'S. A rival's swingOff
   // is an automatic 2.2s drift after their turn; a human holding both pads is ASKING to go
@@ -2478,7 +2502,18 @@ function updateGroups(race, dt) {
         // BEHIND the last wheel, not merely level with it: with the last rider tailing
         // you closely through the drift, a near-level test fired while you were still
         // functionally second wheel and the call came right back.
-        if (rearMost && you2.dist < rearMost.dist - 0.8) race.youWasBack = true;
+        // ★ CLEAR OF CONTACT RANGE, NOT MERELY BEHIND. HIT_LON is 1.9 m, so a rider 0.8 m
+        // back is still inside the collision box of the wheel they just dropped behind:
+        // the cap lifts, you steer over to rejoin the file, and you ride straight into
+        // them. Kevin: "when I move back over I hit the rider. I need to be able to drop
+        // back to be completely behind the rider in front of me." The AI was given this
+        // exact fix and the player never was — see the swing re-arm above, whose comment
+        // says at 0.9 "they cut in half a bike behind the last wheel, mid-merge, and ran
+        // into it". 2.2 clears HIT_LON with 0.3 m to spare. The AI gets away with 1.6
+        // because its swing RELEASE decays and drifts it a further metre; the player's cap
+        // switches off the instant this flips, so the player needs the whole margin here.
+        // Costs about a quarter of a second of extra drift at easeCut 0.45.
+        if (rearMost && you2.dist < rearMost.dist - 2.2) race.youWasBack = true;
       }
       const youQueued = race.youWasBack !== false || you2.sinceTurn > cycle;
       // No praise for a rider already easing out on the swing side: a coasting player
@@ -4367,8 +4402,17 @@ function refreshMenu() {
 
 function saveTour(withRace) {
   if (tut || dailyRun) { ladder.savedTour = null; Store.save(ladder); return; }
+  // ★ SAVE THE WHOLE TOUR, NOT SEVEN OF ITS TEN FIELDS. `grand`, `restAfter` and `routeMap`
+  // were dropped here and never rebuilt by resumeTour, so a save/resume cycle silently
+  // destroyed three things: the ROADS YOU PAID FOR (routeMap drives stageRoute, so the
+  // named climbs from a $2.99 pack vanished from every stage after a resume), the REST DAYS
+  // in a three-week tour, and the grand flag — which made the Grand Tour resume button
+  // dead code, cost a resumed win its grandWins credit, and let abandoning a resumed Grand
+  // Tour write a heldTour of length 14, a length the picker does not offer, locking the
+  // player out of racing entirely.
   ladder.savedTour = tour ? { seed: tour.seed, stage: tour.stage, gc: tour.gc,
     leaders: tour.leaders, fatigue: tour.fatigue, schedule: tour.schedule,
+    grand: !!tour.grand, restAfter: tour.restAfter, routeMap: tour.routeMap,
     type: playerType,
     race: (withRace && race && !race.over && !tut) ? Sim.snapshot(race) : null } : null;
   Store.save(ladder);
@@ -4388,7 +4432,10 @@ function newTour(wantLen) {
   // The LENGTH is chosen, not drawn — the ladder now asks for one of each, so being handed
   // a random length would leave you waiting on a dice roll for the race you still need.
   // The parcours is still drawn, so the build lock is untouched.
-  const len = (held && held.len) || wantLen || 3;
+  // Same predicate the picker locks with, so a card that says "Ride it" always starts the
+  // race it names. Reading `held.len` unconditionally here meant a length the picker could
+  // not offer would silently substitute itself for whatever you actually pressed.
+  const len = (heldLenOffered(held) && held.len) || wantLen || 3;
   tour = { seed, stage: 0, gc: {}, leaders: {}, fatigue: {},
     schedule: Sim.tourSchedule(seed, len) };
   // Three weeks is long enough that the bunch gets a day off, twice. Purely a beat between
@@ -7697,7 +7744,12 @@ function resumeTour() {
   const sv = ladder.savedTour; if (!sv || !sv.schedule) return;
   playerType = sv.type || playerType;
   tour = { seed: sv.seed, stage: sv.stage, gc: sv.gc, leaders: sv.leaders,
-    fatigue: sv.fatigue, schedule: sv.schedule };
+    fatigue: sv.fatigue, schedule: sv.schedule,
+    // The three that saveTour used to drop. A save written before this existed has none of
+    // them, so a 21-stage tour resumed from an old save still rebuilds its rest days from
+    // its own length rather than losing them for good.
+    grand: !!sv.grand, routeMap: sv.routeMap || null,
+    restAfter: sv.restAfter || (sv.schedule.length >= 21 ? [6, 13] : undefined) };
   if (sv.race) {
     race = Sim.restore(sv.race, { kit: ladder.kit, gc: tour.gc, fatigue: tour.fatigue,
       playerStats: raceStats(committedBuild, ladder.career, false) });
@@ -7730,7 +7782,14 @@ $("pAbandon").addEventListener("click", () => {
     return;
   }
   abandonArmed = false;
-  if (!tour.grand) ladder.heldTour = { seed: tour.seed, build: committedBuild };   // the bet stands
+  // ★ THE LENGTH IS PART OF THE BET, AND LEAVING IT OUT LOCKED THE GAME. renderPick reads
+  // `held.len !== r.len` to grey out every race except the one you walked away from. This
+  // object carried no `len` at all, so that test was `undefined !== 1`, `undefined !== 3`
+  // and so on — TRUE for every card. Every option read "Finish the other one first" and
+  // every button was disabled, so abandoning a tour permanently locked you out of starting
+  // another one. `newTour` reads `held.len` too and was falling back to the argument, which
+  // is why nothing else complained.
+  if (!tour.grand) ladder.heldTour = { seed: tour.seed, build: committedBuild, len: tour.schedule.length };   // the bet stands
   ladder.savedTour = null;
   applyLadder(8);                               // ridden, not won
   Store.save(ladder);
@@ -9144,8 +9203,18 @@ const RACE_MENU = [
   { len: 7,  name: "Seven-day tour", sub: "A race of truth, and a road with a name if you own one." },
   { len: 21, name: "Three-week tour", sub: "Twenty-one stages, two time trials and two rest days.", minDiv: 3 }
 ];
+// ★ A HELD LENGTH THE PICKER CANNOT OFFER MUST NOT HOLD ANYTHING. This one predicate is
+// the structural guard against a whole family of permanent lockouts, of which three were
+// found: a heldTour written with no `len` at all (every card locked), a heldTour of length
+// 14 from a resumed Grand Tour (no menu row is 14), and a heldTour of length 21 followed by
+// relegation below Division 3, which withdraws the only row that matched. In every case the
+// lock had nothing left to point at and disabled the entire screen, with the only code that
+// clears heldTour sitting behind those disabled buttons. Both renderPick and newTour ask
+// this same question, so the button state and what the button DOES can never drift apart.
+const heldLenOffered = h => !!(h && h.len && RACE_MENU.some(r => r.len === h.len));
 function renderPick() {
   const held = ladder.heldTour;
+  const holding = heldLenOffered(held);
   const place = reqPlace(ladder.div);
   const words = ["", "win it", "top two", "top three"];
   $("pickSub").textContent = held
@@ -9153,9 +9222,16 @@ function renderPick() {
     : reqSentence();
   const box = $("pickBody"); box.innerHTML = "";
   for (const r of RACE_MENU) {
-    if (r.minDiv && ladder.div > r.minDiv) continue;
+    // The race you are HOLDING stays on the screen even when the division bar would hide
+    // it. Abandon a three-week tour and take the relegation it costs you, and this row used
+    // to vanish while still holding every other row hostage.
+    if (r.minDiv && ladder.div > r.minDiv && !(holding && held.len === r.len)) continue;
     const kind = kindForLen(r.len), done = reqDone(kind);
-    const locked = held && held.len !== r.len;
+    // `holding`, not `held`: a held tour whose length the picker cannot offer holds
+    // NOTHING, or it holds everything and the game is over. The seed and the build are
+    // still restored by newTour either way, so the no-reroll rule survives intact and only
+    // the length comes free — and only when the game itself withdrew the race.
+    const locked = holding && held.len !== r.len;
     const card = document.createElement("div");
     card.className = "card" + (locked ? " locked" : "");
     const top = document.createElement("div"); top.className = "top";
