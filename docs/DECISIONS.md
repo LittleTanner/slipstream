@@ -314,6 +314,55 @@ which supersedes this one). Note that the first phrasing of that recommendation 
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
 
+## The free roads are real roads too (build 20)
+
+Kevin: "I'm thinking we might want all our free routes to be based on real routes... seeing
+real routes throughout the game is more exciting than unnamed routes."
+
+The instinct is right. What was pushed back on, and why:
+
+- **Real route DATA for the whole free game was rejected.** Three reasons. It erodes what
+  the packs sell (today a pack is *a road with a name* against unnamed stages; if everything
+  is a real named route, the pitch collapses to famous-ness). The three display scales mean
+  real profiles do not import — Alpe d'Huez works because it is hand-authored to the numbers
+  you read WHILE RIDING with the summit pinned, so a free catalogue means a hundred bespoke
+  authorings or reconciling all three scales, which changes every course. And a catalogue
+  repeats where the generator does not: a clean run from Division 8 to 1 is ~72 stages before
+  the 21-stage tour and the 14-stage Grand Tour.
+- **What shipped instead: real named CLIMBS on generated stages, plus a name on every
+  stage.** The excitement is in the name, not the elevation data, and `assignRoute` already
+  stamped a named climb into a generated stage and gated purely on ownership. So the free
+  tier needed NO new system — just roads that are always owned.
+
+Rules that keep the packs worth buying:
+
+- **Free roads come from ranges no pack claims** (the Vosges, the Jura, the Massif Central),
+  so free content can never cannibalise premium content.
+- **Paid roads are placed FIRST and take the decisive stages**; free roads only fill what is
+  left. The grand tour showcase (every road you own gets its day, the last on the last
+  mountain) is unchanged.
+- **Every mountain day gets a name now**, not just seven-day tours. `assignRoute` used to
+  bail below seven stages, so a rider doing the short and medium races the ladder ASKS FOR
+  never saw a named road at all.
+
+**Every stage is titled from a town to a town**, derived from the seed, never drawn from the
+course PRNG (DEV-LOOP: derive, never add an `R()` call) and living entirely in the view — so
+generation is untouched, the golden does not move, and the daily's shared board stays fair.
+A summit finish is titled for the summit; a pass is just a road on the way somewhere, which
+is how real races name a day.
+
+**Two things the audit found on the way:**
+
+- **The Pyrenees pack was an empty box.** `ROUTE_PACKS` advertised it and `ROUTES` contained
+  no Pyrenean road at all. The shop was honest about it (it rendered "in the works" with the
+  buy button disabled, so nobody could spend money on air), but one of three advertised packs
+  was the entire paid catalogue. It now holds the Tourmalet, the Aubisque and Peyresourde.
+  The cobbles pack stays "in the works" on purpose: cobbled sectors are SURFACES, not climbs,
+  so it needs machinery the route system does not have.
+- **`renderPractice` hand-rolled its own ownership check** instead of calling
+  `ownedRoutes()`, so the free roads were invisible there — the same producer-versus-consumer
+  split that made abandoning a tour lock the game. One function decides now.
+
 ## A locked control must say why, or it reads as a broken one (build 19)
 
 Kevin: "The body UI needs some updating because it seems like a bug that you can't change
@@ -497,6 +546,10 @@ Consequences:
   reconciling all three scales, which changes every existing course.
 
 ## Monetization
+
+**Five real roads are free** (build 20), drawn from ranges no pack claims, so every
+mountain day of every tour climbs a named col whether you have paid or not. Packs add
+the famous ones and take the stages that decide a race.
 
 Free download, never ads. One **$4.99 unlock** granting the ABILITY to earn the career
 (divisions, rider growth, gear) rather than handing any of it over. **$2.99 route packs**.

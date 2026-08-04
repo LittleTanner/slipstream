@@ -373,6 +373,72 @@ async def main():
         finally:
             await ctx.close()
 
+        # ---- 4c. real roads, free and paid -----------------------------------
+        # Kevin: "seeing real routes throughout the game is more exciting than unnamed
+        # routes." Free roads are always owned and come from ranges no pack claims, so the
+        # free tier can never cannibalise what the packs sell. Everything downstream reads
+        # ownedRoutes(), which is the point: renderPractice used to hand-roll its own pack
+        # check and so knew nothing about free roads.
+        ladder = {"tutorialDone": True, "div": 6, "tours": 3, "money": 20000}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            await pg.click("#pracBtn")
+            await pg.wait_for_selector("#practice:not(.hide)")
+            free_roads = await pg.evaluate(
+                "[...document.querySelectorAll('#pRoutes button')].map(b => b.textContent)")
+            check("a rider who owns no pack still has real named roads",
+                  len(free_roads) >= 4, "practice roads %r" % (free_roads,))
+            check("the free roads are real climbs, not invented ones",
+                  all(any(w in r for w in ("Col", "Ballon", "Puy", "Mont")) for r in free_roads),
+                  "practice roads %r" % (free_roads,))
+            await pg.click("#pBack")
+            await pg.wait_for_selector("#menu:not(.hide)")
+            await pg.click("#routesBtn")
+            await pg.wait_for_selector("#routes:not(.hide)")
+            packs = await pg.evaluate(
+                "[...document.querySelectorAll('#routesBody .card')].map(c => ({"
+                " name: c.querySelector('b').textContent,"
+                " tag: c.querySelector('.pips').textContent,"
+                " btn: c.querySelector('.btns button').textContent,"
+                " disabled: c.querySelector('.btns button').disabled }))")
+            sellable = [p for p in packs if not p["disabled"]]
+            check("a pack on sale always has roads in it",
+                  sellable and all("climb" in p["tag"] for p in sellable),
+                  "sellable %r" % ([(p["name"], p["tag"]) for p in sellable],))
+            empty = [p for p in packs if "in the works" in p["tag"]]
+            check("a pack with no roads cannot be bought",
+                  all(p["disabled"] for p in empty),
+                  "empty packs %r" % ([(p["name"], p["btn"], p["disabled"]) for p in empty],))
+            check("the Pyrenees pack is no longer an empty box",
+                  any(p["name"] == "The Pyrenees" and "climb" in p["tag"] for p in packs),
+                  "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
+        finally:
+            await ctx.close()
+
+        # Every stage is titled from somewhere to somewhere, and the title is derived from
+        # the seed so the daily's shared board stays fair.
+        async def brief_title(lad, race_name):
+            ctx, pg = await open_case(browser, url, lad, [], errs, rand_seed=99)
+            try:
+                await pg.click("#startBtn")
+                await pg.wait_for_selector("#pick:not(.hide)")
+                await pg.locator("#pickBody .card", has_text=race_name).locator(
+                    "button.mini").click()
+                await pg.wait_for_selector("#build:not(.hide)")
+                await pg.click("#bLock")
+                await pg.wait_for_selector("#brief:not(.hide)")
+                return (await pg.locator("#bTitle").text_content()).strip()
+            finally:
+                await ctx.close()
+
+        base = {"tutorialDone": True, "div": 6, "tours": 3, "money": 100}
+        t1 = await brief_title(base, "Three-day tour")
+        check("a stage is titled from a town to a town",
+              "→" in t1 and len(t1) > 6, "title %r" % (t1,))
+        t2 = await brief_title(base, "Three-day tour")
+        check("the same seed titles the same stage the same way", t1 == t2,
+              "%r vs %r" % (t1, t2))
+
         # ---- 5c. the body UI must SAY why you cannot change it ---------------
         # Kevin: "it seems like a bug that you can't change anything. It needs to be
         # designed better so people know they need to unlock it first." The physique rows
