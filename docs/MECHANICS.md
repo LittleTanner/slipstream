@@ -46,6 +46,12 @@ One hard-won rule for tier 4: **whatever weakens the mid-ladder field re-tunes t
 chance**, whose balance is calibrated against the bunch's pace. Re-measure that chase
 across seeds and BOTH wheel-change qualities before believing any ladder change is free.
 
+And one for tier 1: **the mechanics suite does NOT guard the swing constants.** `swingCut`
+0.09 to 0.12 leaves all 38 tests green and breaks the golden, money included, because the
+drill's `hold()` clamps a swinging AI to 90% of your speed and four test files copy that
+clamp verbatim. Verify `swingCut`, `swingLen` and `turnLen` against the GOLDEN. See
+DECISIONS.md, "The mechanics suite gives a false green on the swing constants".
+
 ---
 
 ## Aerodynamics
@@ -71,7 +77,7 @@ The most player-facing mechanic; it has its own suite. All of it lives in
 | Swing-off + rejoin | A relieved rider swings aside, drifts outside the file, tucks in ON the last wheel, never mid-file, never colliding | `rotation-rejoin.test.js` |
 | The queue | You are only called again once you have BEEN TO THE BACK since your last pull; a shirking mate waives that after a full cycle | `rotation-recall.test.js` |
 | Cohesion | The working rotation is the cohesive chain at the head of the break (gaps > 10 m break it); a companion you dropped keeps no rotation alive and no cue fires while you are functionally alone | `rotation-cohesion.test.js` |
-| Drop-back | Soft-pedalling after your pull peels you off the train in ~3-4s (the swinger's cut, player edition) | `rotation-dropback.test.js` |
+| Drop-back | Soft-pedalling after your pull peels you off the train in ~3-4s. `CFG.easeCut` (0.45), deliberately NOT `swingCut` (0.09), because a rival's swing is an automatic drift and yours is a decision. Self-terminating: the cap lifts the instant you are behind the last wheel | `rotation-dropback.test.js` |
 | Wheel-suck escalation | Called and refusing: elbow flick, then the break sits up. Waiting your turn: never punished | `refusal.test.js` |
 | Go-around | Easing on the front without moving aside gets you passed within seconds, not a stalled train | covered inside `rotation-dropback` / `refusal` |
 
@@ -127,7 +133,7 @@ Revisit only if fields grow beyond 8.
 | Course generation | Integer PRNG, deterministic per seed; DERIVE values, never add an R() call mid-generation | `course feature factories` | `course-gen.test.js` (+ golden per-case fields) |
 | Tours / GC / jerseys | Stage times sum into GC, points into green/polka, leaders derived and fed back per stage, fatigue carries | view glue: `finishStage` | `tour.test.js` |
 | Parts and builds | FIVE slots (engine moved to the body), 4-5 trade parts each, 22 in all; balance enforced by the harness, never by hand | `const PARTS` | dominance |
-| Race craft (tactics) | Carry TWO of three, each about a different subject: the RADIO is everything the rivals are doing, the POWER METER is everything you are doing, FEED CRAFT is everything your resources are doing. Every piece of rival information on the HUD is tiered behind the radio (I: attacks and the chase, II: the leader gap and how far clear you are, III: the rail of riders off the top of the screen). Carry no radio and you race what you can see. The power meter is the only tactic that does anything in a time trial | `TACTICS`, `you.stats.radio` in `drawHud` | `career.py` (radio gating, carry-two, TT power) |
+| Race craft (tactics) | Carry TWO of three, each about a different subject: the RADIO is everything the rivals are doing, the POWER METER is everything you are doing, FEED CRAFT is everything your resources are doing. Every piece of rival information on the HUD is tiered behind the radio (I: attacks and the chase, II: the leader gap, how far clear you are, and the rivals on the profile strip, III: the rail of riders off the top of the screen with exact metres). **There is more than one surface that draws rivals** — the strip was missed in build 15 and shipped ungated while the rail was correctly hidden, so `career.py` counts each surface separately. Carry no radio and you race what you can see. The power meter is the only tactic that does anything in a time trial | `TACTICS`, `you.stats.radio` in `drawHud` | `career.py` (radio gating, carry-two, TT power) |
 | Feed craft's levels | Spelled out per level, NOT ramped, because `reach` and `feedSmooth` are coupled in the sim: extra reach lets you grab past 0.95 and `feedSmooth < 2` stumbles you for it, so a flat ramp made level I worse than carrying nothing. Level I carries `feedSmooth 2` outright. Whole tactic worth under half a place | `TACTICS` `levels`, `st.carbMix` / `st.feedSmooth` in `stepRider` | dominance + the note in DECISIONS.md |
 | The economy | Racing UNLOCKS, prize money BUYS, and money can never skip an unlock, so a free rider's ceiling is identical and only adaptability and grind differ. Every layer keeps a free neutral, so a rider who owns nothing is still legal. Applies to specialist bike parts, physique and training | `partOwned`, `physOwned`, `trainOwned`, `ridableBuild` | `career.py` (24 checks) |
 

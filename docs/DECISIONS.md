@@ -117,6 +117,29 @@ archetype" actually meant.
   gauges, and swept the power meter out with the three resource bars. A real time triallist
   rides to numbers and nothing else. This is also what stops the power meter being a slot
   nobody spends, because on a TT it is the only tactic that does anything.
+- **The profile strip's rival ticks are Radio II, and missing them was a real failure
+  (build 17).** Build 15 gated the pip rail behind Radio III, shipped a browser test
+  proving the rail drew nothing without a radio, and left `drawProfile` painting every
+  rider in the field across the whole stage for free, four hundred lines away. The thing
+  left open was strictly MORE informative than the thing hidden: the rail reaches about a
+  screen, the strip shows the break, the bunch and the stragglers at a glance. Kevin found
+  it in ten minutes of play. The lesson is the one already in CLAUDE.md and I broke it
+  anyway: checking the half you just wrote is not the same as asking what ELSE draws
+  rivals. `career.py` now counts every rival-drawing surface separately, not just the rail.
+  Level II because the strip and the leader gap answer the same question (the SHAPE of the
+  race); level III still buys the exact metres.
+- **Your deliberate soft-pedal drop-back has its OWN constant, `CFG.easeCut` (0.45), and it
+  is not `swingCut`.** A rival's `swingOff` is an automatic 2.2s drift after their turn; a
+  human holding both pads is asking to go backwards now. Keeping them separate is what
+  makes the value safe to raise: `swingCut` is also read by the rival swing and by its cap
+  against the front, so lifting the shared constant would re-time every rotation and put
+  the rejoin at risk. Measured sweep of the player value alone: 0.09 gave a 5.9s median
+  (3.6-8.9), 0.22 gave 4.5s, **0.45 gives 3.2s (3.1-3.3)** which is the documented promise
+  with the tightest spread, and 0.60 got worse and noisier (3.5s, up to 10.2). At 0.45 all
+  38 mechanics tests pass and the second chance is untouched (7/7 and 6/7), because that
+  code path needs a `breakFront` and a convoy chase never has one. It is also
+  self-terminating: the cap only applies while `youWasBack` is false, so it switches off
+  the instant you are behind the last wheel and you cannot overshoot off the back.
 - **Every piece of RIVAL information on the HUD belongs to the race radio.** Where the
   leader is, how far clear of the bunch you are, whether it is chasing, and the rail of
   riders off the top of the screen were all free and permanently on screen for everyone,
@@ -234,7 +257,13 @@ Two knock-ons, both measured and worth knowing:
 - **Drop-back is slower.** Median steady-state GOOD TURN to at-the-back went 3.3s to 5.9s,
   because a train that is no longer given free speed takes longer to ride away from you.
   Still inside the promise, but it moves toward the thing Kevin complained about
-  originally. `CFG.swingCut` is the knob if it feels sluggish in the hand.
+  originally. ~~`CFG.swingCut` is the knob if it feels sluggish in the hand.~~ **That advice
+  was wrong twice over and is superseded by `CFG.easeCut`** (see "Your deliberate soft-pedal
+  drop-back has its OWN constant"). Raising `swingCut` applies SYMMETRICALLY to the AI, so
+  the wheel you are falling behind recedes as fast as you do and the metric goes BACKWARDS
+  (measured: 4.5s at 0.09 rising to 6.2s at 0.28). And changing it is not guarded by the
+  suite you would naturally run: see "The mechanics suite gives a false green on the swing
+  constants" below.
 - **Relaxed reach had to be rebalanced.** Its virtue was almost entirely `fatigueResist`,
   which is next-day value, and dominance rides ONE stage so it could never see it. Alive by
   a whisker on the old terrain, dead on both seed sets once days lengthened. It now also
@@ -284,6 +313,48 @@ of 7, 1.15 measured 3 of 7).
 which supersedes this one). Note that the first phrasing of that recommendation was wrong:
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
+
+## The mechanics suite gives a FALSE GREEN on the swing constants
+
+Verified, build 17. Set `CFG.swingCut` to 0.12 (from 0.09) and **all 38 mechanics tests
+pass while the golden master fails** — finishing order, times, points and MONEY, so the
+economy moves silently. Anyone who changes a swing constant and runs only
+`node tools/tests/run.js` will ship that.
+
+The mechanism is a hardcoded clamp. The tutorial drill (`index.html:8896`) pins a swinging
+AI to `y.speed * 0.90`, and FOUR test files replicate that `hold()` verbatim
+(rotation-dropback, rotation-recall, rotation-rejoin, refusal), because DEV-LOOP tells you
+to copy it. Measured with the clamp, the deepest swinger speed is 0.836 / 0.836 / 0.834 of
+the front's across `swingCut` 0.09 / 0.16 / 0.28 — essentially INSENSITIVE across a 3x
+change. Free of the clamp the same values are 0.440 / 0.410 / 0.362. The drill and the
+tests both mask it, which is the "both halves exist, check they are in the same scope"
+failure in CLAUDE.md wearing a different hat.
+
+**So: any change to `swingCut`, `swingLen` or `turnLen` must be verified against the
+GOLDEN, not the mechanics suite.** Related, also measured: `swingLen` feeds the rotation
+cycle formula at `index.html:2324`, which derives `grace`, `warnAt` and `giveAt` — so it
+silently moves the elbow flick and the break sit-up. The refusal test asserts ORDERING but
+not TIMING, so the flick drifted 76.0s to 110.6s while staying green.
+
+`CFG.easeCut` is exempt from all of this: it is read on ONE line, only for the player, only
+while returning after a pull, and the golden's cases never put the player in that state
+(verify passes 1590/1590 with no regen at 0.45, while the drop-back test moves 5.9s to 3.2s).
+
+## Coasting is not soft-pedalling, and that may be the sluggishness you feel
+
+Also verified in build 17, and NOT changed, because changing it means touching the drafting
+model. `CFG.easeCut` only engages when `effVal < CFG.tempo * 0.85` (0.731). Holding BOTH
+PADS sets `ev = CFG.ease` (0.58), so it fires. Simply STOPPING TAPPING sets
+`ev = carried = CFG.idle + (tempo - idle) * draft`, which is 0.815 to 0.86 — **above the
+gate, so nothing happens at all.**
+
+That is the drafting model working as designed: sitting in is cheap, so coasting on a wheel
+costs about what holding it costs, and going BACKWARDS has to be an active gesture. The
+drill teaches exactly this ("Both pads at once is soft pedalling"). But it does mean a
+player who expects "stop pedalling and drift back" gets nothing, which is word for word the
+original "it's like it's capping you from slowing down" complaint. If that is still the
+feel after build 17, the fix is the gate or the idle floor, not `easeCut`, and it touches
+how drafting works for everyone.
 
 ## Design pillars
 
