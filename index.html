@@ -327,7 +327,7 @@
   <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 19</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 20</p>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -964,13 +964,42 @@ function buildArchetype(build) {
 // the game's three display scales (gradePct 15, elevM 7, altM 2.7) disagree with each other
 // and always have — see the note in [[cycling-game]]. The summit altitude is pinned
 // explicitly by `top` so the profile label reads the real number.
+// ★ THE FREE ROADS ARE REAL ROADS TOO. Kevin: "seeing real routes throughout the game is
+// more exciting than unnamed routes." He is right, and the machinery for it already
+// existed — assignRoute stamps a named climb into a generated stage and gates purely on
+// ownership, so a free tier needs no new system at all, just roads that are always owned.
+//
+// The free cols are deliberately drawn from ranges NO PACK CLAIMS (the Vosges, the Jura,
+// the Massif Central), so free content can never cannibalise the thing you are selling.
+// The marquee roads people would actually pay for stay in the packs.
 const ROUTES = [
+  // --- free, always yours -------------------------------------------------------------
+  { id: "alsace", free: true, name: "Ballon d'Alsace", km: 9.1, grade: 6.8, top: 1178, summit: false,
+    note: "The first mountain the Tour ever climbed. Steady, wooded and unrelenting." },
+  { id: "grandballon", free: true, name: "Grand Ballon", km: 13.2, grade: 6.6, top: 1336, summit: false,
+    note: "The roof of the Vosges. Long enough to sort a bunch out properly." },
+  { id: "puymary", free: true, name: "Puy Mary", km: 12.0, grade: 6.9, top: 1589, summit: true,
+    note: "A dead volcano with a wall at the top. The last kilometre is the one that hurts." },
+  { id: "montduchat", free: true, name: "Mont du Chat", km: 8.7, grade: 10.3, top: 1504, summit: true,
+    note: "Barely nine kilometres and almost none of it under ten percent." },
+  { id: "faucille", free: true, name: "Col de la Faucille", km: 11.7, grade: 5.1, top: 1323, summit: false,
+    note: "Gentle by Jura standards, and fast enough that a group can hold together." },
+  // --- the high Alps ------------------------------------------------------------------
   { id: "alpe", pack: "alps", name: "Alpe d'Huez", km: 13.8, grade: 8.1, top: 1850, summit: true,
     note: "Twenty-one hairpins stacked above the valley. The first ramps are the steepest." },
   { id: "galibier", pack: "alps", name: "Col du Galibier", km: 18.1, grade: 6.9, top: 2642, summit: false,
     note: "Long, high and cold. It keeps going after you think it is done." },
   { id: "madeleine", pack: "alps", name: "Col de la Madeleine", km: 19.2, grade: 7.9, top: 2000, summit: false,
-    note: "Nineteen kilometres that never once lets you sit down." }
+    note: "Nineteen kilometres that never once lets you sit down." },
+  // --- the Pyrenees. THIS PACK WAS ON SALE WITH NOTHING IN IT: ROUTE_PACKS listed it and
+  // the shop charged up to 12,000 prize money for it, while ROUTES contained no Pyrenean
+  // road at all, so ownedRoutes() came back empty and you bought a box of air.
+  { id: "tourmalet", pack: "pyrenees", name: "Col du Tourmalet", km: 19.0, grade: 7.4, top: 2115, summit: false,
+    note: "The one every rider knows. Nineteen kilometres and no shelter above the treeline." },
+  { id: "aubisque", pack: "pyrenees", name: "Col d'Aubisque", km: 16.6, grade: 4.9, top: 1709, summit: false,
+    note: "Shallow enough to ride fast, long enough that riding it fast is a mistake." },
+  { id: "peyresourde", pack: "pyrenees", name: "Col de Peyresourde", km: 13.2, grade: 7.0, top: 1569, summit: false,
+    note: "Even gradients the whole way up, which is exactly why it splits a tired bunch." }
 ];
 const ROUTE_BY_ID = {};
 for (const r of ROUTES) ROUTE_BY_ID[r.id] = r;
@@ -7385,6 +7414,41 @@ function stageLabel(i) {
   const n = tour.schedule.length;
   return n === 1 ? "One-day classic" : "Stage " + ((i === undefined ? tour.stage : i) + 1) + " of " + n;
 }
+// ★ EVERY STAGE GOES FROM SOMEWHERE TO SOMEWHERE. "Stage 3 · Mountains" was the least
+// evocative thing on the briefing screen, and naming a day for its towns is also more
+// honest than naming it for a mountain: real stages are "Pau to Bagnères", with the col a
+// feature of the day rather than its title.
+//
+// DERIVED, NEVER DRAWN. This takes no R() from the course PRNG (DEV-LOOP: derive, never add
+// a call mid-generation) and lives entirely in the view, so course generation is untouched
+// and the golden does not move. Same seed, same towns, for everyone — which is what keeps
+// the daily's shared board fair.
+const TOWNS = [
+  "Pau", "Tarbes", "Foix", "Albi", "Rodez", "Mende", "Aurillac", "Millau",
+  "Gap", "Digne", "Briançon", "Embrun", "Chambéry", "Annecy", "Cluses", "Morzine",
+  "Belfort", "Colmar", "Épinal", "Vittel", "Besançon", "Dole", "Mâcon", "Roanne",
+  "Limoges", "Tulle", "Brive", "Cahors", "Agen", "Auch", "Lourdes", "Bayonne",
+  "Valence", "Privas", "Alès", "Nîmes", "Carcassonne", "Béziers", "Perpignan", "Prades",
+  "Saint-Flour", "Le Puy", "Yssingeaux", "Ambert", "Thiers", "Vichy", "Moulins", "Nevers"
+];
+// A stage is titled START to FINISH, and a summit finish is titled for the summit, which is
+// what a real race does. Two different derivations off one seed so the pair rarely matches.
+function stageTowns(seed, idx) {
+  const a = ((seed ^ (idx + 1) * 0x9e3779b9) >>> 0) % TOWNS.length;
+  let b = ((seed ^ (idx + 1) * 0x85ebca6b) >>> 5) % TOWNS.length;
+  if (b === a) b = (b + 1 + (idx % 3)) % TOWNS.length;
+  return { start: TOWNS[a], finish: TOWNS[b] };
+}
+function stageTitle(i) {
+  if (!tour || !tour.schedule) return "";
+  const idx = i === undefined ? tour.stage : i;
+  const seed = tour.daily ? tour.daily.seed : tour.seed;
+  const t = stageTowns(seed >>> 0, idx);
+  const rid = stageRoute(idx);
+  const rt = rid ? Sim.ROUTES.filter(r => r.id === rid)[0] : null;
+  // A summit finish is named for the summit. A pass is just a road on the way somewhere.
+  return rt && rt.summit ? t.start + " → " + rt.name : t.start + " → " + t.finish;
+}
 function specAt(i) { return STAGES[tour.schedule[i]]; }
 function finishPractice(order, you) {
   $("pauseBtn").classList.add("hide");
@@ -7459,9 +7523,13 @@ function showBriefing() {
     : tour.daily
     ? "Daily challenge #" + tour.daily.n + " · " + spec.sub + " · " + dims
     : "Division " + ladder.div + " · " + stageLabel() + " · " + spec.sub + " · " + dims;
-  $("bTitle").textContent = spec.type === "flat" ? "One for the sprinters"
-    : spec.type === "hills" ? "A day for the brave" : "The mountains decide it";
+  // THE TOWNS ARE THE TITLE. The flavour line that used to live here says the same thing
+  // the eyebrow's "Mountains" already says, so it moves down to the notes where it reads as
+  // a remark about the day rather than the name of it.
+  $("bTitle").textContent = stageTitle();
   const notes = [];
+  notes.push(spec.type === "flat" ? "One for the sprinters."
+    : spec.type === "hills" ? "A day for the brave." : "The mountains decide it.");
   // ★ THE CLIMBS OF THE DAY, RATED. Races put a sign at the foot of every classified climb,
   // and "two cat 1s and an HC" tells a cycling fan more about a stage than any amount of
   // prose. Listed hardest first, because that is the one that decides the day.
@@ -9233,7 +9301,10 @@ const PACK_BASE = 3000, PACK_CAP = 18000;
 const packCost = () => Math.min(PACK_CAP, PACK_BASE * Math.pow(2, (ladder.packs || []).length));
 const packOwned = id => (ladder.packs || []).indexOf(id) >= 0;
 const routesIn = id => Sim.ROUTES.filter(r => r.pack === id);
-const ownedRoutes = () => Sim.ROUTES.filter(r => packOwned(r.pack)).map(r => r.id);
+// A free road is always yours. Everything downstream (assignRoute, the practice list, the
+// grand tour showcase) reads this one function, so the free tier needed nothing else.
+const ownedRoutes = () => Sim.ROUTES.filter(r => r.free || packOwned(r.pack)).map(r => r.id);
+const paidRoutes = () => Sim.ROUTES.filter(r => !r.free && packOwned(r.pack)).map(r => r.id);
 // Which stage of a tour goes over a named road, and which one. Kevin's call: SEVEN-DAY
 // TOURS ONLY, so a route stays an event rather than wallpaper — and one per tour, on a
 // mountain day, never the opener or the finale. Derived from the tour seed so it is fixed
@@ -9245,19 +9316,39 @@ function assignRoute(t, len) {
   const mtn = [];
   for (let i = 1; i < len - 1; i++) if (t.schedule[i] === 2 || t.schedule[i] === 4) mtn.push(i);
   if (!mtn.length) return;
+  // ★ PAID ROADS GET THE DECISIVE STAGES, FREE ROADS FILL THE REST. Every mountain day now
+  // has a name on it, which is the whole point of the free tier — but a road you paid for
+  // must never be crowded out by one you did not, so the premium list is placed first and
+  // the free list only takes what is left over.
+  const paid = paidRoutes();
+  const free = Sim.ROUTES.filter(r => r.free).map(r => r.id);
   if (t.grand) {
     // The grand tour is the showcase: every road you own gets its day, spread across the
     // mountain stages. It is the reason to have bought them.
     // Spread them across the whole race, and put the LAST one on the LAST mountain, which
     // is where a grand tour is decided. Clustering them mid-race left the decisive late
     // climb generic, which is exactly backwards.
-    for (let k = 0; k < own.length && k < mtn.length; k++) {
-      t.routeMap[mtn[Math.round(k * (mtn.length - 1) / Math.max(1, Math.min(own.length, mtn.length) - 1))]] = own[k];
+    // Paid roads spread across the race with the last on the last mountain, then free roads
+    // take any mountain day still without a name.
+    const show = paid.length ? paid : free;
+    for (let k = 0; k < show.length && k < mtn.length; k++) {
+      t.routeMap[mtn[Math.round(k * (mtn.length - 1) / Math.max(1, Math.min(show.length, mtn.length) - 1))]] = show[k];
+    }
+    if (paid.length && free.length) {
+      let f = 0;
+      for (const i of mtn) if (t.routeMap[i] === undefined) t.routeMap[i] = free[f++ % free.length];
     }
     return;
   }
-  if (len < 7) return;
-  t.routeMap[mtn[(t.seed >>> 3) % mtn.length]] = own[(t.seed >>> 9) % own.length];
+  // ★ EVERY MOUNTAIN DAY, NOT JUST SEVEN-DAY TOURS. This used to bail below seven stages,
+  // so a rider doing the short and medium races the ladder ASKS FOR never saw a named road
+  // at all. With a free tier that is the common case, and "real roads throughout the game"
+  // means throughout it.
+  const pick = (list, salt) => list[((t.seed >>> salt) >>> 0) % list.length];
+  if (paid.length) t.routeMap[mtn[(t.seed >>> 3) % mtn.length]] = pick(paid, 9);
+  if (!free.length) return;
+  let f = ((t.seed >>> 5) >>> 0) % free.length;
+  for (const i of mtn) if (t.routeMap[i] === undefined) t.routeMap[i] = free[f++ % free.length];
 }
 const stageRoute = st => (tour && tour.routeMap) ? (tour.routeMap[st] || null) : null;
 
@@ -9413,9 +9504,13 @@ function renderRoutes() {
   const foot = document.createElement("p");
   foot.className = "sub";
   foot.style.cssText = "margin-top:14px";
-  foot.textContent = ownedRoutes().length
-    ? "A road you own turns up on one mountain stage of a seven-day tour. Ridden on its own in practice it pays nothing, the same as any practice ride."
-    : "Routes are real roads that appear in your seven-day tours. Prize money carries over and nothing here expires.";
+  // Rewritten for the free tier. The old copy said a road turns up "on one mountain stage of
+  // a seven-day tour", which is no longer how it works, and its other branch (for a rider
+  // owning no roads) is now unreachable because everyone owns the free ones.
+  foot.textContent = "Real roads climb the mountain stages of every tour you ride, and you "
+    + "start with five of them. A pack adds the famous ones, and they take the stages that "
+    + "decide a race: in a grand tour, every road you own gets its own day. Ridden on their "
+    + "own in practice they pay nothing, the same as any practice ride.";
   box.appendChild(foot);
 }
 function renderData() {
@@ -9542,7 +9637,11 @@ function renderPractice() {
   // ROADS YOU OWN, rideable on their own. This was claimed as "already covered by practice"
   // when routes were planned and it simply was not — practice builds its own tour object and
   // never went near the route assignment, so a pack you had paid for was invisible here.
-  const own = Sim.ROUTES.filter(r => (ladder.packs || []).indexOf(r.pack) >= 0);
+  // ownedRoutes(), not a second hand-rolled pack check: this line computed "roads you own"
+  // its own way and so knew nothing about the free tier, which is the same producer-versus-
+  // consumer split that made abandoning a tour lock the game. One function decides.
+  const ownIds = ownedRoutes();
+  const own = Sim.ROUTES.filter(r => ownIds.indexOf(r.id) >= 0);
   $("pRoutesHead").classList.toggle("hide", !own.length);
   const rBox = $("pRoutes"); rBox.innerHTML = ""; rBox.className = "chips";
   rBox.classList.toggle("hide", !own.length);
