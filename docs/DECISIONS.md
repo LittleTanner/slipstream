@@ -314,6 +314,60 @@ which supersedes this one). Note that the first phrasing of that recommendation 
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
 
+## Gearing: built behind a toggle, and the numbers cannot tell you whether it is good (build 23)
+
+Kevin asked for gearing behind a debug toggle so he could try it without disturbing what
+ships. It is built, it is mechanically correct, and **its competitive value is inside the
+noise.** That is the finding, and it is not a reason to delete it — it is a reason to stop
+measuring and start riding.
+
+**The model, and the two versions that were wrong first.** Cadence is road speed divided by
+the ratio, and you pick the ratio; effort is how hard you push. So the tap loop is untouched:
+taps still mean effort. Grinding in a big gear on a ramp, spinning out in a small one on the
+flat, and needing to shift up as a sprint winds on all fall straight out of that one line.
+The first sketch had gear multiply POWER, which puts you in a *big* gear on a 9% wall,
+backwards from real racing. The first calibration then set a 4x ratio range from a rider held
+at one fixed effort in still air, a scenario no stage produces; driving full stages with the
+sim's own AI put the real 1st-to-99th percentile speed at about 5 to 16 m/s, so the range is
+3.2x and gear 4 at a fast bunch pace is the neutral case.
+
+**The wrong gear has to cost more than the shifts that fix it, or ignoring the gears is
+optimal.** At `gearCost` 0.75 that is exactly what happened: sitting in gear 4 all race beat
+shifting to hold the band by 0.26 places. A mechanic whose best play is to ignore it is worse
+than no mechanic.
+
+**And then the tuning would not reproduce, which is the part worth remembering.** A 12-race
+sweep of `(gearCost, shiftBite)` named a cell worth **+1.02 places**. On eight fresh seeds
+over four stages the same cell measured **-0.03**. The cell that shipped (`gearCost` 1.5,
+`shiftBite` 0.62) reads +0.17 against never shifting on one seed set and -0.06 against
+mashing the chevrons on another. Same sim, opposite verdicts. `tools/gearing.js` therefore
+splits its output: mechanism gates are asserted, balance numbers are only ever reported.
+
+For scale: Feed craft measures about half a place and was already marginal. Gearing measures
+less than that, and it costs a control.
+
+**Harness limit, stated rather than used as an excuse.** The shifting policy is a reactive
+servo that corrects whenever it is outside the band, about 250 times a stage. A person shifts
+a handful of times and ANTICIPATES the ramp, which is the actual skill and the one thing the
+harness cannot do. So it may understate a human's edge. It cannot be trusted to overstate it
+either, and that is precisely why this is a question for the hand.
+
+**What was verified directly, and does hold.** Cadence responds to gear and speed as designed;
+past `cadMax` the power is capped rather than taxed, so being spun out is a real limit; a shift
+at full effort drops power ~15% for 0.34s while a shift while soft-pedalling costs exactly
+nothing (`shiftLoad` 0.80 against 0.00). That asymmetry is the whole reason to shift before
+the ramp, and it is the one piece of this that is unambiguously working.
+
+**Scaffolding with an expiry date.** `CFG.gearsOn` is false in a shipped build, the race
+records the rule at creation so an in-progress stage never changes underneath a result, and
+the golden passes with no regeneration. If gearing ships, the golden regenerates and the branch
+stops being a branch. If it does not, the branch comes out. It must not quietly become
+permanent.
+
+Two things a measurement can never answer and Kevin's hands can: whether shifting is
+satisfying or admin, and whether the chevrons at the ends of the action row are reachable
+without breaking the pedalling rhythm.
+
 ## The power meter reads what you can hold, not how you pedal (build 22)
 
 Kevin's proposal was to make the power meter powerful by replacing the LEGS gauge with the
