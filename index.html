@@ -332,7 +332,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 22</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 23</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -607,6 +607,15 @@ const CFG = {
   lineTol: 0.95, lineNear: 1.75,      // the corridor: about a bike wide, not three
   lineSafe: 0.45,                     // green: dead on your line
   lineWarn: 0.72,                     // amber: drifting, but still legal
+  // How near a rider has to be, either way, before the corridor is worth drawing at all.
+  // WIDER THAN THE OFFENCE ON PURPOSE. The offence needs actual contact (inside 0.8 m up
+  // the road and 1.15 across), but by then the swerve has already happened, so gating the
+  // WARNING on the contact box shows it too late to act on: a rival 2.6 m away read "no
+  // risk" when a swerve would plainly reach them. This is instead "someone is close enough
+  // to hit", which in a bunch sprint is almost always true — correctly, that is exactly
+  // when the rule matters — and false when you are clear off the front. The other half of
+  // the gate, "you are contesting the places", is what silences it when you roll in fifth.
+  lineWatch: 3.0,
   // The team car: how fast it paces you, how long it will stay with you, and how far
   // off the back you must be before the sticky bottle is worth offering.
   // A long steady pull rather than a slingshot, and you have to stay in its draft:
@@ -2971,7 +2980,32 @@ function stepRider(race, r, dt) {
     const away = r.x - r.sprintLine;
     const moving = Math.abs(r.vx) > 0.4 && Math.sign(r.vx) === Math.sign(away);
     r.lineDrift = clamp((r.lineDrift || 0) + (moving ? dt : -dt * 2.2), 0, 1);
-  } else { r.sprintLine = null; r.lineDrift = 0; }
+    // ★ IS THE RULE ACTUALLY LIVE? Deviating off your line is only ever judged when there
+    // is a rider beside you to deviate INTO and you are contesting the places, so with
+    // nobody around you the corridor costs you nothing whatever you do. It was drawn on
+    // every sprint regardless, which is furniture that means nothing most of the time and
+    // trains you to ignore it for the moment it does.
+    // COMPUTED HERE, WHERE THE RULE LIVES, and read by the view rather than re-derived
+    // there. The same two conditions gate the penalty itself in `separate()` — off the
+    // SAME constants — because a warning that can disagree with the offence is worse than
+    // no warning. `separate()` still owns the per-pair specifics (which way you moved,
+    // whether you are alongside), which is why this is the PRECONDITION and not the whole
+    // test: it answers "can this be judged at all right now".
+    // The offence needs a rider ALONGSIDE: `separate()` only reaches it inside the
+    // side-by-side branch, which is |dist gap| < 0.8 and |lateral gap| < HIT_LAT. The
+    // WATCH box is deliberately wider than that (see `lineWatch`), because a warning that
+    // waits for the contact box arrives after the swerve it was meant to prevent.
+    // `ahead` counts EXACTLY as separate() counts it, finished riders included and no
+    // filtering, because a warning that goes quiet while the offence still fires is the
+    // one failure mode worth engineering against, and the test asserts that directly.
+    let near = false, ahead = 0;
+    for (const o of race.riders) {
+      if (o === r) continue;
+      if (o.dist > r.dist) ahead++;
+      if (Math.abs(o.x - r.x) <= CFG.lineWatch && Math.abs(o.dist - r.dist) <= CFG.lineWatch) near = true;
+    }
+    r.lineLive = near && ahead <= 3;
+  } else { r.sprintLine = null; r.lineDrift = 0; r.lineLive = false; }
   // Binning empties is NOT player-only. This lived inside the player block, so a rival
   // could want to throw a bottle away and physically never could: they carried every
   // empty to the finish. Everyone bins; only YOUR bottles get an event callout.
@@ -5246,8 +5280,14 @@ function drawRoad() {
       label("INSIDE", lx2, ly2 - pxM * 0.34, 10.5, 700, "rgba(46,49,47,.72)", "center", 1.6);
     }
   }
-  // Your line through a sprint, so you can see exactly what you are held to.
-  if (you.sprintLine !== null) {
+  // Your line through a sprint, so you can see exactly what you are held to — BUT ONLY
+  // WHILE THE RULE CAN ACTUALLY BITE. Deviating is judged only when there is a rider
+  // alongside to deviate into and you are contesting the places, so alone off the front,
+  // or rolling in fifth, the corridor costs you nothing whatever you do. It used to draw
+  // on every sprint regardless, which is furniture that means nothing most of the time and
+  // teaches you to ignore it for the moment it does. `lineLive` is decided by the sim
+  // where the rule lives, never re-derived here.
+  if (you.sprintLine !== null && you.lineLive) {
     // ★ THREE BANDS, ABOUT A BIKE WIDE. One flat corridor 2.9m across told you nothing until
     // you were already outside it. GREEN dead on your line, AMBER drifting but still legal,
     // RED past the limit — so you can see the wiggle room you have before it costs you.

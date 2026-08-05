@@ -131,7 +131,7 @@ Revisit only if fields grow beyond 8.
 |---|---|---|---|
 | Attacks | Committed events: windup, go, cooldown; no per-frame flicker; rivals follow a genuine dig near the front | `Attacks are now committed` | `attacks.test.js` |
 | Chase | The bunch chases a break it fears, harder late, sharper by division | `race.chase` | `chase.test.js` |
-| Sprint lines | You may change your line, not into someone contesting; relegation costs points, money, a fine | `sprintLine` | `sprint-line.test.js` |
+| Sprint lines | You may change your line, not into someone contesting; relegation costs points, money, a fine. **The corridor is only DRAWN while the rule can bite** (`r.lineLive`): a rider inside the `lineWatch` box and you within three of the lead. Alone off the front, or rolling in fifth, deviating costs nothing whatever you do, and drawing it anyway trains you to ignore it for the moment it matters. The watch box is deliberately WIDER than the offence's contact box, because a warning gated on contact arrives after the swerve it was meant to prevent. Decided in the sim where the rule lives, never re-derived in the view | `sprintLine`, `lineLive`, `CFG.lineWatch` | `sprint-line.test.js` (incl. penalised-implies-live, and not live when alone) |
 | Bike throw | Timed right, most of a bike length; stretches you out after | `throwWindow` in CFG | `throw.test.js` |
 | Primes | Sprint and KOM points on the road; summit finish = KOM and finish on one line | `nearestPrime` | `primes.test.js` |
 | Feed zones | Food scattered along the road (deliberately not gating attacks); musettes hand up on a line; empties carried or littered | `musetteReach` in CFG | `feedzone.test.js` (items; musette line + litter golden) |
