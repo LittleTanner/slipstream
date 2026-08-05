@@ -83,9 +83,36 @@ def build_throwaway(scratch):
          "  if ((you.stats.radio || 0) >= 2) {\n"
          "    window.__hud.leader = 1;\n"
          "    label(leader === you ? \"LEADING\""),
-        ("    const lvl = you.stats.powerMeter;",
+        ("    const lo = Sim.CFG.ease;",
          "    window.__hud.power = 1;\n"
-         "    const lvl = you.stats.powerMeter;"),
+         "    const lo = Sim.CFG.ease;"),
+        # The power meter now reads SUSTAINABILITY, and the reading is the feature. Publish
+        # the string the gauge actually labels itself with, plus the raw rate behind it, so
+        # a test asserts what is on screen rather than re-deriving the arithmetic and then
+        # asserting its own copy of it.
+        # RECORD ACROSS FRAMES, DO NOT SAMPLE ONE. A road stage opens with a neutral
+        # roll-out where the sim zeroes the energy rate outright, so a single read at the
+        # end of the case can land on dE 0 and "COMING BACK" and prove nothing about the
+        # number the feature is built on. Keeping the extremes is the same shape the
+        # profile-strip counter already uses.
+        ("    const pmRead = you.cracked ? \"EMPTY\"",
+         "    window.__hud.dE = you.dE === undefined ? null : you.dE;\n"
+         "    window.__hud.dEmin = Math.min(window.__hud.dEmin === undefined ? 0 : window.__hud.dEmin, you.dE || 0);\n"
+         "    if (ttl !== Infinity) window.__hud.ttlMin = Math.min(\n"
+         "      window.__hud.ttlMin === undefined ? 1e9 : window.__hud.ttlMin, Math.round(ttl));\n"
+         "    const pmRead = you.cracked ? \"EMPTY\""),
+        ("    if (pmLvl >= 2) label(pmRead,",
+         "    if (pmLvl >= 2) window.__hud.pmRead = pmRead;\n"
+         "    if (pmLvl >= 2) label(pmRead,"),
+        # The projection slice on the LEGS bar is the OTHER half of level II, and it is
+        # drawn from a different place in drawHud. Count it separately: the build-15 lesson
+        # is that one gated surface passing says nothing about the others.
+        ("  if (pmLvl >= 2 && !you.cracked && Math.abs(you.dE || 0) > 0.05) {",
+         "  window.__hud = window.__hud || { pips: 0 };\n"
+         "  window.__hud.projGate = pmLvl >= 2 ? 1 : 0;\n"
+         "  window.__hud.proj = window.__hud.proj || 0;\n"
+         "  if (pmLvl >= 2 && !you.cracked && Math.abs(you.dE || 0) > 0.05) {\n"
+         "    window.__hud.proj++;"),
         # COUNT THE RIVAL TICKS ON THE PROFILE STRIP. Build 15 gated the pip rail, shipped
         # a passing test proving the rail was silent, and left this loop painting the whole
         # field across the whole stage for free. Counting the rail alone is what let that
@@ -372,6 +399,60 @@ async def main():
                   "hud reported %r" % (h,))
         finally:
             await ctx.close()
+
+        # ---- 5c. the power meter READS SUSTAINABILITY ------------------------
+        # The gauge used to smooth toward one of three fixed heights taken from the effort
+        # LABEL, so it told you nothing your own thumbs had not. It now reads how long the
+        # current effort can be held, off `dE` — the per-second energy rate the sim records
+        # as it applies it. Three separate things are asserted because they are drawn from
+        # three separate places and build 15 shipped exactly this shape of bug: the reading
+        # itself, the projection slice on the LEGS gauge, and the level gating.
+        # LEVEL COMES FROM CAREER WINS, not from a `powerMeter` field on the ladder. That
+        # field is a leftover from when tactics arrived on a win-count drip; the live path
+        # is raceStats -> tacticLevel -> WIN_STEPS.powerMeter = [2, 6, 11]. Seeding the
+        # wrong key gives a rider at level 1 in both cases and a test that proves nothing,
+        # which has already happened twice in this suite.
+        for wins, lvl, want_read, want_proj in ((6, 2, True, True), (2, 1, False, False)):
+            ladder = {"tutorialDone": True, "div": 4, "tours": 3, "wins": wins,
+                      "money": 500, "tactics": ["powerMeter"]}
+            ctx, pg = await open_case(browser, url, ladder, [], errs, rand_seed=42)
+            try:
+                await pg.click("#pracBtn")
+                await pg.locator("#practice").wait_for(state="visible")
+                # EXACT: "Flat" also matches "Pan flat", which is a strict-mode violation.
+                await pg.locator("#pStages button", has_text=re.compile(r"^Flat$")).click()
+                await pg.click("#pRide")
+                await pg.wait_for_selector("#build:not(.hide)")
+                await pg.click("#bLock")
+                await pg.wait_for_selector("#brief:not(.hide)")
+                await pg.click("#rollBtn")
+                # PEDAL HARD ENOUGH TO ACTUALLY SPEND, and ride long enough to clear the
+                # neutral roll-out, where the sim zeroes the energy rate outright. Below
+                # tempo the legs only ever come back and the reading is "COMING BACK"
+                # forever, which passes a sloppy assertion while proving nothing.
+                side = 0
+                for _ in range(120):
+                    await pg.keyboard.press("z" if side == 0 else "x")
+                    side ^= 1
+                    await pg.wait_for_timeout(60)
+                h = await pg.evaluate("window.__hud || null") or {}
+                check("power meter L%d: the sim publishes an energy rate" % lvl,
+                      h.get("dE") is not None, "dE %r" % (h.get("dE"),))
+                got_read = h.get("pmRead") is not None
+                check("power meter L%d: the reading %s" % (lvl, "shows" if want_read else "is held back"),
+                      got_read == want_read, "read %r" % (h.get("pmRead"),))
+                check("power meter L%d: the LEGS projection %s" % (lvl, "draws" if want_proj else "is held back"),
+                      (h.get("proj", 0) > 0) == want_proj,
+                      "projGate %r, frames %r" % (h.get("projGate"), h.get("proj")))
+                if want_read:
+                    # A REAL seconds-to-empty has to have appeared at some point in the
+                    # ride, not just the "COMING BACK" that a resting rider shows. Asserting
+                    # on the last frame would accept a reading that was never finite.
+                    check("power meter: a finite seconds-to-empty was reached",
+                          h.get("ttlMin") is not None and 0 < h["ttlMin"] < 1e9,
+                          "lowest reading %r, hardest rate %r" % (h.get("ttlMin"), h.get("dEmin")))
+            finally:
+                await ctx.close()
 
         # ---- 4bis. the test shortcut is behind a gesture ----------------------
         # It used to be a plainly labelled Settings button handing over the $4.99 career and

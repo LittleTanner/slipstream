@@ -332,7 +332,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 21</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 22</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -3334,6 +3334,13 @@ function stepRider(race, r, dt) {
   if (r.carTow > 0 && de > 0) de *= 1 + CFG.carRecover * r.carTow;
   else if (r.carTow > 0) de += CFG.carRecover * 0.9 * r.carTow;
   if (race.neutral) de = 0;                 // nothing is spent before the flag drops
+  // ★ RECORD THE RATE, DO NOT RECOMPUTE IT. The power meter reads how long you can hold
+  // what you are doing, and the honest way to know that is the number the legs are
+  // actually moving at. Deriving it a second time in the view is exactly how the
+  // abandonment line ended up computed in one place and displayed from another: two
+  // formulas that agree until one of them is edited. This is per SECOND, on the same
+  // 0..legCap scale as `energy`, so seconds-to-empty is energy / -dE and nothing else.
+  r.dE = de;
   r.energy = clamp(r.energy + de * dt, 0, r.legCap);
   const wasCracked = r.cracked;
   if (r.energy <= 0) r.cracked = true;
@@ -5786,7 +5793,17 @@ function drawWind() {
     cx, cy + 16, 9.5, 700, "rgba(46,49,47," + (0.35 + 0.4 * w.str) + ")", "center", 1.6);
 }
 
-let pmVal = 0, pmPrevE = null, ttShown = 0;      // power-meter effort, smoothed across frames
+let pmVal = 0, ttShown = 0;      // power-meter effort, smoothed across frames
+// The power meter's reading, in seconds, CALIBRATED TO WHAT THE SIM ACTUALLY DOES rather
+// than to what a minute of effort sounds like it should be. `node tools/outlook.js` reads
+// seconds-to-empty across the situations a stage puts you in; at a fixed 2.4 strokes/s on
+// 70 legs it spans 37s sitting on a wheel on the flat down to 10s in the wind on a 9%
+// ramp. Anything above tempo is a matches-burning regime measured in SECONDS, so a
+// threshold set in minutes would have painted the gauge red for the entire race.
+// PM_LOOK is how far ahead the LEGS projection looks. Ten seconds, for the same reason:
+// at thirty the slice pins to the bottom of the bar in most situations and stops carrying
+// any information at all.
+const PM_LOOK = 10, PM_ALLDAY = 120, PM_WARN = 20, PM_REDLINE = 8;
 function drawHud(dt) {
   drawProfile(); drawWind();
   const c = C(), you = race.you, pad = Math.max(14, W * 0.045);
@@ -5872,11 +5889,35 @@ function drawHud(dt) {
   // telling you why — so three near-static bars would be noise on the stage that is
   // meant to be about a single skill.
   const ttOnly = !!(race.spec && race.spec.tt);
+  // Read once, up here, because the power meter now annotates the LEGS gauge as well as
+  // drawing its own, and the LEGS gauge is drawn first.
+  const pmLvl = you.stats.powerMeter || 0;
   if (!ttOnly) {
   gauge(gx, gy, gw, gh, you.energy, you.cracked ? PAL.spot : you.energy < 25 ? PAL.fuel : PAL.you, "LEGS");
   if (you.legCap < 99) {                                  // days in the legs
     ctx.fillStyle = "rgba(213,94,0,.85)";
     ctx.fillRect(gx - 3, gy + gh * (1 - you.legCap / 100) - 1, gw + 6, 2);
+  }
+  // ★ WHERE THIS EFFORT IS TAKING YOU (power meter, level II). The same effort costs
+  // wildly different amounts depending on the gradient, your climbing economy and how
+  // sheltered you are — the drain scales with the gradient times climbing economy
+  // SQUARED, and again with exposure — and none of that has ever been visible. You found
+  // out you overcooked it when the legs went. This is the projection: where LEGS will be
+  // in PM_LOOK seconds if nothing changes.
+  // ANNOTATION ON A BAR THAT ALREADY EXISTS, not a new widget. The FOOD gauge already
+  // marks what you have swallowed but not absorbed the same way, and the record here is
+  // that additive screen furniture gets built, looks wrong and gets cut.
+  if (pmLvl >= 2 && !you.cracked && Math.abs(you.dE || 0) > 0.05) {
+    const proj = clamp(you.energy + (you.dE || 0) * PM_LOOK, 0, 100);
+    const yNow = gy + gh * (1 - clamp(you.energy / 100, 0, 1));
+    const yEnd = gy + gh * (1 - proj / 100);
+    ctx.save();
+    roundRect(gx, gy, gw, gh, gw / 2); ctx.clip();
+    // Spending reads as a bite off the top of the fill, gaining as a ghost above it. Both
+    // sit between where you are and where you are going, so the direction is the shape.
+    ctx.fillStyle = you.dE < 0 ? "rgba(213,94,0,.42)" : "rgba(0,158,115,.32)";
+    ctx.fillRect(gx, Math.min(yNow, yEnd), gw, Math.abs(yEnd - yNow));
+    ctx.restore();
   }
   gx += gstep;
   gauge(gx, gy, gw, gh, you.fuel, you.bonk ? PAL.spot : PAL.fuel, "FOOD");
@@ -5910,26 +5951,52 @@ function drawHud(dt) {
   // reasoning still holds, because legs, food and fluid look after themselves once you
   // hold the rhythm. This is also what stops the power meter being a slot nobody spends:
   // on a TT it is the only tactic that does anything at all.
-  if ((you.stats.powerMeter || 0) > 0) {
-    const lvl = you.stats.powerMeter;
-    const target = you.eff === "ease" ? 16 : you.eff === "attack" ? 92 : 52;
+  if (pmLvl > 0) {
+    // ★ IT READS WHAT YOU CAN HOLD, NOT JUST HOW HARD YOU ARE GOING. The gauge used to
+    // smooth toward one of three fixed heights taken from the EFFORT LABEL — 16 for ease,
+    // 52 for tempo, 92 for attack — so it was a three-state light dressed up as a gauge,
+    // and it told you nothing your own thumbs had not already told you. It now reads the
+    // live effort continuously, and level II answers the question a real power meter is
+    // actually for: can I hold this, and for how long. That number was invisible and it
+    // swings hugely — `node tools/outlook.js` measures ONE effort, 2.4 strokes/s on 70
+    // legs, reading 37s sitting on a wheel on the flat and 10s in the wind on a 9% ramp
+    // on a rouleur body. You used to find that out when the legs went.
+    // DELIBERATELY NOT SPEED. A tactic that made you faster would dwarf every other
+    // number in the game (Feed craft measures under half a placing; the division strength
+    // ramp deleted in build 16 for being an unfair escalator was 3.5%), it would be a
+    // must-pick, and it would make information something you buy performance with.
+    // Everything here is a reading of a race you were already riding.
+    const lo = Sim.CFG.ease;
+    const span = Math.max(0.2, (you.stats.attack || Sim.CFG.attack) - lo);
+    const target = clamp(((you.effV === undefined ? lo : you.effV) - lo) / span, 0, 1) * 100;
     pmVal += (target - pmVal) * Math.min(1, dt * 6);
-    const draining = pmPrevE != null && you.energy < pmPrevE - 0.0005;
-    pmPrevE = you.energy;
-    const redline = pmVal > 80 || (draining && you.energy < 42 && you.eff !== "ease");
+    // Seconds until the legs are gone at exactly this rate. `dE` is recorded by the sim
+    // as it happens (per second, same scale as `energy`), so this can never drift out of
+    // step with what the bar is actually doing.
+    const dE = you.dE || 0;
+    const ttl = dE < -0.05 ? you.energy / -dE : Infinity;
+    const redline = ttl < PM_REDLINE;
     // NOT BLUE. PAL.water is the FLUID colour, so a blue POWER gauge sitting in the row
     // beside LEGS / FOOD / FLUID read as a second fluid gauge. Same mistake as the yellow
     // pace car that read as food (DECISIONS.md). Charcoal belongs to no resource; amber
     // and orange stay, because those two carry meaning.
-    const col = redline ? PAL.spot : pmVal > 60 ? PAL.fuel : "#4A4E4B";
+    const col = redline ? PAL.spot : ttl < PM_WARN ? PAL.fuel : "#4A4E4B";
     // On a TT the three gauges never drew, so gx is still at the left margin where the
     // rhythm bar is about to go. Clear it deliberately rather than by one gauge step, or
     // the POWER column lands on the rhythm bar's shoulder.
     gx = ttOnly ? pad + Math.max(20, gw * 2.1) + 20 : gx + gstep;
     gauge(gx, gy, gw, gh, pmVal, col, "POWER");
-    if (lvl >= 2) label(redline ? "REDLINE" : pmVal < 30 ? "EASY" : pmVal > 60 ? "HARD" : "STEADY",
-      gx + gw / 2, gy + gh + 14, 8, 700, col, "center", 0.5);
-    if (lvl >= 3 && redline && you.energy < 38) label("EASE UP", gx + gw / 2, gy - 20, 8.5, 700, PAL.spot, "center", 0.7);
+    // The readout is the feature. "ALL DAY" rather than a number when you are inside your
+    // own ceiling, because a rider who is riding within themselves does not need a clock —
+    // they need to know they are fine. A number only appears once it is finite and it
+    // matters, which is also what makes it read as a warning without shouting.
+    // Held in a variable rather than inlined into the label, so a test can assert the
+    // reading itself instead of re-deriving it and asserting its own arithmetic.
+    const pmRead = you.cracked ? "EMPTY" : dE >= 0 ? "COMING BACK"
+      : ttl > PM_ALLDAY ? "ALL DAY" : ttl >= 60 ? Math.round(ttl / 60) + " MIN" : Math.round(ttl) + "s";
+    if (pmLvl >= 2) label(pmRead, gx + gw / 2, gy + gh + 14, 8, 700, col, "center", 0.5);
+    if (pmLvl >= 3 && redline && !you.cracked)
+      label("EASE UP", gx + gw / 2, gy - 20, 8.5, 700, PAL.spot, "center", 0.7);
   }
   // THE RHYTHM BAR. The bar IS your cadence and the line is the target, so one glance
   // gives you both how far off you are and WHICH WAY: over the line means spinning too
@@ -8508,7 +8575,7 @@ const TACTICS = [
   // to read the race is one decision made twice, the same mistake wheels, position and
   // tires were making with aero.
   { key: "radio", name: "Race radio", note: "Everything the race is doing around you. I: attacks, and whether the bunch is chasing. II: how far back the leader is, and how far clear you are. III: every rider off the top of the screen, and by how much. Carry nothing and you race what you can see." },
-  { key: "powerMeter", name: "Power meter", note: "Everything your own body is doing. Reads your effort live, so you can pace a climb instead of finding out you overcooked it when the legs go. The one thing that helps in a time trial." },
+  { key: "powerMeter", name: "Power meter", note: "Everything your own body is doing. Reads your effort live, and tells you how long you can hold it: the same effort costs far more on a ramp than it does in the bunch, and without one you find that out when the legs go. The one thing that helps in a time trial." },
   // ★ THE SIM ALREADY DID ALL OF THIS AND NO RIDER COULD EVER HAVE IT. carbMix (a bottle
   // feeding you as well as watering you) and feedSmooth (no stumble when you take one
   // wide) are implemented in stepRider, sit in BASE_STATS and in FLAG_KEYS, and were

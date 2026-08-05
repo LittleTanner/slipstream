@@ -29,7 +29,16 @@ way to check you have not broken it.
    contest all the way up). Run it after anything touching `tierProfile`, `rivalBody` or
    rider growth. `LAD_SEEDS=...` widens it. `tools/sweep-ladder.js` runs candidate
    changes against patched copies of the sim so you can compare before editing the game.
-5. **Browser suites** — `python3 tools/browser/smoke.py` (~2 min: every screen, every
+5. **`node tools/outlook.js` — is a number worth showing?** Not a balance gate. It prints
+   what the power meter's readout SAYS (seconds until the legs are gone) across gradient,
+   shelter and climbing body, so a readout can be shown to differ before it is sold as a
+   tactic. Two harness traps it hit, both of which silently read as "the feature does
+   nothing": `course.grades` is a FLAT ARRAY OF NUMBERS indexed by distance/STEP, so
+   writing `{d, g}` markers into it lerps two objects into NaN; and the sim's grade is not
+   a percent (`displayed % = g * CFG.gradePct`, gradePct 15), so a literal `0.09` is a
+   1.35% drag rather than a wall. Shelter cannot be pinned by setting `q` — it is
+   recomputed every substep — so pin a hare on the wheel-line the way `tt.test.js` does.
+6. **Browser suites** — `python3 tools/browser/smoke.py` (~2 min: every screen, every
    drill, a daily-challenge start on today's real course, the team car's whole
    arrive-change-pull-tow life cycle, a shrunk race end to end, the pause card) and
    `python3 tools/browser/career.py` (~2 min: division display, route-pack pricing
@@ -37,8 +46,8 @@ way to check you have not broken it.
    the dead-button / unregistered-screen / CSS-specificity class of bug the sim tests
    cannot see.
 
-CI runs tiers 1, 2 and 5 on every PR (the browser suites as a parallel job, so they do
-not slow the golden down). Tiers 3 and 4 are manual: dominance after anything touching AI
+CI runs tiers 1, 2 and 6 on every PR (the browser suites as a parallel job, so they do
+not slow the golden down). Tiers 3, 4 and 5 are manual: dominance after anything touching AI
 behavior, effort, or drafting (box-section wheels are the canary), and ladder after
 anything touching division difficulty or growth.
 
@@ -135,6 +144,7 @@ Revisit only if fields grow beyond 8.
 | Tours / GC / jerseys | Stage times sum into GC, points into green/polka, leaders derived and fed back per stage, fatigue carries | view glue: `finishStage` | `tour.test.js` |
 | Parts and builds | FIVE slots (engine moved to the body), 4-5 trade parts each, 22 in all; balance enforced by the harness, never by hand | `const PARTS` | dominance |
 | Race craft (tactics) | Carry TWO of three, each about a different subject: the RADIO is everything the rivals are doing, the POWER METER is everything you are doing, FEED CRAFT is everything your resources are doing. Every piece of rival information on the HUD is tiered behind the radio (I: attacks and the chase, II: the leader gap, how far clear you are, and the rivals on the profile strip, III: the rail of riders off the top of the screen with exact metres). **There is more than one surface that draws rivals** — the strip was missed in build 15 and shipped ungated while the rail was correctly hidden, so `career.py` counts each surface separately. Carry no radio and you race what you can see. The power meter is the only tactic that does anything in a time trial | `TACTICS`, `you.stats.radio` in `drawHud` | `career.py` (radio gating, carry-two, TT power) |
+| The power meter's reading | It reads SUSTAINABILITY, not just effort: seconds until the legs are gone at exactly this rate, plus a projection slice on the LEGS gauge for the next 10s. Derived from `r.dE`, the per-second energy rate the sim RECORDS as it applies it — never recomputed in the view, because "computed in one function, displayed from another" is how the abandonment line shipped broken. The number moves enormously and none of it was visible before: at 2.4 strokes/s on 70 legs it spans 37s on a wheel on the flat to 10s in the wind on a 9% ramp on a rouleur body. Level I is the live gauge, II adds the reading and the projection, III adds EASE UP. Deliberately NOT speed: a tactic that made you faster would dwarf every measured number in the game and make information something you buy performance with | `r.dE` in `stepRider`, `PM_LOOK`/`PM_ALLDAY`/`PM_WARN`/`PM_REDLINE` in `drawHud` | `node tools/outlook.js` + `career.py` (reading, projection, level gating) |
 | Feed craft's levels | Spelled out per level, NOT ramped, because `reach` and `feedSmooth` are coupled in the sim: extra reach lets you grab past 0.95 and `feedSmooth < 2` stumbles you for it, so a flat ramp made level I worse than carrying nothing. Level I carries `feedSmooth 2` outright. Whole tactic worth under half a place | `TACTICS` `levels`, `st.carbMix` / `st.feedSmooth` in `stepRider` | dominance + the note in DECISIONS.md |
 | Cobbled sectors | A route can be a SECTOR rather than a climb: pave stamped into the surfaces list instead of the terrain, on FLAT days, one per race. Cobbles cut drafting to 0.62 as well as costing drag, grip and punctures, so a sector is where a flat race comes apart. Rated in stars, never in gradients | `isSector`, `c.sector`, `SURFACES.cobbles` | `career.py` (pack contents, sector wording) |
 | Named roads | Every mountain day of every tour climbs a REAL named col, and every stage is titled from a town to a town. Five free roads (Vosges, Jura, Massif Central — ranges no pack claims, so free never cannibalises paid) plus whatever packs you own; paid roads are placed FIRST and take the decisive stages. Stage titles are derived from the seed, never drawn from the course PRNG, and live in the view, so generation is untouched | `ROUTES`, `assignRoute`, `stageTitle` | `career.py` (free roads, pack contents, titles) |

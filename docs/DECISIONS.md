@@ -314,6 +314,70 @@ which supersedes this one). Note that the first phrasing of that recommendation 
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
 
+## The power meter reads what you can hold, not how you pedal (build 22)
+
+Kevin's proposal was to make the power meter powerful by replacing the LEGS gauge with the
+TT rhythm bar and tying speed to pedalling quality: faster for good pedalling, slower for
+bad. Both halves were refused, and then the replacement idea was refused too, and the third
+answer is the one that shipped. The route there is worth keeping, because each step was
+killed by a fact rather than by taste.
+
+**A tactic must never sell speed.** Feed craft measures under half a placing, and the
+division strength ramp deleted in build 16 for being an unfair escalator was 3.5% raw
+speed. Any tactic granting a raw percentage dwarfs every other number in the game, becomes
+a must-pick, and turns information into something you buy performance with. A power meter
+does not produce watts in life either; it is a display.
+
+**Replacing LEGS is a deletion, not a replacement.** LEGS is energy, the power meter reads
+effort. They are different quantities. Gating the bar that tells you whether you are about
+to crack behind a purchase is punitive and unrecoverable.
+
+**Then the road-cadence idea died on the input model, which is the interesting one.** The
+plan was to give the road a moving cadence target, unified with the TT so nobody learns two
+systems. Kevin asked how it would affect jumps, sprints and attacks, and the answer killed
+it. Laying the numbers out: tempo is 2.0 strokes/s, "attack" is labelled at 3.2, effort
+saturates at 4.0, and three alternating strokes inside 0.6s fires a jump. A target near 3.4
+sits **above** the attack threshold and **below** a sprint, so a sprint for the line would
+read "too fast", a jump would read wildly off, and steady riding would read "too slow".
+
+The reason is structural, not tunable. **Real cadence exists because gears let you make the
+same power two ways.** This game has no gear, so rate IS power, there is no such thing as
+grinding, and a cadence target can only ever mean "hold this exact power" — a rhythm-game
+instruction that collides with every aggressive move, because those moves are defined by
+leaving that power. No band width fixes it. (An earlier note in this conversation claimed
+grinding a big gear should burn more fuel. You cannot grind in this game.)
+
+That also explains why the TT rhythm works and is not an oversight: alone, at threshold,
+with no attack and no sprint, "hold this power" genuinely IS the whole stage.
+
+**What shipped instead: the meter reads sustainability.** The sim already computes something
+rich and completely invisible — the same effort costs radically different amounts depending
+on gradient, climbing economy and shelter — and you only ever found out by cracking. The
+meter now reads seconds until the legs are gone, plus a 10s projection slice on the LEGS
+gauge. Measured with `tools/outlook.js` at 2.4 strokes/s on 70 legs:
+
+| | on a wheel | in the wind |
+|---|---|---|
+| flat | 37s | 17s |
+| 4% | 24-28s | 13-15s |
+| 9% | 16-21s | 10-13s |
+
+A 3.7x span corner to corner, and the climbing body separates the rows (climber 21s against
+rouleur 16s at 9% on a wheel). It is information, it needs no new control, and it does not
+collide with attacking, because an attack is knowingly going over your ceiling and that is
+the point.
+
+**Two implementation rules this locked in.** The rate is RECORDED by `stepRider` as
+`r.dE` at the moment it is applied, never recomputed in the view: recomputing is exactly how
+the abandonment line ended up calculated in one function and displayed from another.
+And the thresholds are calibrated to what the sim does rather than to what sounds right —
+everything above tempo is a matches-burning regime measured in SECONDS, so the first pass
+(a 30s redline, a 90s warning) would have painted the gauge red for the entire race.
+
+**Still open:** Kevin wants to ride this before deciding whether to try the gear control,
+which is the only thing that would make real cadence possible. That is a new control on a
+two-thumb interface and probably a port-era conversation.
+
 ## The cobbles pack, and the test shortcut behind a gesture (build 21)
 
 **The cobbles pack was the one that could not be built, and the reason was a category
