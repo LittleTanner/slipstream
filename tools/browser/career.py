@@ -83,6 +83,13 @@ def build_throwaway(scratch):
          "  if ((you.stats.radio || 0) >= 2) {\n"
          "    window.__hud.leader = 1;\n"
          "    label(leader === you ? \"LEADING\""),
+        # Publish how many route packs exist, so the shop test asserts "a card per pack"
+        # rather than a literal count that a new pack silently breaks. Published from the
+        # RENDERER, because ROUTE_PACKS is a const inside the view IIFE and unreachable from
+        # evaluate — the same reason every other assertion here goes through window.
+        ("function renderRoutes() {",
+         "function renderRoutes() {\n  window.__packCount = ROUTE_PACKS.length;"
+         "\n  window.__packIds = ROUTE_PACKS.map(p => p.id);"),
         ("    const lo = Sim.CFG.ease;",
          "    window.__hud.power = 1;\n"
          "    const lo = Sim.CFG.ease;"),
@@ -205,13 +212,15 @@ async def open_case(browser, url, ladder, history, errs, rand_seed=None):
     await ctx.add_init_script(init_script(ladder, history, rand_seed))
     pg = await ctx.new_page()
     pg.on("pageerror", lambda e: errs.append(str(e)))
-    # DO NOT WAIT FOR `load`. It waits on every subresource including the font CDN, which is
-    # blocked here and holds the event until it gives up: measured at 13.2s against this
-    # context's 15s timeout, so the suite was one slow proxy away from failing on page one
-    # and did. Nothing below needs the font, and every case already waits on an explicit
-    # condition (the seeded money reaching the menu status line, immediately after this), so
-    # domcontentloaded is both faster and the honest contract.
-    await pg.goto(url, wait_until="domcontentloaded")
+    # ★ DO NOT WAIT ON ANY EXTERNAL RESOURCE TO CONSIDER THE PAGE OPEN. `load` waits on every
+    # subresource including the blocked font CDN (measured at 13.2s against this context's 15s
+    # timeout, so the suite was one slow proxy from failing on page one, and duly did), and
+    # `domcontentloaded` is no escape either, because a stylesheet in <head> blocks DCL as
+    # well. `commit` means the navigation happened and nothing more, which is all this needs:
+    # the very next line waits on a REAL condition — the seeded money reaching the menu status
+    # line — and that cannot come true until the page has parsed, run and loaded the save.
+    # A page-open assertion should depend on the page, never on a CDN.
+    await pg.goto(url, wait_until="commit", timeout=30000)
     # the save loads asynchronously; the money suffix in the menu status line
     # only exists once the seeded ladder (tours > 0) has been merged in
     await pg.wait_for_function(
@@ -223,8 +232,12 @@ async def open_case(browser, url, ladder, history, errs, rand_seed=None):
 async def read_routes(pg):
     await pg.click("#routesBtn")
     await pg.wait_for_selector("#routes:not(.hide)")
+    # ONE CARD PER PACK, whatever the pack count is. This waited for a literal 3 and broke the
+    # moment a fourth pack shipped, which is a test asserting today's content rather than the
+    # behaviour ("the shop renders every pack"). The count comes from the page's own list.
     await pg.wait_for_function(
-        "() => document.querySelectorAll('#routesBody .card').length === 3")
+        "() => { const n = document.querySelectorAll('#routesBody .card').length;"
+        " return n > 0 && n === window.__packCount; }")
     return await pg.evaluate("""() => {
       const paras = [...document.querySelectorAll('#routesBody p.sub')].map(p => p.textContent);
       const card = document.querySelector('#routesBody .card');   // alps is first
@@ -636,8 +649,12 @@ async def main():
             check("the Pyrenees pack is no longer an empty box",
                   any(p["name"] == "The Pyrenees" and "climb" in p["tag"] for p in packs),
                   "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
-            check("every advertised pack now has roads, including the cobbles",
-                  not empty and len(sellable) == 3,
+            # EVERY pack, however many there are. This asserted a literal 3 and broke the day
+            # a fourth shipped, which tests today's catalogue rather than the rule ("nothing
+            # is ever advertised empty") — the rule that the Pyrenees and the cobbles both
+            # violated for real, which is why the check exists at all.
+            check("every advertised pack has roads in it, whatever the catalogue holds",
+                  not empty and len(sellable) == len(packs) and len(packs) >= 3,
                   "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
             # A sector has no gradient and no summit, so listing it like a climb prints
             # "at undefined%". It is rated in stars, the way pave actually is.
@@ -867,11 +884,15 @@ async def main():
             ([], 3000, True),
             (["cobbles"], 6000, True),
             (["cobbles", "pyrenees"], 12000, True),
-            # a third non-alps id stands in for a future pack: 3000 * 2^3
-            # would be 24000, the cap must hold it at 18000, and with every
-            # catalogued pack counted as owned the "next costs" paragraph is
-            # gone, so the card button is where the cap must show
-            (["cobbles", "pyrenees", "future"], 18000, False),
+            # THE CAP. 3000 * 2^3 would be 24000 and it must hold at 18000.
+            # The price line is still THERE, because alps is still unbought and
+            # `owned < ROUTE_PACKS.length` is the real rule for showing it. This
+            # case used to expect the line GONE, which only held while three packs
+            # existed and a stand-in id ("future") padded the count to match — an
+            # assertion encoding the size of the catalogue rather than a rule. The
+            # "nothing left to buy" half is now its own case below, where it is
+            # actually true.
+            (["cobbles", "pyrenees", "california"], 18000, True),
         ]
         for packs, want, want_para in cases:
             ladder = {"tutorialDone": True, "tours": 1, "money": 1234,
@@ -890,6 +911,36 @@ async def main():
                 check(name, got_btn == want and r["priceLine"] is None,
                       "want %d on the card and no next-costs paragraph; button %s, paragraph %r"
                       % (want, got_btn, r["priceLine"]))
+            await ctx.close()
+
+        # NOTHING LEFT TO BUY. `owned < ROUTE_PACKS.length` is what puts the price line on
+        # screen, so owning every pack is the only state where it should be gone — and it is
+        # a state the priced-card cases can never reach, because they need an unowned card to
+        # read a price off. Derives the full list from the page rather than naming the packs,
+        # so a fifth one does not quietly make this pass for the wrong reason.
+        ctx, pg = await open_case(browser, url, {"tutorialDone": True, "tours": 1,
+                                                 "money": 99999, "packs": []}, [], errs)
+        try:
+            await read_routes(pg)                      # renders once so __packCount exists
+            ids = await pg.evaluate("window.__packIds")
+            await ctx.close()
+            ctx, pg = await open_case(browser, url, {"tutorialDone": True, "tours": 1,
+                                                     "money": 99999, "packs": ids}, [], errs)
+            await pg.click("#routesBtn")
+            await pg.wait_for_selector("#routes:not(.hide)")
+            await pg.wait_for_function("() => document.querySelectorAll('#routesBody .card').length"
+                                       " === window.__packCount")
+            line = await pg.evaluate(
+                "[...document.querySelectorAll('#routesBody p.sub')]"
+                ".map(p => p.textContent).find(t => /costs \\d/.test(t)) || null")
+            buyable = await pg.evaluate(
+                "[...document.querySelectorAll('#routesBody .card .btns button')]"
+                ".filter(b => !b.disabled).length")
+            check("own every pack and the price line has nothing to point at",
+                  line is None, "line %r" % (line,))
+            check("own every pack and nothing is left for sale",
+                  buyable == 0, "%d buyable cards" % buyable)
+        finally:
             await ctx.close()
 
         # ---- 3b. rival information belongs to the race radio -----------------

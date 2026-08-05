@@ -355,7 +355,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 28</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 29</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -1129,6 +1129,19 @@ const ROUTES = [
     note: "Shallow enough to ride fast, long enough that riding it fast is a mistake." },
   { id: "peyresourde", pack: "pyrenees", name: "Col de Peyresourde", km: 13.2, grade: 7.0, top: 1569, summit: false,
     note: "Even gradients the whole way up, which is exactly why it splits a tired bunch." },
+  // --- California. Long, hot, exposed climbs from the state's own racing, and a different
+  // problem from the Alps: nothing here is above 1700 m, so it is not altitude that hurts,
+  // it is length at a steady grade with no shade and no let-up. Real figures, as every named
+  // road in this game uses, so the categories fall out of the climb rather than being set by
+  // hand — Baldy and Palomar both rate HC on their own numbers.
+  { id: "baldy", pack: "california", name: "Mount Baldy", km: 20.4, grade: 6.7, top: 1980, summit: true,
+    note: "Twenty kilometres of it, and the last four hundred metres average thirteen percent." },
+  { id: "palomar", pack: "california", name: "Palomar Mountain", km: 20.0, grade: 6.9, top: 1681, summit: true,
+    note: "Eighteen unbroken hairpins at a metronomic six to eight. Nothing to hide behind." },
+  { id: "gibraltar", pack: "california", name: "Gibraltar Road", km: 14.5, grade: 7.0, top: 1062, summit: true,
+    note: "Off the ocean and straight up. Dry, brushy switchbacks with the sea behind you." },
+  { id: "diablo", pack: "california", name: "Mount Diablo", km: 17.1, grade: 5.7, top: 1173, summit: true,
+    note: "Shallow enough to ride hard all the way, until a wall of a final two hundred metres." },
   // --- the cobbles. A SECTOR, NOT A CLIMB, which is why this pack sat unbuilt while the
   // others shipped: a route stamps a gradient into the terrain, and pave has no gradient.
   // The machinery for it existed all along in SURFACES.cobbles — drag, jostle, lost grip,
@@ -10001,7 +10014,8 @@ const nth = n => {
 const ROUTE_PACKS = [
   { id: "alps", name: "The high Alps", note: "Three passes that decide grand tours." },
   { id: "cobbles", name: "The cobbles", note: "Flat, brutal, and decided by position rather than legs." },
-  { id: "pyrenees", name: "The Pyrenees", note: "Shorter climbs, steeper ramps, no time to recover." }
+  { id: "pyrenees", name: "The Pyrenees", note: "Shorter climbs, steeper ramps, no time to recover." },
+  { id: "california", name: "California", note: "Four long, exposed climbs where the heat and the length do the damage." }
 ];
 // PACKS GET DEARER AS YOU COLLECT THEM, and the price depends on HOW MANY YOU OWN rather
 // than on which pack it is — tie it to the pack and whoever wants the Pyrenees first pays
