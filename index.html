@@ -332,7 +332,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 23</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 24</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -619,43 +619,43 @@ const CFG = {
   // when the rule matters — and false when you are clear off the front. The other half of
   // the gate, "you are contesting the places", is what silences it when you roll in fifth.
   lineWatch: 3.0,
-  // ★ GEARING — PROTOTYPE, OFF UNLESS `race.gears` IS SET. Scaffolding with an expiry date:
-  // if it ships, the golden regenerates and this stops being a branch; if it does not, the
-  // branch comes out. It must not quietly become permanent.
+  // ★ GEARING, AND IT LIVES ON THE RACE OF TRUTH ONLY. It was built for road stages first
+  // and Kevin's verdict after riding it was that it added no fun, only difficulty, which is
+  // what the harness had already said in numbers: the edge was inside the noise and it cost a
+  // permanent control in the row your thumbs cross. A time trial is a different case, and
+  // measurably so — speed there spans 3.5x from the 5th to the 95th percentile at Division 4,
+  // as wide as a road stage, so the right gear genuinely moves through the ride — and your
+  // thumbs are free, because there is no positioning, no attack and no feed to make.
   //
-  // CADENCE COMES FROM ROAD SPEED, NOT FROM POWER. On a real bike cadence is speed divided
-  // by the ratio and you pick the ratio; effort is how hard you push. So the tap loop is
-  // untouched — your taps still mean effort, exactly as today — and the gear decides what
-  // cadence you would be turning at the speed you are doing. That is what makes this work
-  // where a cadence TARGET on the pads could not: a target near 3.4 sits above the attack
-  // threshold and below a sprint, so every aggressive move read as an error (DECISIONS.md,
-  // build 22). Modelling gear as a multiplier on POWER instead fails differently and
-  // obviously: it would put you in a BIG gear on a 9% ramp, backwards from real racing.
+  // ONE CADENCE SYSTEM, NOT TWO. The TT already had a rhythm: your tap rate against a fixed
+  // `ttCadence`. Bolting a second bar beside it, reading "road speed over the ratio", would
+  // have put two definitions of cadence on one screen to disagree with each other. So the
+  // GEAR MOVES THE TARGET instead. Big gear, low target, grinding; small gear, high target,
+  // and you have to tap furiously. The right gear is the one that puts the target where you
+  // can actually hold it, and as the speed climbs a drag the target drifts off and you shift
+  // to bring it back. One bar, one meaning, and the gear is what steers it.
+  //
+  // That also means gearing needs NO cost term of its own. Being in the wrong gear moves the
+  // target away from where you are tapping, `hold` falls, and the existing TT machinery
+  // already charges that in both speed and legs. The road version had a separate `gearCost`
+  // economy penalty and an explicit spin-out cap; both are gone, because both were a second
+  // way of saying what `hold` says.
   //
   // ONE FLAG, not a parameter threaded through eleven createRace call sites. Missing one
   // would silently disable gearing on that path only, and "the two halves exist but are
   // not in the same scope" is the failure this project has shipped more than once. The
   // race RECORDS it at creation, so a race never changes rules underneath itself and
-  // determinism holds. Default false, so the golden generator sees today's sim exactly.
+  // determinism holds.
   gearsOn: false,
-  // Six ratios, geometric at ~1.26 a click, 1.00 at gear 4. The range is 3.2x because that
-  // is the SPEED range a stage actually puts you through, MEASURED rather than guessed: over
-  // full stages the 1st to 99th percentile runs about 5 to 16 m/s (`tools/gearing.js`). The
-  // first pass used 4x, calibrated off a rider held at one fixed effort in still air, which
-  // is not a speed range any stage produces.
+  // Six ratios, geometric at ~1.26 a click. Calibrated so gears 1 to 6 put the target at
+  // `ttCadence` across the TT's MEASURED speed range, 5.0 to 16.0 m/s (`tools/gearing.js`
+  // drives full time trials with the sim's own AI). Below gear 1 you are spinning however
+  // small you go; above gear 6 you are grinding however big.
   gearRatios: [0.50, 0.63, 0.79, 1.00, 1.26, 1.59],
-  gearStart: 4,
-  // cadence = speed / (ratio * cadScale), set so gear 4 at a fast bunch pace lands dead on
-  // the target. The default gear at the default pace being the neutral case is what makes
-  // "gears off" and "gear 4 on the flat" comparable at all.
-  cadScale: 3.93, cadTarget: 2.8, cadBand: 0.85,
-  cadMax: 4.6,                        // past this you physically cannot turn them over
-  // Economy penalty per unit of cadence outside the band. 0.75 made IGNORING the gears the
-  // optimal play (the wrong gear cost less than the shifts to fix it), which is the worst
-  // outcome a mechanic can have. 1.5 is the only setting that measured a positive edge on a
-  // seed set it was not chosen on, and even that is only +0.17 places. See DECISIONS.md: a
-  // 12-race sweep claimed +1.02 for a different cell and it did not reproduce at 32 races.
-  gearCost: 1.5,
+  gearStart: 3,
+  // target cadence = speed / (ratio * cadScale). 2.96 puts gear 6 dead on `ttCadence` at the
+  // TT's 95th-percentile speed and gear 1 dead on it at the 5th.
+  cadScale: 2.96,
   // A SHIFT COSTS WHAT IT COSTS IN LIFE. The chain takes a moment to move, and shifting
   // under full load is the mistake: you lose a beat, which is why riders shift BEFORE the
   // ramp and ease as they do it. Free and instant shifting would just be another
@@ -2108,10 +2108,12 @@ function createRace(opts) {
     breakaway: [], breakGap: 0, over: false, events: [],
     // GEARING, prototype. Absent unless a caller asks for it, so every existing caller —
     // the golden generator included — gets a race that is bit-identical to before.
-    gears: opts.gears === undefined ? CFG.gearsOn : !!opts.gears,
+    // TIME TRIALS ONLY, decided here so every downstream reader is automatically gated and
+    // no road-stage path can grow a gear by accident.
+    gears: (opts.gears === undefined ? CFG.gearsOn : !!opts.gears) && !!course.spec.tt,
     leaders: opts.leaders || {}
   };
-  if (race.gears) { you.gear = CFG.gearStart; you.shiftT = 0; you.shiftLoad = 0; you.cad = 0; you.cadOff = 0; }
+  if (race.gears) { you.gear = CFG.gearStart; you.shiftT = 0; you.shiftLoad = 0; you.cadTgt = CFG.ttCadence; you.gearIdeal = CFG.gearStart; }
   if (ttGap > 0) {
     // Reverse GC order: the rider lying last sets off first, the leader goes off last, as
     // in the sport. With no GC yet (practice, a one-day TT) it falls back to rider index,
@@ -3416,12 +3418,6 @@ function stepRider(race, r, dt) {
   if (r.trainBoost > 0 && de > 0) de *= 1.22;
   if (r.carTow > 0 && de > 0) de *= 1 + CFG.carRecover * r.carTow;
   else if (r.carTow > 0) de += CFG.carRecover * 0.9 * r.carTow;
-  // GEARING: the wrong gear costs you ECONOMY, not speed. Grinding a big gear up a ramp or
-  // spinning a small one on the flat burns through the legs faster for the same effort, so
-  // it hurts later rather than now — which is what keeps a road stage a race, because you
-  // can knowingly stay in the wrong gear to hold a wheel and pay for it on the climb.
-  // Only ever the player: `cadOff` is set by the input pipeline, so rivals are untouched.
-  if (race.gears && de < 0 && r.cadOff) de *= 1 + CFG.gearCost * r.cadOff;
   if (race.neutral) de = 0;                 // nothing is spent before the flag drops
   // ★ RECORD THE RATE, DO NOT RECOMPUTE IT. The power meter reads how long you can hold
   // what you are doing, and the honest way to know that is the number the legs are
@@ -3919,9 +3915,10 @@ function step(race, frameDt, input) {
         const over = clamp((input.rate - CFG.strokeTempo) / (CFG.strokeAttack - CFG.strokeTempo), 0, 1);
         ev = CFG.tempo + (you.stats.attack - CFG.tempo) * over;
       }
-      // ★ GEARING (prototype, only when the race was created with it). Everything above is
-      // untouched: taps are still effort. What the gear decides is the CADENCE those legs
-      // are turning at the speed you are doing, and three things follow from it.
+      // ★ GEARING, TIME TRIALS ONLY. `race.gears` is already gated on the stage, so this
+      // block simply does not exist on a road day. It holds the SHIFTER: the gear and the
+      // chain timer. What the gear does to the riding is one line further down, where it
+      // moves the rhythm target rather than running a cadence model of its own.
       if (race.gears) {
         // The chain takes a moment, and a shift only lands when one is not already running,
         // so holding a chevron down cannot machine-gun through the block.
@@ -3938,21 +3935,6 @@ function step(race, frameDt, input) {
             you.shiftLoad = clamp((ev - CFG.tempo) / (you.stats.attack - CFG.tempo), 0, 1);
           }
         }
-        const ratio = CFG.gearRatios[clamp((you.gear || CFG.gearStart), 1, CFG.gearRatios.length) - 1];
-        // Cadence is road speed over the ratio. Grinding on a climb in a big gear and
-        // spinning out on the flat in a small one both fall straight out of this.
-        you.cad = you.speed / (ratio * CFG.cadScale);
-        // SPUN OUT is a hard limit, not a tax: past `cadMax` your legs cannot go round any
-        // faster, so the power simply is not available however hard you tap. That is what
-        // makes a small gear a real decision rather than a free one.
-        const over = Math.max(0, you.cad - CFG.cadMax);
-        if (over > 0) ev = Math.min(ev, CFG.tempo + (ev - CFG.tempo) * Math.max(0, 1 - over / 1.5));
-        // Off the comfortable band costs ECONOMY, never speed — the same split build 22
-        // settled on. Read by stepRider, which owns the energy and fuel terms.
-        you.cadOff = Math.max(0, Math.abs(you.cad - CFG.cadTarget) - CFG.cadBand);
-        // Mid-shift the chain is between sprockets and the power is not going anywhere.
-        if (you.shiftT > 0)
-          ev = CFG.idle + (ev - CFG.idle) * (1 - CFG.shiftBite * (you.shiftLoad || 0) * (you.shiftT / CFG.shiftTime));
       }
       if (input.ease) ev = CFG.ease;
       // HOLD THE BRAKE AND YOU STOP. Easing only ever dropped you to soft-pedalling pace,
@@ -3980,11 +3962,44 @@ function step(race, frameDt, input) {
         // Far more forgiving at the bottom, tighter at the top: Division 8 should be able
         // to find the rhythm by feel, Division 1 should have to hold it precisely.
         const band = CFG.ttBand * (1.9 - 1.15 * race.D.t);
+        // ★ WITH GEARS, THE GEAR MOVES THE TARGET. Without them the target is the fixed
+        // `ttCadence` it has always been. A bigger gear turns slower at the same road speed,
+        // so it pulls the target DOWN toward grinding; a smaller one pushes it up until you
+        // cannot tap fast enough. The right gear is whichever puts the target back at the
+        // cadence a rider actually sustains, which is `ttCadence` — so the ideal gear is a
+        // pure function of your speed, and it drifts as the speed does.
+        // DELIBERATELY ONE SYSTEM: there is no second cadence here and no separate economy
+        // penalty for the wrong gear. The wrong gear moves the target away from your taps,
+        // `hold` falls, and `hold` is already charged in speed here and in legs in stepRider.
+        const ratio = race.gears
+          ? CFG.gearRatios[clamp(you.gear || CFG.gearStart, 1, CFG.gearRatios.length) - 1] : 1;
+        // ★ FLOORED AT TEMPO, AND THAT FLOOR IS LOAD-BEARING. Without it the rule spirals:
+        // a low speed makes a low target, tapping at a low target makes less power (the
+        // `pedal` term below is proportional to rate up to `strokeTempo`), less power makes a
+        // lower speed, and the target chases it down to a standstill. Measured before the
+        // fix: a Division 1 ride took 1799s against a normal 108s. A rider getting going
+        // pedals harder than their efficient cadence, so the target never instructs you
+        // below tempo — and at crawling speed every gear reads the same, which is true: your
+        // gear hardly matters at 5 km/h, you are just getting the thing moving.
+        const tgt = race.gears
+          ? Math.max(CFG.strokeTempo, you.speed / (ratio * CFG.cadScale)) : CFG.ttCadence;
+        you.cadTgt = tgt;
+        if (race.gears) {
+          // Which gear would put the target closest to a cadence you can hold? Computed
+          // here, beside the rule, so the ladder the view draws cannot disagree with what
+          // the riding actually rewards.
+          let bi = 0, bd = Infinity;
+          for (let i = 0; i < CFG.gearRatios.length; i++) {
+            const d = Math.abs(you.speed / (CFG.gearRatios[i] * CFG.cadScale) - CFG.ttCadence);
+            if (d < bd) { bd = d; bi = i; }
+          }
+          you.gearIdeal = bi + 1;
+        }
         // Smoothed, because raw tap rate jitters between strokes: unsmoothed it made the
         // bar twitch AND meant you were being judged on the jitter rather than the rhythm.
         you.ttRate = you.ttRate === undefined ? input.rate
           : you.ttRate + (input.rate - you.ttRate) * Math.min(1, frameDt * 3.2);
-        const hold = clamp(1 - Math.abs(you.ttRate - CFG.ttCadence) / band, 0, 1);
+        const hold = clamp(1 - Math.abs(you.ttRate - tgt) / band, 0, 1);
         const pedal = clamp(input.rate / CFG.strokeTempo, 0, 1);
         you.ttHold = hold;
         // The rhythm pays THRESHOLD effort, not attack. Mapping it to attack made holding
@@ -3992,7 +4007,12 @@ function step(race, frameDt, input) {
         // opposite of a race of truth. A TT is ridden at the hardest pace you can SUSTAIN.
         const peak = CFG.tempo + (you.stats.attack - CFG.tempo) * CFG.ttPeak;
         ev = CFG.idle + (peak - CFG.idle) * pedal * (0.55 + 0.45 * hold);
-      } else you.ttHold = null;
+        // Mid-shift the chain is between sprockets and the power is not going anywhere.
+        // Applied AFTER the rhythm sets the effort, so a shift costs you a beat of the pace
+        // you were holding rather than quietly rewriting what the rhythm was worth.
+        if (race.gears && you.shiftT > 0)
+          ev = CFG.idle + (ev - CFG.idle) * (1 - CFG.shiftBite * (you.shiftLoad || 0) * (you.shiftT / CFG.shiftTime));
+      } else { you.ttHold = null; you.cadTgt = null; }
       you.effV = ev;
       // In a TT the rhythm owns both of these. Left on raw rate, `spin` handed over-spinning
       // a flat +14% of power and the "attack" label on top, which beat the rhythm bonus
@@ -4720,9 +4740,11 @@ function startStage() {
 // ---------------------------------------------------------------- input
 const keys = new Set();
 let btn = { ease: false, attack: false };
-// GEARING, prototype. A view-side mirror of Sim.CFG.gearsOn, read by btnR() and the input
-// handlers. The debug panel sets both together; nothing else touches it, and it is not
-// persisted, so a reload comes up in the shipped configuration.
+// GEARING, prototype. A view-side mirror of Sim.CFG.gearsOn so the debug panel can paint its
+// own button state. NOTHING ELSE READS IT: the layout and the input handlers all read
+// `race.gears`, which the sim decides and which is already gated on the stage being a time
+// trial. That is deliberate — a second switch the view could disagree with is how half a
+// mechanic ships. Not persisted, so a reload comes up in the shipped configuration.
 let gearsOn = false;
 const touches = new Map();     // id -> { x, y, t }
 let binRect = null, binHit = false;
@@ -4799,7 +4821,10 @@ function btnR() {
   // shifters are always live, so the shifters take the fixed corners. DOWN on the left,
   // UP on the right, matching the pads underneath them, where the left is ease and the
   // right is attack — so "right means more" needs no learning.
-  const shW = gearsOn ? Math.max(50, Math.min(76, W * 0.135)) : 0;
+  // A ROAD STAGE NEVER GIVES UP THE ROOM, because gearing is a time-trial mechanic: the
+  // road version added difficulty without fun and is gone. `race.gears` is already gated on
+  // the stage, so reading it here is what keeps the road layout byte-for-byte as it was.
+  const shW = (race && race.gears) ? Math.max(50, Math.min(76, W * 0.135)) : 0;
   const rowY = y - 62, rowH = 56;
   return { h, w, y, easeX: m, atkX: W / 2 + m * 0.5,
     thX: m + shW, thY: rowY, thW: W - m * 2 - shW * 2, thH: rowH,
@@ -4827,8 +4852,8 @@ addEventListener("keydown", e => {
     // Shifting from the keyboard, so the prototype can be driven and measured on a desktop
     // without anyone having to hit a 50px target with a mouse. `,` and `.` carry the
     // chevrons on a real keyboard already; the arrows are taken (up throws, down eases).
-    if (gearsOn && (e.key === "." || e.key === ">")) btn.shiftUp = true;
-    if (gearsOn && (e.key === "," || e.key === "<")) btn.shiftDown = true;
+    if (race && race.gears && (e.key === "." || e.key === ">")) btn.shiftUp = true;
+    if (race && race.gears && (e.key === "," || e.key === "<")) btn.shiftDown = true;
   }
   keys.add(e.key);
 });
@@ -4867,7 +4892,7 @@ function down(id, x, y) {
   // FIRST or the narrowed action rect would still swallow the corners on any layout where
   // the two ever overlap. One tap is one shift: the sim refuses a second while the chain
   // is still moving, so holding a chevron cannot machine-gun through the block.
-  if (gearsOn && race && !race.over && y > bb.shY && y < bb.shY + bb.shH) {
+  if (race && race.gears && !race.over && y > bb.shY && y < bb.shY + bb.shH) {
     if (x >= bb.shDownX && x < bb.shDownX + bb.shW) { btn.shiftDown = true; return; }
     if (x >= bb.shUpX && x < bb.shUpX + bb.shW) { btn.shiftUp = true; return; }
   }
@@ -6144,8 +6169,12 @@ function drawHud(dt) {
     const col = redline ? PAL.spot : ttl < PM_WARN ? PAL.fuel : "#4A4E4B";
     // On a TT the three gauges never drew, so gx is still at the left margin where the
     // rhythm bar is about to go. Clear it deliberately rather than by one gauge step, or
-    // the POWER column lands on the rhythm bar's shoulder.
-    gx = ttOnly ? pad + Math.max(20, gw * 2.1) + 20 : gx + gstep;
+    // the POWER column lands on the rhythm bar's shoulder. With gears there is a gear
+    // ladder on the rhythm bar's right as well, so clear that too — the ladder is drawn
+    // AFTER this, and would otherwise paint straight over the POWER gauge.
+    const ttBw = Math.max(20, gw * 2.1);
+    const ladderW = race.gears ? 13 + Math.max(13, ttBw * 0.62) : 0;
+    gx = ttOnly ? pad + ttBw + ladderW + 20 : gx + gstep;
     gauge(gx, gy, gw, gh, pmVal, col, "POWER");
     // The readout is the feature. "ALL DAY" rather than a number when you are inside your
     // own ceiling, because a rider who is riding within themselves does not need a clock —
@@ -6170,7 +6199,11 @@ function drawHud(dt) {
     const shownSrc = you.ttRate === undefined ? lastRate : you.ttRate;
     ttShown += (Math.min(shownSrc, maxRate) - ttShown) * Math.min(1, dt * 2.6);   // smoothed: raw taps jitter
     const yOf = v => by + bh2 * (1 - clamp(v / maxRate, 0, 1));
-    const tgt = Sim.CFG.ttCadence;
+    // THE TARGET IS LIVE, because with gears the gear moves it. Read from the sim rather
+    // than recomputed from CFG here: recomputing is how the abandonment line ended up
+    // calculated in one function and displayed from another. Without gears `cadTgt` is
+    // `ttCadence` and the bar is exactly what it always was.
+    const tgt = (you.cadTgt === null || you.cadTgt === undefined) ? Sim.CFG.ttCadence : you.cadTgt;
     const band = Sim.CFG.ttBand * (1.9 - 1.15 * race.D.t) * 0.35;   // the green pocket
     const hold = you.ttHold === null || you.ttHold === undefined ? 0 : you.ttHold;
     const inPocket = Math.abs(ttShown - tgt) <= band;
@@ -6191,6 +6224,33 @@ function drawHud(dt) {
     label("RHYTHM", bx + bw / 2, by - 7, 9, 700, "rgba(46,49,47,.5)", "center", 0.3);
     label(inPocket ? "ON IT" : ttShown > tgt ? "TOO FAST" : "TOO SLOW",
       bx + bw / 2, by + bh2 + 14, 8.5, 700, col, "center", 0.5);
+    // ★ THE GEAR LADDER, beside the rhythm bar rather than a second cadence bar next to it.
+    // Kevin asked for "a bar for the ideal gear" and a literal second bar would have put two
+    // definitions of cadence on one screen to contradict each other. This is an INDEX INTO
+    // THE GEARS instead: six rungs, the one you are in filled, the one to aim for ringed. It
+    // cannot disagree with the rhythm bar because it is not measuring cadence at all.
+    if (race.gears) {
+      const lx = bx + bw + 13, lw = Math.max(13, bw * 0.62);
+      const n = Sim.CFG.gearRatios.length;
+      const rh = bh2 / n, gap = 3;
+      const gNow = you.gear || Sim.CFG.gearStart, gWant = you.gearIdeal || gNow;
+      label("GEAR", lx + lw / 2, by - 7, 9, 700, "rgba(46,49,47,.5)", "center", 0.3);
+      for (let i = 1; i <= n; i++) {
+        // Rung 1 at the BOTTOM, so a bigger gear is higher up and "shift up" moves up the
+        // ladder. A ladder that ran the other way would fight the chevrons under it.
+        const ry = by + bh2 - i * rh + gap / 2, rHt = rh - gap;
+        const isNow = i === gNow, isWant = i === gWant;
+        ctx.fillStyle = isNow ? PAL.ink : "rgba(46,49,47,.11)";
+        roundRect(lx, ry, lw, rHt, 3); ctx.fill();
+        if (isWant && !isNow) {
+          ctx.strokeStyle = PAL.green; ctx.lineWidth = 2;
+          roundRect(lx, ry, lw, rHt, 3); ctx.stroke();
+        }
+      }
+      label(gWant === gNow ? "RIGHT GEAR" : gWant > gNow ? "SHIFT UP" : "SHIFT DOWN",
+        lx + lw / 2, by + bh2 + 14, 8, 700,
+        gWant === gNow ? PAL.green : PAL.fuel, "center", 0.4);
+    }
   }
   // SHELTERING WARNING. A fine you did not see coming is just a mugging, so the moment you
   // are in someone's shelter a bar fills toward the limit and tells you to pull out. It is
@@ -6306,27 +6366,36 @@ function drawHud(dt) {
   if (Math.abs(gNow2) > 0.06)
     label(M.grade(gNow2), W - pad, b.y - 50, 15, 700,
       gNow2 > 0 ? PAL.spot : PAL.water, "right", 0.4);
-  // SPEED MOVES TO THE TOP when gearing is on, because the shifters need the corners of
-  // the row it used to sit above. Top CENTRE rather than the top-right column: the right
-  // is already the leader gap, points and KOM stacked, and the centre is empty below the
-  // radio strip. Only under the toggle, so the shipped layout is untouched.
-  if (gearsOn) {
-    label(M.speed(you.speed).toFixed(0), W / 2, topBar + 84, 26, 700, PAL.ink, "center", -0.5);
-    label(M.speedTag(), W / 2, topBar + 98, 9.5, 500, "rgba(46,49,47,.42)", "center", 1.4);
+  // SPEED SITS WHERE IT ALWAYS DID on a road stage. It was briefly moved to the top centre
+  // to make room for the shifters; Kevin did not like it there, and once gearing became a
+  // time-trial-only mechanic there was no reason for a road stage to give up the space at
+  // all. In a TT it moves up under the clock, which is where a time triallist's numbers
+  // belong and where there is room, because a TT draws no LEGS, FOOD or FLUID.
+  if (race.gears) {
+    label(M.speed(you.speed).toFixed(0), W - pad, yTop + 96, 22, 700, PAL.ink, "right", -0.4);
+    label(M.speedTag(), W - pad, yTop + 108, 9.5, 500, "rgba(46,49,47,.42)", "right", 1.4);
   } else {
     label(M.speed(you.speed).toFixed(0), W - pad, b.y - 16, 28, 700, PAL.ink, "right", -0.5);
     label(M.speedTag(), W - pad, b.y - 2, 10, 500, "rgba(46,49,47,.42)", "right", 1.4);
   }
-  // ★ THE SHIFTERS. Down on the left, up on the right, in the corners of the action row.
-  // The pill shows the gear you are in and colours by CADENCE: green inside the band,
-  // amber drifting, orange grinding or spun out. That colour is the whole feedback loop —
-  // it is what tells you to shift before the ramp rather than after it — and it reads off
-  // `cadOff`, which the sim computes, so it can never disagree with what you are charged.
-  if (gearsOn && race.gears && !race.over) {
-    const cadOff = you.cadOff || 0;
-    const gcol = cadOff <= 0.01 ? PAL.green : cadOff < 0.6 ? PAL.fuel : PAL.spot;
-    const chev = (cx, cy, up) => {
-      ctx.strokeStyle = "rgba(46,49,47,.62)"; ctx.lineWidth = 3.2;
+  // ★ THE SHIFTERS. Down on the left, up on the right, in the corners of the action row,
+  // matching the pads underneath them where left is ease and right is attack. The pill
+  // shows the gear you are in, coloured by how far the rhythm target has drifted from a
+  // cadence you can hold — which is the same `ttHold` the riding is scored on, so the
+  // colour can never disagree with what you are being charged.
+  if (race.gears && !race.over) {
+    const off = Math.abs((you.cadTgt === null || you.cadTgt === undefined ? Sim.CFG.ttCadence : you.cadTgt) - Sim.CFG.ttCadence);
+    const gcol = off < 0.35 ? PAL.green : off < 0.9 ? PAL.fuel : PAL.spot;
+    // ★ POINT AT THE BUTTON, DO NOT NAME THE SYMPTOM. The first version printed SPINNING or
+    // GRINDING, which made you translate "spinning" into "too fast" into "bigger gear" into
+    // "right chevron" — three steps of thought while your thumbs are pedalling, and Kevin's
+    // first question after riding it was how he was supposed to know whether to shift. The
+    // chevron you need now lights up and the other one dims. Zero translation.
+    const gNow = you.gear || Sim.CFG.gearStart, gWant = you.gearIdeal || gNow;
+    const wantUp = gWant > gNow, wantDown = gWant < gNow;
+    const chev = (cx, cy, up, live) => {
+      ctx.strokeStyle = live ? PAL.ink : "rgba(46,49,47,.28)";
+      ctx.lineWidth = live ? 4 : 3;
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.beginPath();
       ctx.moveTo(cx - 9, cy + (up ? 5 : -5));
@@ -6334,12 +6403,12 @@ function drawHud(dt) {
       ctx.lineTo(cx + 9, cy + (up ? 5 : -5));
       ctx.stroke();
     };
-    for (const s of [{ x: b.shDownX, up: false }, { x: b.shUpX, up: true }]) {
-      ctx.fillStyle = "rgba(244,242,236,.90)";
+    for (const s of [{ x: b.shDownX, up: false, live: wantDown }, { x: b.shUpX, up: true, live: wantUp }]) {
+      ctx.fillStyle = s.live ? "rgba(230,159,0,.20)" : "rgba(244,242,236,.90)";
       roundRect(s.x, b.shY, b.shW, b.shH, 14); ctx.fill();
-      ctx.strokeStyle = "rgba(46,49,47,.20)"; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = s.live ? gcol : "rgba(46,49,47,.20)"; ctx.lineWidth = s.live ? 2.2 : 1.5;
       roundRect(s.x, b.shY, b.shW, b.shH, 14); ctx.stroke();
-      chev(s.x + b.shW / 2, b.shY + b.shH * 0.38, s.up);
+      chev(s.x + b.shW / 2, b.shY + b.shH * 0.40, s.up, s.live);
       // MID-SHIFT IS VISIBLE. The chain is moving and the power is gone; without showing
       // it, a lost beat reads as the game dropping an input rather than as the cost of
       // shifting under load, which is the one thing this mechanic is trying to teach.
@@ -6350,11 +6419,8 @@ function drawHud(dt) {
         ctx.fillRect(s.x, b.shY, b.shW, b.shH * (you.shiftT / Sim.CFG.shiftTime));
         ctx.restore();
       }
-      label(String(you.gear || Sim.CFG.gearStart), s.x + b.shW / 2, b.shY + b.shH - 9,
-        13, 700, gcol, "center", 0.6);
     }
-    label(cadOff <= 0.01 ? "GEARED" : (you.cad || 0) > Sim.CFG.cadTarget ? "SPINNING" : "GRINDING",
-      W / 2, b.shY - 8, 9, 700, gcol, "center", 1.2);
+    label("GEAR " + gNow, W / 2, b.shY + b.shH - 10, 11, 700, gcol, "center", 1.0);
   }
 
   // Riders off the top of the screen, as pips on a rail with how far up the road they
@@ -8265,11 +8331,13 @@ function renderDebug() {
       // Solid vs ghost is the file's existing on/off convention for a `.go` button; the
       // `.on` class only styles `.card .btns button`, so it would do nothing here.
       b.className = gearsOn ? "go" : "go ghost";
-      b.textContent = "Gearing: " + (gearsOn ? "ON" : "off") + " · 6 speed";
+      b.textContent = "Gearing in time trials: " + (gearsOn ? "ON" : "off") + " · 6 speed";
       note.textContent = (gearsOn
-        ? "On from the NEXT race you start: a race records the rules when it is created, so an in-progress stage is left alone rather than having its physics changed under a result. "
-        : "Off from the next race you start. ")
-        + "Chevrons sit at the ends of the action row, down on the left and up on the right, or , and . on a keyboard. Six ratios. Cadence is road speed over the ratio, so a big gear grinds on a climb and a small one spins out on the flat and caps your power. The wrong gear costs legs, never speed. Shifting under load costs you a beat, so shift before the ramp.";
+        ? "On from the NEXT time trial you start: a race records the rules when it is created, so an in-progress stage is left alone rather than having its physics changed under a result. "
+        : "Off from the next time trial you start. ")
+        + "TIME TRIALS ONLY. On road stages it added difficulty without fun, so that half is gone. "
+        + "Six ratios, and the gear MOVES the rhythm target rather than adding a second bar to argue with it: a bigger gear turns slower at the same road speed, so it pulls the target down toward grinding, and a smaller one pushes it up until you cannot tap fast enough. The gear ladder beside the rhythm bar rings the one to aim for. "
+        + "Chevrons sit at the ends of the action row, down on the left and up on the right, or , and . on a keyboard. Shifting under load costs you a beat, so shift before the drag, not on it.";
     };
     b.addEventListener("click", () => {
       gearsOn = !gearsOn;

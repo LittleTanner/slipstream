@@ -314,7 +314,65 @@ which supersedes this one). Note that the first phrasing of that recommendation 
 "steeper and longer climbs" would have made route packs pay-to-win, and only the length and
 preamble of the day are safe to scale.
 
-## Gearing: built behind a toggle, and the numbers cannot tell you whether it is good (build 23)
+## Gearing found its home: time trials, where the gear moves the rhythm target (build 24)
+
+Kevin rode the road version and his verdict was that it added no fun, only difficulty. The
+harness had already said the same in numbers (see the section below). So the road path is
+gone and gearing lives on the race of truth, which is a better fit for reasons that measure:
+
+- **TT speed spans 3.5x** from the 5th to the 95th percentile at Division 4, as wide as a
+  road stage, so the right gear genuinely moves through the ride. This was the objection that
+  could have killed it — a short flat TT would mean one shift at the start and a setup screen
+  rather than a mechanic — and it did not survive contact with the measurement.
+- Your thumbs are free. No positioning, no attack, no feed to take.
+- A TT is already about holding a rhythm, so the gear has something to act on.
+
+**The gear moves the target. It does not get a bar of its own.** Kevin asked for "a bar next
+to rhythm for the ideal gear", and a literal second bar would have put two definitions of
+cadence on one screen to contradict each other — the exact two-systems problem he had asked
+to avoid one message earlier. Instead the target the rhythm bar already draws stops being a
+fixed `ttCadence` and becomes `speed / (ratio * cadScale)`. A bigger gear turns slower at the
+same road speed, so it pulls the target down toward grinding; a smaller one pushes it up until
+you cannot tap fast enough. The right gear is the one that puts the target back where a rider
+sustains it, so the ideal gear is a function of your speed and it drifts as the speed does.
+What sits beside the bar is a GEAR LADDER, an index into the six ratios with the one to aim
+for ringed, which cannot contradict the rhythm bar because it is not measuring cadence.
+
+**That also deleted two mechanisms.** The road version had a separate `gearCost` economy
+penalty and an explicit spin-out power cap. Both are gone: the wrong gear moves the target
+away from your taps, `hold` falls, and `hold` is already charged in speed here and in legs in
+`stepRider`. Two ways of saying the same thing is one too many.
+
+**One load-bearing floor, found by measurement.** The target is `max(strokeTempo, ...)`.
+Without it the rule spirals: a low speed makes a low target, tapping at a low target makes
+less power (the `pedal` term is proportional to rate up to `strokeTempo`), less power makes a
+lower speed, and the target chases it to a standstill. A Division 1 ride measured **1799s
+against a normal 108s**. A rider getting going pedals harder than their efficient cadence, so
+the target never instructs below tempo — and at crawling speed every gear reads alike, which
+is true.
+
+**What it is worth, confirmed on two seed sets.** Chasing the ideal gear against sitting in
+one, median TT time: +0.7s / +4.9s / +5.8s at Divisions 8 / 4 / 1 on the first set, and
++0.3s / +1.3s / +14.1s on seeds the tuning never saw. Both sets agree in sign at every
+division and both show the gain GROWING with division, which is what Kevin wanted from it.
+Against mashing the chevrons it is 8 to 28 seconds. In a ~140s time trial, five seconds is a
+result. That is a far cleaner reading than the road version ever produced, and the reason is
+structural: a TT is scored on a continuous clock with no bunch, where the road was scored on a
+finishing rank with twenty riders interacting.
+
+**Two harness faults worth keeping.** A mean over six seeds reported a Division 1 ride at
+1796s because one of them ended in the broom wagon carrying the +9999 sentinel that DEV-LOOP
+already flags as expected; it read exactly like a catastrophic bug in the mechanic. Medians
+with DNFs counted separately. And the harness never steers or brakes (`tx: you.x`), which
+DEV-LOOP warns makes corners look unmakeable: the DNFs at Division 1 are the FASTER policy
+arriving at a bend quicker and crashing out on the same metre where the slower one crashes,
+takes a team car and rides on. Harness, not mechanic.
+
+**The golden does not regenerate.** `CFG.gearsOn` is false in a shipped build and the golden
+never turns it on, so TT times only move with the toggle. An earlier note in this
+conversation said the golden would have to be regenerated; that was wrong.
+
+## Gearing on the road: built behind a toggle, and the numbers could not tell you whether it was good (build 23)
 
 Kevin asked for gearing behind a debug toggle so he could try it without disturbing what
 ships. It is built, it is mechanically correct, and **its competitive value is inside the
