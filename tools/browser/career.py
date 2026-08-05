@@ -205,7 +205,13 @@ async def open_case(browser, url, ladder, history, errs, rand_seed=None):
     await ctx.add_init_script(init_script(ladder, history, rand_seed))
     pg = await ctx.new_page()
     pg.on("pageerror", lambda e: errs.append(str(e)))
-    await pg.goto(url)
+    # DO NOT WAIT FOR `load`. It waits on every subresource including the font CDN, which is
+    # blocked here and holds the event until it gives up: measured at 13.2s against this
+    # context's 15s timeout, so the suite was one slow proxy away from failing on page one
+    # and did. Nothing below needs the font, and every case already waits on an explicit
+    # condition (the seeded money reaching the menu status line, immediately after this), so
+    # domcontentloaded is both faster and the honest contract.
+    await pg.goto(url, wait_until="domcontentloaded")
     # the save loads asynchronously; the money suffix in the menu status line
     # only exists once the seeded ladder (tours > 0) has been merged in
     await pg.wait_for_function(
@@ -326,6 +332,87 @@ async def main():
         check("relegation cannot withdraw the tour you are holding",
               bool(three_week) and not three_week[0]["disabled"],
               "cards rendered %r" % (names,))
+
+        # ---- 4ter. build your own race ---------------------------------------
+        # Two rules keep a custom race from eating the career, and only one of them is the
+        # use limit: the purse scales with what you BUILT (so a soft race pays soft money and
+        # farming defeats itself) and it never touches the ladder or your wins. Every one of
+        # those is asserted here, because "the builder opens" proves none of them.
+        ctx, pg = await open_case(browser, url,
+                                  {"tutorialDone": True, "div": 5, "tours": 4, "money": 700}, [], errs)
+        try:
+            await pg.click("#startBtn")
+            await pg.wait_for_selector("#pick:not(.hide)")
+            byo = pg.locator("#pickBody .card", has_text="Build your own")
+            check("builder: the picker offers it", await byo.count() == 1,
+                  "cards %r" % (await pg.evaluate(
+                      "[...document.querySelectorAll('#pickBody .card b')].map(b => b.textContent)"),))
+            check("builder: a fresh division has its ranked race",
+                  (await byo.locator(".pips").text_content() or "").strip() == "one a division",
+                  "tag %r" % (await byo.locator(".pips").text_content(),))
+            await byo.locator(".btns button").click()
+            await pg.wait_for_selector("#builder:not(.hide)")
+            # REGISTERED WITH show(): an unregistered screen leaves the previous one visible
+            # underneath, which is a bug class this codebase has shipped before.
+            leaked = await pg.evaluate(
+                "['menu','pick','settings','build'].filter(id =>"
+                " !document.getElementById(id).classList.contains('hide'))")
+            check("builder: the screen is registered, nothing shows underneath",
+                  not leaked, "still visible: %r" % (leaked,))
+
+            days = lambda: pg.locator("#cbDays .cbStage").count()
+            check("builder: three days by default", await days() == 3, "%d rows" % await days())
+            await pg.locator("#cbLen button", has_text="7 days").click()
+            check("builder: the length picker adds days", await days() == 7, "%d rows" % await days())
+            await pg.locator("#cbLen button", has_text="3 days").click()
+
+            # THE PURSE MUST FALL FOR A SOFT BUILD. This is the rule that makes farming
+            # pointless, so it is asserted as a NUMBER, not as the presence of a sentence.
+            async def purse():
+                t = await pg.locator("#cbPurse").text_content() or ""
+                m = re.search(r"(\d+)%", t)
+                return int(m.group(1)) if m else None
+            for row in range(3):
+                await pg.locator("#cbDays .cbStage").nth(row).locator(
+                    "button", has_text=re.compile(r"^Pan flat$")).click()
+            soft = await purse()
+            for row in range(3):
+                await pg.locator("#cbDays .cbStage").nth(row).locator(
+                    "button", has_text=re.compile(r"^High mountains$")).click()
+            hard = await purse()
+            check("builder: a soft race pays less than a hard one",
+                  soft is not None and hard is not None and soft < hard,
+                  "pan flat %r%% against high mountains %r%%" % (soft, hard))
+            check("builder: and a hard race pays no MORE than a drawn one",
+                  hard is not None and hard <= 100, "hard %r%%" % (hard,))
+
+            await pg.fill("#cbName", "Tour de Pain")
+            await pg.locator("#cbGo button", has_text="Ride it").click()
+            await pg.wait_for_selector("#build:not(.hide)")
+            await pg.click("#bLock")
+            await pg.wait_for_selector("#brief:not(.hide)")
+            eyebrow = await pg.locator("#bEyebrow").text_content() or ""
+            check("builder: the race is called what you called it",
+                  eyebrow.startswith("Tour de Pain"), "eyebrow %r" % (eyebrow,))
+            spent = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).customAtDiv)")
+            check("builder: a ranked race spends this division's one", spent == 5,
+                  "customAtDiv %r" % (spent,))
+        finally:
+            await ctx.close()
+
+        # Having spent it, the picker offers the unranked build only.
+        ctx, pg = await open_case(browser, url,
+                                  {"tutorialDone": True, "div": 5, "tours": 4, "money": 700,
+                                   "customAtDiv": 5}, [], errs)
+        try:
+            await pg.click("#startBtn")
+            await pg.wait_for_selector("#pick:not(.hide)")
+            tag = await pg.locator("#pickBody .card", has_text="Build your own").locator(".pips").text_content()
+            check("builder: once spent, only unranked is offered",
+                  (tag or "").strip() == "unranked only", "tag %r" % (tag,))
+        finally:
+            await ctx.close()
 
         # ---- 5. race craft: carry TWO of three -------------------------------
         # The pool grew to three (radio / power meter / feed craft) and the limit to

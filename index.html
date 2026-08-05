@@ -173,6 +173,16 @@
   #chanceCard .go{width:100%;margin-bottom:8px}
   /* `.go{display:block}` beats `.hide{display:none}` at equal specificity, so every one of
      these needs its own id rule or it can never be hidden. This has bitten four times. */
+  /* The one text field in the game. Matches the ghost-button look rather than inventing a
+     second visual language for a single control. */
+  #cbName{width:100%;box-sizing:border-box;margin-top:10px;padding:13px 14px;
+    font:inherit;font-size:15px;font-weight:700;color:var(--ink);background:transparent;
+    border:1.5px solid rgba(46,49,47,.22);border-radius:12px}
+  #cbName::placeholder{font-weight:500;color:rgba(46,49,47,.38)}
+  #cbName:focus{outline:none;border-color:var(--ink)}
+  .cbDay{display:flex;align-items:center;gap:10px;margin-top:9px}
+  .cbDay .n{font-size:11px;font-weight:700;opacity:.45;min-width:44px;letter-spacing:.1em}
+  .cbDay .segmented{flex:1;margin-top:0}
   #pCal.hide{display:none}
   #pTilt.hide{display:none}
   #pLean.hide{display:none}
@@ -345,7 +355,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 27</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 28</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -384,6 +394,28 @@
   <h2>Choose your race</h2>
   <p class="sub" id="pickSub"></p>
   <div id="pickBody"></div>
+</div></div>
+
+<!-- ★ BUILD YOUR OWN RACE. Pick the shape of every day and the road it goes over, and name
+     it whatever you like. Two rules keep it from eating the career: the purse scales with
+     what you actually BUILT rather than with the division you are standing in, so a soft
+     tour pays soft money and farming defeats itself; and a custom race never fills a
+     promotion credit, so money yes, ladder no. "Money buys breadth, never power" survives.
+     One RANKED custom race per division on top of that, as a belt and braces. Unranked is
+     unlimited and pays nothing, which is the free-play version. -->
+<div class="screen hide" id="builder"><div class="inner">
+  <button class="navback" id="cbBack" aria-label="Back">&#8592;</button>
+  <h2>Build your own race</h2>
+  <p class="sub" id="cbSub"></p>
+  <div class="secthead">Name</div>
+  <input id="cbName" type="text" maxlength="34" placeholder="Name your race" autocomplete="off" />
+  <div class="secthead">Length</div>
+  <div class="segmented" id="cbLen"></div>
+  <div class="secthead">The days</div>
+  <div id="cbDays"></div>
+  <div class="secthead">Purse</div>
+  <p class="sub" id="cbPurse"></p>
+  <div id="cbGo"></div>
 </div></div>
 
 <div class="screen hide" id="rest"><div class="inner">
@@ -2114,7 +2146,12 @@ function createRace(opts) {
     // nobody can attack and nobody gains a metre, so where you sit when the flag drops is
     // your first decision of the stage rather than dead time. The CLOCK does not run yet.
     neutral: false, pacer: { x: 0, gone: false },
-    payScale: 1 + 2.5 * D.t, kit: kitId,
+    // A CUSTOM RACE PAYS FOR WHAT YOU BUILT, not for where you are standing. Without this
+    // the exploit is to build the softest legal race at Division 1 and collect Division 1
+    // money for Division 8 racing — and capping HOW OFTEN you can do it only slows that
+    // down, it does not stop it paying. Defaults to 1, so every drawn race is untouched and
+    // the golden does not move.
+    payScale: (1 + 2.5 * D.t) * (opts.payMul === undefined ? 1 : opts.payMul), kit: kitId,
     stageIndex: opts.stageIndex, seed: opts.seed,
     rnd: null, rndN: 0, clock: 0, acc: 0, chase: 0, pelotonHead: 0, pelotonPace: 0, driver: null, youDriving: false,
     ttChecks: course.spec.tt ? [course.len / 3, course.len * 2 / 3] : null, bestSplit: [], ttCheck: null,
@@ -4578,6 +4615,12 @@ let lanterneJustWon = false;
 function applyLadder(place, kind) {
   ladder.tours++;
   let moved = "held";
+  // ★ A RACE YOU BUILT IS OUTSIDE THE LADDER, and outside your WINS as well. No promotion
+  // credit is the obvious half; no `wins` is the half that matters, because wins drive
+  // tactic LEVELS (WIN_STEPS) and winning a race you designed to be soft must not sharpen
+  // your race radio. It still counts as a race ridden, so it appears in the palmares. The
+  // money is the whole reward, and the purse already scales with what you built.
+  if (tour && tour.custom) { Store.save(ladder); return "held"; }
   if (place === 1) ladder.wins++;
   if (kind && place <= reqPlace(ladder.div)) {
     (ladder.req || (ladder.req = {}))[kind] = true;
@@ -4756,6 +4799,9 @@ function startStage() {
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
         out: tour.out || [],
         route: stageRoute(tour.stage),
+        // A CUSTOM RACE PAYS FOR WHAT YOU BUILT. Unranked pays nothing at all, so the purse
+        // is zeroed at the source rather than filtered out of six different readouts later.
+        payMul: tour.custom ? (tour.custom.ranked ? tour.custom.pay : 0) : 1,
         fatigue: tour.fatigue, playerStats: bStats });
   // Your chosen bib, worn on the dot. View-only (the sim neither reads nor saves
   // num), so it is applied after createRace here and after Sim.restore on resume.
@@ -7784,7 +7830,7 @@ function frame(now) {
 // ---------------------------------------------------------------- screens
 const $ = id => document.getElementById(id);
 const show = id => {
-  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest", "gloss", "debug"])
+  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest", "gloss", "debug", "builder"])
     $(s).classList.toggle("hide", s !== id);
   $("drillDone").classList.add("hide");       // never leaves it stranded over a screen
 };
@@ -7927,6 +7973,9 @@ function raceNick(seed, len) {
 // shared puzzle, and both already say so in their own eyebrow.
 function tourNick() {
   if (!tour || !tour.schedule || tour.practice || tour.daily) return "";
+  // A race you built and named is called what you called it. Falls through to the drawn pool
+  // when the field was left blank, because an unnamed race still deserves a name.
+  if (tour.custom && tour.custom.name) return tour.custom.name;
   // THE Grand Tour is one specific race you unlock by taking Division 1, not a category, so
   // it gets one name and keeps it. Drawing it from the pool would give the thing you spent a
   // whole career opening a different title every time you rode it.
@@ -8006,6 +8055,9 @@ function showBriefing() {
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
         out: tour.out || [],
         route: stageRoute(tour.stage),
+        // A CUSTOM RACE PAYS FOR WHAT YOU BUILT. Unranked pays nothing at all, so the purse
+        // is zeroed at the source rather than filtered out of six different readouts later.
+        payMul: tour.custom ? (tour.custom.ranked ? tour.custom.pay : 0) : 1,
         fatigue: tour.fatigue, playerStats: Sim.buildStats(committedBuild || Sim.neutralBuild()) });
   const c = preview.course;
   // How much climbing is in it: the number every rider looks at first.
@@ -8343,6 +8395,8 @@ let debugOn = false;
 })();
 $("debugBtn").addEventListener("click", () => { renderDebug(); show("debug"); });
 $("dbgBack").addEventListener("click", () => show("settings"));
+$("cbBack").addEventListener("click", () => { renderPick(); show("pick"); });
+$("cbName").addEventListener("input", () => { if (cb) cb.name = $("cbName").value; });
 
 function dbgRow(host, label, value) {
   const d = document.createElement("div"); d.className = "note";
@@ -10031,6 +10085,145 @@ function assignRoute(t, len) {
 }
 const stageRoute = st => (tour && tour.routeMap) ? (tour.routeMap[st] || null) : null;
 
+// ---- build your own race --------------------------------------------------------
+// Pick the shape of every day, the road it goes over if you own one, and a name. Two rules
+// stop it eating the career, and only one of them is the use limit.
+//
+// 1. THE PURSE SCALES WITH WHAT YOU BUILT. Frequency caps how often you can farm, not
+//    whether farming pays: a soft race at Division 1 would otherwise collect Division 1
+//    money for Division 8 racing. Softer than a drawn race pays less, and the factor is
+//    CAPPED AT 1, so building a monster is never a payday either — the honest build is
+//    simply the only one that pays in full.
+// 2. IT NEVER TOUCHES THE LADDER OR YOUR WINS. No promotion credit, no relegation strike,
+//    and no `wins`, because wins drive tactic LEVELS and a race you designed to be easy must
+//    not sharpen your race radio. Money is breadth, wins are power, and the rule this whole
+//    economy rests on is that money never buys power.
+// One RANKED custom race per division on top of that. Unranked is unlimited and pays
+// nothing, which is the free-play version.
+const CB_LENGTHS = [3, 5, 7];
+let cb = null;                     // { len, days: [stageIndex], name, ranked }
+// A day's hardness, from the stage's own numbers rather than a second opinion about them.
+const cbHard = i => { const s = Sim.STAGES[i]; return s.hilly + s.len / 3600 + (s.tt ? 0.10 : 0); };
+function customPayFactor(schedule) {
+  let all = 0; for (let i = 0; i < Sim.STAGES.length; i++) all += cbHard(i);
+  const avg = all / Sim.STAGES.length;
+  let mine = 0; for (const i of schedule) mine += cbHard(i);
+  return clamp((mine / schedule.length) / avg, 0.35, 1);
+}
+// One per division, refreshed whenever the division CHANGES — including downwards. Keyed on
+// "where was it last spent" rather than a per-division ledger, so a long career that visits
+// Division 5 three times gets a custom race each time instead of one forever.
+const customReady = () => (ladder.customAtDiv === undefined || ladder.customAtDiv !== ladder.div);
+function openBuilder() {
+  if (!cb) cb = { len: 3, days: [0, 2, 0], name: "", ranked: true };
+  cb.ranked = cb.ranked && customReady();
+  show("builder"); renderBuilder();
+}
+function renderBuilder() {
+  const ready = customReady();
+  $("cbSub").textContent = ready
+    ? "One ranked race a division, and it pays for what you build rather than for the division you are standing in. It never counts toward promotion."
+    : "You have already ridden your ranked race at Division " + ladder.div
+      + ". Build as many unranked ones as you like: they pay nothing and change nothing.";
+  const nameEl = $("cbName");
+  if (nameEl.value !== cb.name) nameEl.value = cb.name;
+
+  const seg = $("cbLen"); seg.innerHTML = "";
+  for (const n of CB_LENGTHS) {
+    const b = document.createElement("button");
+    b.textContent = n + " days";
+    b.setAttribute("aria-pressed", n === cb.len ? "true" : "false");
+    b.addEventListener("click", () => {
+      // Keep the days you already chose when the length changes, rather than wiping the
+      // board because you wanted one more stage.
+      const old = cb.days.slice();
+      cb.days = []; for (let i = 0; i < n; i++) cb.days.push(old[i] === undefined ? 0 : old[i]);
+      cb.len = n; renderBuilder();
+    });
+    seg.appendChild(b);
+  }
+
+  const own = ownedRoutes();
+  const byId = id => Sim.ROUTES.filter(r => r.id === id)[0];
+  const host = $("cbDays"); host.innerHTML = "";
+  for (let d = 0; d < cb.len; d++) {
+    const row = document.createElement("div"); row.className = "cbDay cbStage";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = "DAY " + (d + 1);
+    row.appendChild(n);
+    const s = document.createElement("div"); s.className = "segmented";
+    Sim.STAGES.forEach((st, i) => {
+      const b = document.createElement("button");
+      b.textContent = st.sub;
+      b.setAttribute("aria-pressed", cb.days[d] === i ? "true" : "false");
+      b.addEventListener("click", () => { cb.days[d] = i; renderBuilder(); });
+      s.appendChild(b);
+    });
+    row.appendChild(s); host.appendChild(row);
+    // A ROAD FOR THE DAY, and only the roads that belong on it: a climb on a mountain stage,
+    // a cobbled sector on a flat one. Same split assignRoute enforces, for the same reason —
+    // a pack bought for the cobbles must never turn up on a col.
+    const k = cb.days[d];
+    const wants = (k === 2 || k === 4) ? "climb" : (k === 0 || k === 3) ? "sector" : null;
+    const pool = wants === null ? [] : own.filter(id => {
+      const r = byId(id); return wants === "climb" ? !Sim.isSector(r) : Sim.isSector(r);
+    });
+    if (pool.length) {
+      const rr = document.createElement("div"); rr.className = "cbDay cbRoad";
+      const rn = document.createElement("span"); rn.className = "n"; rn.textContent = "ROAD";
+      rr.appendChild(rn);
+      const rs = document.createElement("div"); rs.className = "segmented";
+      const mk = (label, id) => {
+        const b = document.createElement("button");
+        b.textContent = label;
+        b.setAttribute("aria-pressed", (cb.roads && cb.roads[d]) === id ? "true" : "false");
+        b.addEventListener("click", () => { (cb.roads || (cb.roads = {}))[d] = id; renderBuilder(); });
+        rs.appendChild(b);
+      };
+      mk("Any", undefined);
+      for (const id of pool) mk(byId(id).name, id);
+      rr.appendChild(rs); host.appendChild(rr);
+    }
+  }
+
+  const f = customPayFactor(cb.days);
+  $("cbPurse").textContent = cb.ranked
+    ? "This race pays " + Math.round(f * 100) + "% of a drawn race of the same length. "
+      + (f >= 0.99 ? "As hard as the game would have handed you."
+        : f > 0.6 ? "Softer than a drawn race, so it pays less." : "Much softer than a drawn race.")
+    : "Unranked: no prize money, no fatigue carried, nothing recorded.";
+
+  const go = $("cbGo"); go.innerHTML = "";
+  if (ready) {
+    const rk = document.createElement("button");
+    rk.className = cb.ranked ? "go" : "go ghost";
+    rk.textContent = cb.ranked ? "Ranked · spends this division's one" : "Unranked · pays nothing";
+    rk.addEventListener("click", () => { cb.ranked = !cb.ranked; renderBuilder(); });
+    go.appendChild(rk);
+  }
+  const b = document.createElement("button");
+  b.className = "go"; b.textContent = "Ride it";
+  b.addEventListener("click", startCustom);
+  go.appendChild(b);
+}
+function startCustom() {
+  ghost = null;
+  const seed = (Math.random() * 1e9) | 0;
+  const name = ($("cbName").value || "").trim().slice(0, 34);
+  cb.name = name;
+  tour = { seed, stage: 0, gc: {}, leaders: {}, fatigue: {},
+    schedule: cb.days.slice(),
+    custom: { name: name, ranked: !!cb.ranked, pay: customPayFactor(cb.days) } };
+  // Auto-assign first so every eligible day still gets a road, then stamp the ones the
+  // player picked over the top. Picking "Any" leaves the automatic choice in place, which is
+  // what "any" should mean.
+  assignRoute(tour, cb.days.length);
+  if (cb.roads) for (const d in cb.roads) if (cb.roads[d] !== undefined) tour.routeMap[d] = cb.roads[d];
+  if (cb.ranked) { ladder.customAtDiv = ladder.div; Store.save(ladder); }
+  const names = [Sim.YOU.name].concat(Sim.FIELD.map(f => f.name));
+  for (const n of names) tour.gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
+  openBuild("tour");
+}
+
 // ---- the grand tour -------------------------------------------------------------
 // THE SUMMIT OF THE LADDER. Winning Division 1 used to increment a counter and nothing
 // else: you climbed eight divisions and arrived nowhere. This is the destination — a
@@ -10106,6 +10299,30 @@ function renderPick() {
     b.disabled = !!locked;
     b.addEventListener("click", () => { newTour(r.len); openBuild("tour"); });
     btns.appendChild(b); card.appendChild(btns);
+    box.appendChild(card);
+  }
+  // BUILD YOUR OWN, at the bottom of the drawn races rather than on a screen of its own: it
+  // is a way to choose a race, which is what this screen is for. Held back while you are
+  // holding an abandoned tour, exactly like every other row — you cannot shop for a parcours
+  // that suits you by building one either.
+  {
+    const card = document.createElement("div");
+    card.className = "card" + (holding ? " locked" : "");
+    const top = document.createElement("div"); top.className = "top";
+    const nb = document.createElement("b"); nb.textContent = "Build your own"; top.appendChild(nb);
+    const tag = document.createElement("span"); tag.className = "pips";
+    tag.textContent = customReady() ? "one a division" : "unranked only";
+    top.appendChild(tag); card.appendChild(top);
+    const note = document.createElement("div"); note.className = "note";
+    note.textContent = "Pick every day, pick the roads, name it. Pays for what you build, "
+      + "and never counts toward promotion.";
+    card.appendChild(note);
+    const btns2 = document.createElement("div"); btns2.className = "btns";
+    const b2 = document.createElement("button"); b2.className = "mini";
+    b2.textContent = holding ? "Finish the other one first" : "Build it";
+    b2.disabled = !!holding;
+    b2.addEventListener("click", openBuilder);
+    btns2.appendChild(b2); card.appendChild(btns2);
     box.appendChild(card);
   }
 }
