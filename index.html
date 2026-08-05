@@ -324,10 +324,29 @@
   <div class="secthead">Help</div>
   <button class="go ghost" id="howBtn">How to play</button>
   <button class="go ghost" id="dataBtnMenu">Palmarès</button>
-  <button class="go ghost" id="devBtn">Unlock everything (testing)</button>
   <button class="go ghost" id="rulesBtn">The rules</button>
   <button class="go ghost" id="glossBtn">Cycling words</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 20</p>
+  <!-- ★ THE TEST SHORTCUT IS BEHIND A GESTURE NOW. It used to be a plainly labelled button
+       sitting in Settings that handed over the $4.99 career and every $2.99 route pack for
+       free, and rewrote a real save doing it. Hold the build number for five seconds and
+       type the passphrase to reveal it. A player will never find that by accident; Kevin
+       gets his shortcut back with a diagnostics page attached. -->
+  <button class="go ghost hide" id="debugBtn">Debug</button>
+  <p class="sub" id="verLine">v1.0 &#183; build 22</p>
+</div></div>
+
+<div class="screen hide" id="debug"><div class="inner">
+  <button class="navback" id="dbgBack" aria-label="Back">&#8592;</button>
+  <h2>Debug</h2>
+  <p class="sub">Testing tools. None of this is reachable in a shipped build without the gesture, and every button here rewrites your real save.</p>
+  <div class="secthead">State</div>
+  <div id="dbgState"></div>
+  <div class="secthead">Jump to</div>
+  <div class="segmented" id="dbgDivs"></div>
+  <div class="secthead">Give</div>
+  <div id="dbgGive"></div>
+  <div class="secthead">Reset</div>
+  <div id="dbgReset"></div>
 </div></div>
 
 <div class="screen hide" id="data"><div class="inner">
@@ -533,6 +552,17 @@ const CFG = {
   // leaves all 38 tests green and breaks the golden's finishing orders, points and money.
   // AI-ONLY since build 17: every swingOff setter is gated `!r.you`, and the player's
   // drop-back is `easeCut` below.
+  // ★ THE DISTANCE-BUDGET SWING WAS BUILT, MEASURED AND NOT SHIPPED (build 21). It replaced
+  // this fixed pace cut with "work out how far you still have to drop and take the deficit
+  // that clears it in four seconds", which is the more principled mechanism and cannot
+  // overshoot. It passed every gate — 38/38, second chance unchanged, sanity clean, no
+  // dominance verdict that repeated across seed sets — and it halved the worst case, 39.1s
+  // to 20.1s. It was held anyway, because the REASON for it evaporated under measurement:
+  // the AI drop-back was never slow. Median front-handover-to-last-wheel is 3.65s, against
+  // the player's 3.3s and the four-to-six this design claims. The earlier "median 11.91s"
+  // came from a harness timing contiguous runs of `swingOff`, and the flag is re-armed by
+  // three separate paths, so it was chaining several swings into one. `tools/aiswing.js`
+  // measures it correctly now. Revisit only if the TAIL is what bothers you in the hand.
   swingCut: 0.09,                     // how much of their pace a swinging rider gives up
   // ★ YOUR DELIBERATE SOFT-PEDAL IS ITS OWN NUMBER, NOT THE SWINGER'S. A rival's swingOff
   // is an automatic 2.2s drift after their turn; a human holding both pads is ASKING to go
@@ -999,8 +1029,22 @@ const ROUTES = [
   { id: "aubisque", pack: "pyrenees", name: "Col d'Aubisque", km: 16.6, grade: 4.9, top: 1709, summit: false,
     note: "Shallow enough to ride fast, long enough that riding it fast is a mistake." },
   { id: "peyresourde", pack: "pyrenees", name: "Col de Peyresourde", km: 13.2, grade: 7.0, top: 1569, summit: false,
-    note: "Even gradients the whole way up, which is exactly why it splits a tired bunch." }
+    note: "Even gradients the whole way up, which is exactly why it splits a tired bunch." },
+  // --- the cobbles. A SECTOR, NOT A CLIMB, which is why this pack sat unbuilt while the
+  // others shipped: a route stamps a gradient into the terrain, and pave has no gradient.
+  // The machinery for it existed all along in SURFACES.cobbles — drag, jostle, lost grip,
+  // punctures, and drafting cut to 0.62, which is what turns a sector from a tax into the
+  // moment a race comes apart. All these needed was a name and a place on the road.
+  { id: "arenberg", pack: "cobbles", kind: "cobbles", name: "Trouée d'Arenberg", km: 2.3, stars: 5,
+    note: "Straight, sunken and ridden flat out because slowing down is worse. The one nobody wins on and everybody can lose on." },
+  { id: "arbre", pack: "cobbles", kind: "cobbles", name: "Carrefour de l'Arbre", km: 2.1, stars: 5,
+    note: "Late, exposed and rutted. Whatever is left of the race is decided here." },
+  { id: "monsenpevele", pack: "cobbles", kind: "cobbles", name: "Mons-en-Pévèle", km: 3.0, stars: 5,
+    note: "Three kilometres with a crown you get thrown off and gutters you cannot trust." }
 ];
+// A climb route reshapes the terrain; a sector route lays pave on flat road. Everything
+// that asks "is this a climb road" asks this, so neither kind can leak into the other.
+const isSector = r => !!(r && r.kind === "cobbles");
 const ROUTE_BY_ID = {};
 for (const r of ROUTES) ROUTE_BY_ID[r.id] = r;
 
@@ -1222,7 +1266,9 @@ function buildStage(seed, spec0, D) {
   // as an ordinary climb and needs no special case. Only the shape is hand-made.
   const route = spec.route ? ROUTE_BY_ID[spec.route] : null;
   let routeEnd = 0;
-  if (route) {
+  // A cobbled sector changes the SURFACE, not the terrain, so it is stamped further down
+  // with the other surfaces and this whole climb-shaping block is skipped for it.
+  if (route && !isSector(route)) {
     const cLen = Math.round(route.km * 1000 / CFG.scaleM);
     const g = route.grade / CFG.gradePct;
     const end = route.summit ? spec.len : Math.round(spec.len * 0.66);
@@ -1383,6 +1429,19 @@ function buildStage(seed, spec0, D) {
   // Cobbles belong on flat and rolling roads, never in the mountains: that is where
   // the sport puts them. Gravel gets the occasional mountain because Finestre exists.
   const surfaces = [];
+  // ★ A NAMED SECTOR, stamped first so the random ones have to work around it. Placed late
+  // enough to decide the day and clear of the finish run-in, the same rule the generated
+  // sectors follow. Severity is pinned at the top of the scale rather than scaled by
+  // division: Arenberg is Arenberg in Division 8.
+  let sector = null;
+  if (route && isSector(route)) {
+    const sLen = Math.round(route.km * 1000 / CFG.scaleM);
+    const sAt = Math.max(200, Math.round(spec.len * 0.62) - sLen);
+    if (sAt + sLen < spec.len - 260) {
+      surfaces.push(MAKE.surface("cobbles", sAt, sLen, 1.0));
+      sector = { route: route.id, s: sAt, e: sAt + sLen };
+    }
+  }
   {
     const kinds = spec.hilly > 0.55 ? ["rough", "gravel"] : ["rough", "cobbles", "gravel"];
     const chance = 0.18 + 0.45 * D.t;
@@ -1584,7 +1643,7 @@ function buildStage(seed, spec0, D) {
   }
   if (spec.tt) { items.length = 0; feeds.length = 0; litters.length = 0; }
   return { spec, len: spec.len, grades, elev, eMin, eMax, baseElev, climbs,
-    primes, feeds, items, winds, scenery, narrows, rounds, surfaces, hazards, litters,
+    primes, feeds, items, winds, scenery, narrows, rounds, surfaces, hazards, litters, sector,
     // twistier in the mountains and twistier up the ladder
     // Tighter, more frequent corners rather than long sweeping ones. Drift scales
     // with the road's SLOPE while the inside-line advantage scales with its
@@ -3275,6 +3334,13 @@ function stepRider(race, r, dt) {
   if (r.carTow > 0 && de > 0) de *= 1 + CFG.carRecover * r.carTow;
   else if (r.carTow > 0) de += CFG.carRecover * 0.9 * r.carTow;
   if (race.neutral) de = 0;                 // nothing is spent before the flag drops
+  // ★ RECORD THE RATE, DO NOT RECOMPUTE IT. The power meter reads how long you can hold
+  // what you are doing, and the honest way to know that is the number the legs are
+  // actually moving at. Deriving it a second time in the view is exactly how the
+  // abandonment line ended up computed in one place and displayed from another: two
+  // formulas that agree until one of them is edited. This is per SECOND, on the same
+  // 0..legCap scale as `energy`, so seconds-to-empty is energy / -dE and nothing else.
+  r.dE = de;
   r.energy = clamp(r.energy + de * dt, 0, r.legCap);
   const wasCracked = r.cracked;
   if (r.energy <= 0) r.cracked = true;
@@ -3995,7 +4061,7 @@ return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,
   tourLength, tourSchedule,
-  createRace, snapshot, restore, step, tick, preRoll, settle, secondChance, DIM_STATS, rivalBody, ROUTES, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
+  createRace, snapshot, restore, step, tick, preRoll, settle, secondChance, DIM_STATS, rivalBody, ROUTES, isSector, climbCat, routeGain, liveOrder, byKey, gradeAt, elevAt, altAt, windAt, centreAt, dropIn,
   danger, throwLine, hopTarget, sprintZone, widthAt, edgeAt, bendAt, curveAt, islandAt,
   surfaceAt, SURFACES, MAKE, FEATURE_KEYS, raceData };
 })();
@@ -5678,8 +5744,10 @@ function drawProfile() {
   // A ROAD YOU PAID FOR IS NEVER A GUESS. Named on the profile and the briefing is not
   // enough — once you roll out those are gone, so the road gets its own pill on the HUD
   // for the WHOLE stage, not just while you are on the climb.
+  // A named SECTOR has no climb to hang off, so the pill reads c.sector for those.
   const rcl = (c.climbs || []).find(x => x.route);
-  const rrt = rcl ? Sim.ROUTES.filter(x => x.id === rcl.route)[0] : null;
+  const rid = rcl ? rcl.route : (c.sector ? c.sector.route : null);
+  const rrt = rid ? Sim.ROUTES.filter(x => x.id === rid)[0] : null;
   if (rrt) {
     // RIGHT-ALIGNED, above the profile. It used to sit under the "km to go" line, which is
     // directly on top of the big 1ST / OF 8 block below — the two overlapped all race.
@@ -5725,7 +5793,17 @@ function drawWind() {
     cx, cy + 16, 9.5, 700, "rgba(46,49,47," + (0.35 + 0.4 * w.str) + ")", "center", 1.6);
 }
 
-let pmVal = 0, pmPrevE = null, ttShown = 0;      // power-meter effort, smoothed across frames
+let pmVal = 0, ttShown = 0;      // power-meter effort, smoothed across frames
+// The power meter's reading, in seconds, CALIBRATED TO WHAT THE SIM ACTUALLY DOES rather
+// than to what a minute of effort sounds like it should be. `node tools/outlook.js` reads
+// seconds-to-empty across the situations a stage puts you in; at a fixed 2.4 strokes/s on
+// 70 legs it spans 37s sitting on a wheel on the flat down to 10s in the wind on a 9%
+// ramp. Anything above tempo is a matches-burning regime measured in SECONDS, so a
+// threshold set in minutes would have painted the gauge red for the entire race.
+// PM_LOOK is how far ahead the LEGS projection looks. Ten seconds, for the same reason:
+// at thirty the slice pins to the bottom of the bar in most situations and stops carrying
+// any information at all.
+const PM_LOOK = 10, PM_ALLDAY = 120, PM_WARN = 20, PM_REDLINE = 8;
 function drawHud(dt) {
   drawProfile(); drawWind();
   const c = C(), you = race.you, pad = Math.max(14, W * 0.045);
@@ -5811,11 +5889,35 @@ function drawHud(dt) {
   // telling you why — so three near-static bars would be noise on the stage that is
   // meant to be about a single skill.
   const ttOnly = !!(race.spec && race.spec.tt);
+  // Read once, up here, because the power meter now annotates the LEGS gauge as well as
+  // drawing its own, and the LEGS gauge is drawn first.
+  const pmLvl = you.stats.powerMeter || 0;
   if (!ttOnly) {
   gauge(gx, gy, gw, gh, you.energy, you.cracked ? PAL.spot : you.energy < 25 ? PAL.fuel : PAL.you, "LEGS");
   if (you.legCap < 99) {                                  // days in the legs
     ctx.fillStyle = "rgba(213,94,0,.85)";
     ctx.fillRect(gx - 3, gy + gh * (1 - you.legCap / 100) - 1, gw + 6, 2);
+  }
+  // ★ WHERE THIS EFFORT IS TAKING YOU (power meter, level II). The same effort costs
+  // wildly different amounts depending on the gradient, your climbing economy and how
+  // sheltered you are — the drain scales with the gradient times climbing economy
+  // SQUARED, and again with exposure — and none of that has ever been visible. You found
+  // out you overcooked it when the legs went. This is the projection: where LEGS will be
+  // in PM_LOOK seconds if nothing changes.
+  // ANNOTATION ON A BAR THAT ALREADY EXISTS, not a new widget. The FOOD gauge already
+  // marks what you have swallowed but not absorbed the same way, and the record here is
+  // that additive screen furniture gets built, looks wrong and gets cut.
+  if (pmLvl >= 2 && !you.cracked && Math.abs(you.dE || 0) > 0.05) {
+    const proj = clamp(you.energy + (you.dE || 0) * PM_LOOK, 0, 100);
+    const yNow = gy + gh * (1 - clamp(you.energy / 100, 0, 1));
+    const yEnd = gy + gh * (1 - proj / 100);
+    ctx.save();
+    roundRect(gx, gy, gw, gh, gw / 2); ctx.clip();
+    // Spending reads as a bite off the top of the fill, gaining as a ghost above it. Both
+    // sit between where you are and where you are going, so the direction is the shape.
+    ctx.fillStyle = you.dE < 0 ? "rgba(213,94,0,.42)" : "rgba(0,158,115,.32)";
+    ctx.fillRect(gx, Math.min(yNow, yEnd), gw, Math.abs(yEnd - yNow));
+    ctx.restore();
   }
   gx += gstep;
   gauge(gx, gy, gw, gh, you.fuel, you.bonk ? PAL.spot : PAL.fuel, "FOOD");
@@ -5849,26 +5951,52 @@ function drawHud(dt) {
   // reasoning still holds, because legs, food and fluid look after themselves once you
   // hold the rhythm. This is also what stops the power meter being a slot nobody spends:
   // on a TT it is the only tactic that does anything at all.
-  if ((you.stats.powerMeter || 0) > 0) {
-    const lvl = you.stats.powerMeter;
-    const target = you.eff === "ease" ? 16 : you.eff === "attack" ? 92 : 52;
+  if (pmLvl > 0) {
+    // ★ IT READS WHAT YOU CAN HOLD, NOT JUST HOW HARD YOU ARE GOING. The gauge used to
+    // smooth toward one of three fixed heights taken from the EFFORT LABEL — 16 for ease,
+    // 52 for tempo, 92 for attack — so it was a three-state light dressed up as a gauge,
+    // and it told you nothing your own thumbs had not already told you. It now reads the
+    // live effort continuously, and level II answers the question a real power meter is
+    // actually for: can I hold this, and for how long. That number was invisible and it
+    // swings hugely — `node tools/outlook.js` measures ONE effort, 2.4 strokes/s on 70
+    // legs, reading 37s sitting on a wheel on the flat and 10s in the wind on a 9% ramp
+    // on a rouleur body. You used to find that out when the legs went.
+    // DELIBERATELY NOT SPEED. A tactic that made you faster would dwarf every other
+    // number in the game (Feed craft measures under half a placing; the division strength
+    // ramp deleted in build 16 for being an unfair escalator was 3.5%), it would be a
+    // must-pick, and it would make information something you buy performance with.
+    // Everything here is a reading of a race you were already riding.
+    const lo = Sim.CFG.ease;
+    const span = Math.max(0.2, (you.stats.attack || Sim.CFG.attack) - lo);
+    const target = clamp(((you.effV === undefined ? lo : you.effV) - lo) / span, 0, 1) * 100;
     pmVal += (target - pmVal) * Math.min(1, dt * 6);
-    const draining = pmPrevE != null && you.energy < pmPrevE - 0.0005;
-    pmPrevE = you.energy;
-    const redline = pmVal > 80 || (draining && you.energy < 42 && you.eff !== "ease");
+    // Seconds until the legs are gone at exactly this rate. `dE` is recorded by the sim
+    // as it happens (per second, same scale as `energy`), so this can never drift out of
+    // step with what the bar is actually doing.
+    const dE = you.dE || 0;
+    const ttl = dE < -0.05 ? you.energy / -dE : Infinity;
+    const redline = ttl < PM_REDLINE;
     // NOT BLUE. PAL.water is the FLUID colour, so a blue POWER gauge sitting in the row
     // beside LEGS / FOOD / FLUID read as a second fluid gauge. Same mistake as the yellow
     // pace car that read as food (DECISIONS.md). Charcoal belongs to no resource; amber
     // and orange stay, because those two carry meaning.
-    const col = redline ? PAL.spot : pmVal > 60 ? PAL.fuel : "#4A4E4B";
+    const col = redline ? PAL.spot : ttl < PM_WARN ? PAL.fuel : "#4A4E4B";
     // On a TT the three gauges never drew, so gx is still at the left margin where the
     // rhythm bar is about to go. Clear it deliberately rather than by one gauge step, or
     // the POWER column lands on the rhythm bar's shoulder.
     gx = ttOnly ? pad + Math.max(20, gw * 2.1) + 20 : gx + gstep;
     gauge(gx, gy, gw, gh, pmVal, col, "POWER");
-    if (lvl >= 2) label(redline ? "REDLINE" : pmVal < 30 ? "EASY" : pmVal > 60 ? "HARD" : "STEADY",
-      gx + gw / 2, gy + gh + 14, 8, 700, col, "center", 0.5);
-    if (lvl >= 3 && redline && you.energy < 38) label("EASE UP", gx + gw / 2, gy - 20, 8.5, 700, PAL.spot, "center", 0.7);
+    // The readout is the feature. "ALL DAY" rather than a number when you are inside your
+    // own ceiling, because a rider who is riding within themselves does not need a clock —
+    // they need to know they are fine. A number only appears once it is finite and it
+    // matters, which is also what makes it read as a warning without shouting.
+    // Held in a variable rather than inlined into the label, so a test can assert the
+    // reading itself instead of re-deriving it and asserting its own arithmetic.
+    const pmRead = you.cracked ? "EMPTY" : dE >= 0 ? "COMING BACK"
+      : ttl > PM_ALLDAY ? "ALL DAY" : ttl >= 60 ? Math.round(ttl / 60) + " MIN" : Math.round(ttl) + "s";
+    if (pmLvl >= 2) label(pmRead, gx + gw / 2, gy + gh + 14, 8, 700, col, "center", 0.5);
+    if (pmLvl >= 3 && redline && !you.cracked)
+      label("EASE UP", gx + gw / 2, gy - 20, 8.5, 700, PAL.spot, "center", 0.7);
   }
   // THE RHYTHM BAR. The bar IS your cadence and the line is the target, so one glance
   // gives you both how far off you are and WHICH WAY: over the line means spinning too
@@ -7333,7 +7461,7 @@ function frame(now) {
 // ---------------------------------------------------------------- screens
 const $ = id => document.getElementById(id);
 const show = id => {
-  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest", "gloss"])
+  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest", "gloss", "debug"])
     $(s).classList.toggle("hide", s !== id);
   $("drillDone").classList.add("hide");       // never leaves it stranded over a screen
 };
@@ -7552,7 +7680,13 @@ function showBriefing() {
   // figures come from the catalogue rather than being measured off the terrain, so they
   // read as the climb's real, exact numbers.
   const rt = c.spec && c.spec.route ? Sim.ROUTES.filter(x => x.id === c.spec.route)[0] : null;
-  if (rt) notes.push(rt.name + " \u00b7 " + Sim.climbCat(c, rcl) + " \u00b7 "
+  if (rt && rt.kind === "cobbles") {
+    // A sector is described by what it does to you, not by a gradient it does not have:
+    // its length, its rating, and the fact that cobbles tear the shelter up.
+    notes.push(rt.name + " \u00b7 " + "\u2605".repeat(rt.stars || 5) + " \u00b7 "
+      + M.long(rt.km * 1000 / Sim.CFG.scaleM) + " of pave. Shelter is worth barely half of "
+      + "what it is on tar here, and the holes puncture. " + rt.note);
+  } else if (rt) notes.push(rt.name + " \u00b7 " + Sim.climbCat(c, rcl) + " \u00b7 "
     + M.long(rt.km * 1000 / Sim.CFG.scaleM) + " at " + rt.grade.toFixed(1) + "%, "
     + Sim.routeGain(c) + " m of climbing, topping out at " + M.alt(rt.top) + ". " + rt.note);
   const ns = c.primes.filter(p => p.kind === "sprint").length;
@@ -7787,33 +7921,144 @@ $("tiltBtn").addEventListener("click", () => {
   ladder.tiltSens = ((ladder.tiltSens ?? 1) + 1) % TILT_SENS.length;
   Store.save(ladder); refreshMenu();
 });
-// A TEST SHORTCUT, and only that. Kevin asked for it so he can reach any part of the game
-// without riding the ladder first. It is deliberately in Settings, deliberately labelled
-// "(testing)", and deliberately two-tap: it rewrites a real save. REMOVE OR HIDE THIS BEFORE
-// SHIPPING — it hands over the $4.99 career and every $2.99 route pack for free.
-let devArmed = false;
-$("devBtn").addEventListener("click", () => {
-  if (!devArmed) {
-    devArmed = true;
-    $("devBtn").textContent = "Unlock everything \u00b7 tap again";
-    return;
+// ★ THE TEST SHORTCUT, BEHIND A GESTURE. This used to be a plainly labelled button in
+// Settings that handed over the $4.99 career and every $2.99 route pack for free and
+// rewrote a real save doing it — the pre-ship blocker in CLAUDE.md. Now: hold the build
+// number for five seconds, type the passphrase, and a Debug button appears with a
+// diagnostics page behind it. Nobody finds that by accident, and the flag is NOT persisted,
+// so it lasts one session and a shipped build starts clean every time.
+const DEBUG_PHRASE = "developer_debug!";
+let debugOn = false;
+(function armDebugGesture() {
+  const line = $("verLine");
+  if (!line) return;
+  let timer = null;
+  const start = () => {
+    if (debugOn || timer) return;
+    timer = setTimeout(() => {
+      timer = null;
+      const said = window.prompt("Passphrase");
+      if (said !== DEBUG_PHRASE) return;
+      debugOn = true;
+      $("debugBtn").classList.remove("hide");
+      line.textContent = line.textContent + " \u00b7 debug";
+    }, 5000);
+  };
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  line.style.cursor = "default";
+  // Pointer events cover mouse and touch both; touchend/cancel are belt and braces for
+  // Safari, where a long press can end without a pointerup.
+  line.addEventListener("pointerdown", start);
+  for (const ev of ["pointerup", "pointerleave", "pointercancel", "touchend", "touchcancel"])
+    line.addEventListener(ev, cancel);
+})();
+$("debugBtn").addEventListener("click", () => { renderDebug(); show("debug"); });
+$("dbgBack").addEventListener("click", () => show("settings"));
+
+function dbgRow(host, label, value) {
+  const d = document.createElement("div"); d.className = "note";
+  d.style.cssText = "display:flex;justify-content:space-between;gap:12px;margin-top:5px";
+  const a = document.createElement("span"); a.textContent = label;
+  const b = document.createElement("b"); b.textContent = value;
+  d.appendChild(a); d.appendChild(b); host.appendChild(d);
+  return d;
+}
+function dbgButton(host, label, fn) {
+  const b = document.createElement("button");
+  b.className = "go ghost"; b.textContent = label;
+  b.addEventListener("click", () => { fn(); Store.save(ladder); renderDebug(); refreshMenu(); });
+  host.appendChild(b);
+  return b;
+}
+// What is actually WRONG is usually a save field, so the panel leads with the save rather
+// than with the toggles. Everything here reads live, so it doubles as a state dump.
+function renderDebug() {
+  const st = $("dbgState"); st.innerHTML = "";
+  const car = ladder.career || {};
+  dbgRow(st, "Division", ladder.div + " (peak " + (ladder.peakDiv || ladder.div) + ", best " + (ladder.best || ladder.div) + ")");
+  dbgRow(st, "Tours ridden", String(ladder.tours || 0));
+  dbgRow(st, "Wins / top wins", (ladder.wins || 0) + " / " + (ladder.topWins || 0));
+  dbgRow(st, "Strikes", String(ladder.strikes || 0));
+  dbgRow(st, "Prize money", String(ladder.money || 0));
+  dbgRow(st, "Packs", (ladder.packs || []).join(", ") || "none");
+  dbgRow(st, "Roads available", String(ownedRoutes().length));
+  dbgRow(st, "Career", DIMS.map(d => d.name.slice(0, 5) + " " + Math.round(car[d.key] || 0)).join("  "));
+  dbgRow(st, "Physique", (ladder.weight || "balanced") + " / " + (ladder.muscle || "allround"));
+  dbgRow(st, "Owned physique", (ladder.physique || []).join(", ") || "none");
+  dbgRow(st, "Training budget", fittedTraining().reduce((a, t) => a + t.pts, 0)
+    + " of " + trainingBudget(ladder.career, ladder.div));
+  dbgRow(st, "Tactics", (ladder.tactics || []).join(", ") || "none");
+  dbgRow(st, "Parts owned", String((ladder.parts || []).length));
+  dbgRow(st, "Saved tour", ladder.savedTour
+    ? "stage " + ((ladder.savedTour.stage || 0) + 1) + " of " + (ladder.savedTour.schedule || []).length
+      + (ladder.savedTour.race ? " (mid-race)" : "") : "none");
+  dbgRow(st, "Held tour", ladder.heldTour
+    ? (ladder.heldTour.len || "?") + "-day, seed " + ladder.heldTour.seed : "none");
+  dbgRow(st, "Req credits", Object.keys(ladder.req || {}).join(", ") || "none");
+
+  const dv = $("dbgDivs"); dv.innerHTML = "";
+  for (let d = 8; d >= 1; d--) {
+    const b = document.createElement("button");
+    b.textContent = String(d);
+    b.setAttribute("aria-pressed", String(d === ladder.div));
+    b.addEventListener("click", () => {
+      ladder.div = d;
+      ladder.peakDiv = Math.min(ladder.peakDiv || 8, d);
+      ladder.best = Math.min(ladder.best || 8, d);
+      ladder.strikes = 0; ladder.req = {};
+      Store.save(ladder); renderDebug(); refreshMenu();
+    });
+    dv.appendChild(b);
   }
-  devArmed = false;
-  $("devBtn").textContent = "Unlock everything (testing)";
-  ladder.tutorialDone = true;
-  ladder.div = 1; ladder.peakDiv = 1; ladder.best = 1;
-  ladder.topWins = Math.max(1, ladder.topWins || 0);   // opens the Grand Tour
-  ladder.strikes = 0; ladder.req = {};
-  ladder.money = 99999;
-  ladder.packs = ROUTE_PACKS.map(p => p.id);
-  ladder.radio = 3; ladder.powerMeter = 3;
-  ladder.career = { climb: 150, sprint: 150, endur: 150, durab: 150 };
-  ladder.rust = { climb: 0, sprint: 0, endur: 0, durab: 0 };
-  // Gear needs no line of its own: parts unlock off peakDiv, which is now 1.
-  Store.save(ladder);
-  refreshMenu(); showProfile(null);
-  show("menu");
-});
+
+  const gv = $("dbgGive"); gv.innerHTML = "";
+  dbgButton(gv, "+10,000 prize money", () => { ladder.money = (ladder.money || 0) + 10000; });
+  dbgButton(gv, (ladder.packs || []).length >= ROUTE_PACKS.length ? "All packs owned" : "Unlock every route pack",
+    () => { ladder.packs = ROUTE_PACKS.map(p => p.id); });
+  dbgButton(gv, "Max the career (all six dimensions)", () => {
+    ladder.career = {}; ladder.rust = {};
+    for (const d of DIMS) { ladder.career[d.key] = 150; ladder.rust[d.key] = 0; }
+  });
+  dbgButton(gv, "Own every physique and training block", () => {
+    ladder.physique = WEIGHTS.concat(MUSCLES).map(o => o.id);
+    ladder.trainOwned = TRAINING.map(t => t.id);
+  });
+  dbgButton(gv, "Own every bike part", () => { ladder.parts = Sim.SLOTS
+    .reduce((a, [s]) => a.concat(Sim.PARTS[s].map(p => p.id)), []); });
+  dbgButton(gv, "Open the Grand Tour", () => { ladder.topWins = Math.max(1, ladder.topWins || 0); });
+  dbgButton(gv, "Everything at once", () => {
+    ladder.tutorialDone = true;
+    ladder.div = 1; ladder.peakDiv = 1; ladder.best = 1;
+    ladder.topWins = Math.max(1, ladder.topWins || 0);
+    ladder.strikes = 0; ladder.req = {};
+    ladder.money = 99999;
+    ladder.packs = ROUTE_PACKS.map(p => p.id);
+    ladder.career = {}; ladder.rust = {};
+    for (const d of DIMS) { ladder.career[d.key] = 150; ladder.rust[d.key] = 0; }
+    ladder.physique = WEIGHTS.concat(MUSCLES).map(o => o.id);
+    ladder.trainOwned = TRAINING.map(t => t.id);
+    ladder.parts = Sim.SLOTS.reduce((a, [s]) => a.concat(Sim.PARTS[s].map(p => p.id)), []);
+  });
+
+  const rs = $("dbgReset"); rs.innerHTML = "";
+  dbgButton(rs, "Clear the saved tour", () => { ladder.savedTour = null; });
+  dbgButton(rs, "Clear the held tour (frees the race picker)", () => { ladder.heldTour = null; });
+  // Two-tap, because it is the one button here you cannot undo.
+  let wipeArmed = false;
+  const wipe = document.createElement("button");
+  wipe.className = "go ghost"; wipe.textContent = "Wipe the save";
+  wipe.addEventListener("click", () => {
+    if (!wipeArmed) { wipeArmed = true; wipe.textContent = "Wipe the save \u00b7 tap again"; return; }
+    // Store has load/save and nothing else, so a wipe is "overwrite with a fresh ladder"
+    // rather than a delete. Same end state, and it cannot leave a half-removed save behind.
+    for (const k of Object.keys(ladder)) delete ladder[k];
+    Object.assign(ladder, { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0,
+      best: 8, career: {}, rust: {}, units: "metric", steer: "drag", money: 0, kit: "magenta",
+      bib: 1, tactics: ["radio", "feedcraft"], tutorialDone: true, packs: [], req: {} });
+    Store.save(ladder); renderDebug(); refreshMenu();
+  });
+  rs.appendChild(wipe);
+}
 $("leanBtn").addEventListener("click", () => {
   ladder.leanInvert = !ladder.leanInvert; Store.save(ladder); refreshMenu();
 });
@@ -8330,7 +8575,7 @@ const TACTICS = [
   // to read the race is one decision made twice, the same mistake wheels, position and
   // tires were making with aero.
   { key: "radio", name: "Race radio", note: "Everything the race is doing around you. I: attacks, and whether the bunch is chasing. II: how far back the leader is, and how far clear you are. III: every rider off the top of the screen, and by how much. Carry nothing and you race what you can see." },
-  { key: "powerMeter", name: "Power meter", note: "Everything your own body is doing. Reads your effort live, so you can pace a climb instead of finding out you overcooked it when the legs go. The one thing that helps in a time trial." },
+  { key: "powerMeter", name: "Power meter", note: "Everything your own body is doing. Reads your effort live, and tells you how long you can hold it: the same effort costs far more on a ramp than it does in the bunch, and without one you find that out when the legs go. The one thing that helps in a time trial." },
   // ★ THE SIM ALREADY DID ALL OF THIS AND NO RIDER COULD EVER HAVE IT. carbMix (a bottle
   // feeding you as well as watering you) and feedSmooth (no stumble when you take one
   // wide) are implemented in stepRider, sit in BASE_STATS and in FLAG_KEYS, and were
@@ -9313,42 +9558,60 @@ function assignRoute(t, len) {
   t.routeMap = {};
   const own = ownedRoutes();
   if (!own.length) return;
-  const mtn = [];
-  for (let i = 1; i < len - 1; i++) if (t.schedule[i] === 2 || t.schedule[i] === 4) mtn.push(i);
-  if (!mtn.length) return;
-  // ★ PAID ROADS GET THE DECISIVE STAGES, FREE ROADS FILL THE REST. Every mountain day now
-  // has a name on it, which is the whole point of the free tier — but a road you paid for
-  // must never be crowded out by one you did not, so the premium list is placed first and
-  // the free list only takes what is left over.
-  const paid = paidRoutes();
-  const free = Sim.ROUTES.filter(r => r.free).map(r => r.id);
+  // ★ TWO KINDS OF ROAD, TWO KINDS OF DAY. A climb belongs on a mountain stage; a cobbled
+  // sector belongs on a FLAT one, because pave decides a flat race and would be invisible
+  // on a mountain day. Keeping the lists apart is what stops a pack you bought for the
+  // cobbles turning up on a col.
+  const byId = id => Sim.ROUTES.filter(r => r.id === id)[0];
+  const climbs = own.filter(id => !Sim.isSector(byId(id)));
+  const setts = own.filter(id => Sim.isSector(byId(id)));
+  const paidSet = new Set(paidRoutes());
+  const mtn = [], flat = [];
+  for (let i = 1; i < len - 1; i++) {
+    const k = t.schedule[i];
+    if (k === 2 || k === 4) mtn.push(i);
+    else if (k === 0 || k === 3) flat.push(i);
+  }
+  // PAID FIRST, FREE FILLS. A road you paid for must never be crowded out by one you did
+  // not, so each list is split and the premium half is placed before the free half.
+  const split = list => [list.filter(id => paidSet.has(id)), list.filter(id => !paidSet.has(id))];
+  const [paidClimbs, freeClimbs] = split(climbs);
+  const [paidSetts] = split(setts);            // there is no free cobbled sector
+
+  const spread = (days, list) => {
+    for (let k = 0; k < list.length && k < days.length; k++)
+      t.routeMap[days[Math.round(k * (days.length - 1) / Math.max(1, Math.min(list.length, days.length) - 1))]] = list[k];
+  };
+  const fill = (days, list) => {
+    if (!list.length) return;
+    let f = ((t.seed >>> 5) >>> 0) % list.length;
+    for (const i of days) if (t.routeMap[i] === undefined) t.routeMap[i] = list[f++ % list.length];
+  };
+
   if (t.grand) {
-    // The grand tour is the showcase: every road you own gets its day, spread across the
-    // mountain stages. It is the reason to have bought them.
-    // Spread them across the whole race, and put the LAST one on the LAST mountain, which
-    // is where a grand tour is decided. Clustering them mid-race left the decisive late
-    // climb generic, which is exactly backwards.
-    // Paid roads spread across the race with the last on the last mountain, then free roads
-    // take any mountain day still without a name.
-    const show = paid.length ? paid : free;
-    for (let k = 0; k < show.length && k < mtn.length; k++) {
-      t.routeMap[mtn[Math.round(k * (mtn.length - 1) / Math.max(1, Math.min(show.length, mtn.length) - 1))]] = show[k];
-    }
-    if (paid.length && free.length) {
-      let f = 0;
-      for (const i of mtn) if (t.routeMap[i] === undefined) t.routeMap[i] = free[f++ % free.length];
-    }
+    // The grand tour is the showcase: every road you own gets its day. Paid climbs spread
+    // across the mountains with the last on the last mountain, free climbs take what is
+    // left, and the sectors get the flat days — which is what a real grand tour does with
+    // its cobbled stage.
+    spread(mtn, paidClimbs.length ? paidClimbs : freeClimbs);
+    if (paidClimbs.length) fill(mtn, freeClimbs);
+    spread(flat, paidSetts);
     return;
   }
   // ★ EVERY MOUNTAIN DAY, NOT JUST SEVEN-DAY TOURS. This used to bail below seven stages,
   // so a rider doing the short and medium races the ladder ASKS FOR never saw a named road
   // at all. With a free tier that is the common case, and "real roads throughout the game"
   // means throughout it.
-  const pick = (list, salt) => list[((t.seed >>> salt) >>> 0) % list.length];
-  if (paid.length) t.routeMap[mtn[(t.seed >>> 3) % mtn.length]] = pick(paid, 9);
-  if (!free.length) return;
-  let f = ((t.seed >>> 5) >>> 0) % free.length;
-  for (const i of mtn) if (t.routeMap[i] === undefined) t.routeMap[i] = free[f++ % free.length];
+  if (mtn.length) {
+    if (paidClimbs.length) t.routeMap[mtn[(t.seed >>> 3) % mtn.length]] =
+      paidClimbs[((t.seed >>> 9) >>> 0) % paidClimbs.length];
+    fill(mtn, freeClimbs);
+  }
+  // One sector per race, on a flat day, because a cobbled stage is an event rather than a
+  // texture — putting pave on every flat day would make it wallpaper.
+  if (flat.length && paidSetts.length)
+    t.routeMap[flat[((t.seed >>> 7) >>> 0) % flat.length]] =
+      paidSetts[((t.seed >>> 11) >>> 0) % paidSetts.length];
 }
 const stageRoute = st => (tour && tour.routeMap) ? (tour.routeMap[st] || null) : null;
 
@@ -9470,7 +9733,9 @@ function renderRoutes() {
     const top = document.createElement("div"); top.className = "top";
     const nb = document.createElement("b"); nb.textContent = p.name; top.appendChild(nb);
     const tag = document.createElement("span"); tag.className = "pips";
-    tag.textContent = have ? "owned" : ready ? climbs.length + " climbs" : "in the works";
+    // "3 climbs" is wrong for a pack of pave. Name what is actually in the box.
+    const kindWord = climbs.length && climbs.every(c => Sim.isSector(c)) ? " sectors" : " climbs";
+    tag.textContent = have ? "owned" : ready ? climbs.length + kindWord : "in the works";
     top.appendChild(tag); card.appendChild(top);
     const note = document.createElement("div"); note.className = "note"; note.textContent = p.note;
     card.appendChild(note);
@@ -9478,8 +9743,13 @@ function renderRoutes() {
     for (const c of climbs) {
       const li = document.createElement("div"); li.className = "note";
       li.style.cssText = "opacity:.75;margin-top:4px";
-      li.textContent = c.name + " \u00b7 " + M.long(c.km * 1000 / Sim.CFG.scaleM)
-        + " at " + c.grade.toFixed(1) + "% \u00b7 tops out at " + M.alt(c.top);
+      // A sector has no gradient and no summit, so describing it like a climb would print
+      // "at undefined%". Rated in stars, the way pave actually is.
+      li.textContent = Sim.isSector(c)
+        ? c.name + " \u00b7 " + M.long(c.km * 1000 / Sim.CFG.scaleM) + " of pave \u00b7 "
+          + "\u2605".repeat(c.stars || 5)
+        : c.name + " \u00b7 " + M.long(c.km * 1000 / Sim.CFG.scaleM)
+          + " at " + c.grade.toFixed(1) + "% \u00b7 tops out at " + M.alt(c.top);
       card.appendChild(li);
     }
     const btns = document.createElement("div"); btns.className = "btns";

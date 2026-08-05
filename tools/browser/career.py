@@ -83,9 +83,36 @@ def build_throwaway(scratch):
          "  if ((you.stats.radio || 0) >= 2) {\n"
          "    window.__hud.leader = 1;\n"
          "    label(leader === you ? \"LEADING\""),
-        ("    const lvl = you.stats.powerMeter;",
+        ("    const lo = Sim.CFG.ease;",
          "    window.__hud.power = 1;\n"
-         "    const lvl = you.stats.powerMeter;"),
+         "    const lo = Sim.CFG.ease;"),
+        # The power meter now reads SUSTAINABILITY, and the reading is the feature. Publish
+        # the string the gauge actually labels itself with, plus the raw rate behind it, so
+        # a test asserts what is on screen rather than re-deriving the arithmetic and then
+        # asserting its own copy of it.
+        # RECORD ACROSS FRAMES, DO NOT SAMPLE ONE. A road stage opens with a neutral
+        # roll-out where the sim zeroes the energy rate outright, so a single read at the
+        # end of the case can land on dE 0 and "COMING BACK" and prove nothing about the
+        # number the feature is built on. Keeping the extremes is the same shape the
+        # profile-strip counter already uses.
+        ("    const pmRead = you.cracked ? \"EMPTY\"",
+         "    window.__hud.dE = you.dE === undefined ? null : you.dE;\n"
+         "    window.__hud.dEmin = Math.min(window.__hud.dEmin === undefined ? 0 : window.__hud.dEmin, you.dE || 0);\n"
+         "    if (ttl !== Infinity) window.__hud.ttlMin = Math.min(\n"
+         "      window.__hud.ttlMin === undefined ? 1e9 : window.__hud.ttlMin, Math.round(ttl));\n"
+         "    const pmRead = you.cracked ? \"EMPTY\""),
+        ("    if (pmLvl >= 2) label(pmRead,",
+         "    if (pmLvl >= 2) window.__hud.pmRead = pmRead;\n"
+         "    if (pmLvl >= 2) label(pmRead,"),
+        # The projection slice on the LEGS bar is the OTHER half of level II, and it is
+        # drawn from a different place in drawHud. Count it separately: the build-15 lesson
+        # is that one gated surface passing says nothing about the others.
+        ("  if (pmLvl >= 2 && !you.cracked && Math.abs(you.dE || 0) > 0.05) {",
+         "  window.__hud = window.__hud || { pips: 0 };\n"
+         "  window.__hud.projGate = pmLvl >= 2 ? 1 : 0;\n"
+         "  window.__hud.proj = window.__hud.proj || 0;\n"
+         "  if (pmLvl >= 2 && !you.cracked && Math.abs(you.dE || 0) > 0.05) {\n"
+         "    window.__hud.proj++;"),
         # COUNT THE RIVAL TICKS ON THE PROFILE STRIP. Build 15 gated the pip rail, shipped
         # a passing test proving the rail was silent, and left this loop painting the whole
         # field across the whole stage for free. Counting the rail alone is what let that
@@ -373,6 +400,116 @@ async def main():
         finally:
             await ctx.close()
 
+        # ---- 5c. the power meter READS SUSTAINABILITY ------------------------
+        # The gauge used to smooth toward one of three fixed heights taken from the effort
+        # LABEL, so it told you nothing your own thumbs had not. It now reads how long the
+        # current effort can be held, off `dE` — the per-second energy rate the sim records
+        # as it applies it. Three separate things are asserted because they are drawn from
+        # three separate places and build 15 shipped exactly this shape of bug: the reading
+        # itself, the projection slice on the LEGS gauge, and the level gating.
+        # LEVEL COMES FROM CAREER WINS, not from a `powerMeter` field on the ladder. That
+        # field is a leftover from when tactics arrived on a win-count drip; the live path
+        # is raceStats -> tacticLevel -> WIN_STEPS.powerMeter = [2, 6, 11]. Seeding the
+        # wrong key gives a rider at level 1 in both cases and a test that proves nothing,
+        # which has already happened twice in this suite.
+        for wins, lvl, want_read, want_proj in ((6, 2, True, True), (2, 1, False, False)):
+            ladder = {"tutorialDone": True, "div": 4, "tours": 3, "wins": wins,
+                      "money": 500, "tactics": ["powerMeter"]}
+            ctx, pg = await open_case(browser, url, ladder, [], errs, rand_seed=42)
+            try:
+                await pg.click("#pracBtn")
+                await pg.locator("#practice").wait_for(state="visible")
+                # EXACT: "Flat" also matches "Pan flat", which is a strict-mode violation.
+                await pg.locator("#pStages button", has_text=re.compile(r"^Flat$")).click()
+                await pg.click("#pRide")
+                await pg.wait_for_selector("#build:not(.hide)")
+                await pg.click("#bLock")
+                await pg.wait_for_selector("#brief:not(.hide)")
+                await pg.click("#rollBtn")
+                # PEDAL HARD ENOUGH TO ACTUALLY SPEND, and ride long enough to clear the
+                # neutral roll-out, where the sim zeroes the energy rate outright. Below
+                # tempo the legs only ever come back and the reading is "COMING BACK"
+                # forever, which passes a sloppy assertion while proving nothing.
+                side = 0
+                for _ in range(120):
+                    await pg.keyboard.press("z" if side == 0 else "x")
+                    side ^= 1
+                    await pg.wait_for_timeout(60)
+                h = await pg.evaluate("window.__hud || null") or {}
+                check("power meter L%d: the sim publishes an energy rate" % lvl,
+                      h.get("dE") is not None, "dE %r" % (h.get("dE"),))
+                got_read = h.get("pmRead") is not None
+                check("power meter L%d: the reading %s" % (lvl, "shows" if want_read else "is held back"),
+                      got_read == want_read, "read %r" % (h.get("pmRead"),))
+                check("power meter L%d: the LEGS projection %s" % (lvl, "draws" if want_proj else "is held back"),
+                      (h.get("proj", 0) > 0) == want_proj,
+                      "projGate %r, frames %r" % (h.get("projGate"), h.get("proj")))
+                if want_read:
+                    # A REAL seconds-to-empty has to have appeared at some point in the
+                    # ride, not just the "COMING BACK" that a resting rider shows. Asserting
+                    # on the last frame would accept a reading that was never finite.
+                    check("power meter: a finite seconds-to-empty was reached",
+                          h.get("ttlMin") is not None and 0 < h["ttlMin"] < 1e9,
+                          "lowest reading %r, hardest rate %r" % (h.get("ttlMin"), h.get("dEmin")))
+            finally:
+                await ctx.close()
+
+        # ---- 4bis. the test shortcut is behind a gesture ----------------------
+        # It used to be a plainly labelled Settings button handing over the $4.99 career and
+        # every $2.99 pack for free. Now: hold the build number 5s, type the passphrase. The
+        # assertions that matter are that it is INVISIBLE at rest (a shipped build must not
+        # leak it) and that the debug screen is REGISTERED with show() — an unregistered
+        # screen leaves the previous one visible underneath, which is a known bug class here.
+        ladder = {"tutorialDone": True, "div": 6, "tours": 3, "money": 250}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            await pg.click("#setBtn")
+            await pg.wait_for_selector("#settings:not(.hide)")
+            check("debug: the shortcut is invisible until the gesture",
+                  await pg.locator("#debugBtn").is_hidden(), "")
+            pg.on("dialog", lambda d: asyncio.ensure_future(d.accept("developer_debug!")))
+            # SCROLL IT INTO VIEW FIRST. #verLine is the LAST element of a screen that
+            # overflows (scrollHeight 749 against a 720 viewport), so its centre sits at
+            # y=711 with nine pixels to spare. bounding_box() does not scroll, and a few
+            # pixels of font-metric difference between Chromium builds is enough to push
+            # that centre past the fold: mouse.move then aims outside the viewport, the
+            # pointerdown never reaches the build number, and the whole gesture silently
+            # does nothing. That is exactly how this passed locally and failed on CI.
+            await pg.locator("#verLine").scroll_into_view_if_needed()
+            box = await pg.locator("#verLine").bounding_box()
+            cy = box["y"] + box["height"] / 2
+            vh = await pg.evaluate("innerHeight")
+            check("debug: the build number is reachable by pointer",
+                  0 <= cy <= vh, "centre y %.0f in a %d viewport" % (cy, vh))
+            await pg.mouse.move(box["x"] + box["width"] / 2, cy)
+            await pg.mouse.down()
+            await pg.wait_for_timeout(5600)
+            await pg.mouse.up()
+            await pg.wait_for_timeout(400)
+            check("debug: holding the build number and answering reveals it",
+                  await pg.locator("#debugBtn").is_visible(), "")
+            await pg.click("#debugBtn")
+            await pg.wait_for_selector("#debug:not(.hide)")
+            leaked = await pg.evaluate(
+                "['menu','settings','routes','build'].filter(id =>"
+                " !document.getElementById(id).classList.contains('hide'))")
+            check("debug: the screen is registered, nothing shows underneath",
+                  not leaked, "still visible: %r" % (leaked,))
+            rows = await pg.evaluate("document.querySelectorAll('#dbgState .note').length")
+            check("debug: the panel dumps the save state", rows >= 12, "%d rows" % rows)
+            await pg.locator("#dbgGive button", has_text="10,000").click()
+            await pg.wait_for_timeout(200)
+            money = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).money)")
+            check("debug: +10,000 lands in the save", money == 10250, "money %r" % money)
+            await pg.locator("#dbgDivs button", has_text="1").first.click()
+            await pg.wait_for_timeout(200)
+            div = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).div)")
+            check("debug: jumping division rewrites the save", div == 1, "div %r" % div)
+        finally:
+            await ctx.close()
+
         # ---- 4c. real roads, free and paid -----------------------------------
         # Kevin: "seeing real routes throughout the game is more exciting than unnamed
         # routes." Free roads are always owned and come from ranges no pack claims, so the
@@ -403,7 +540,7 @@ async def main():
                 " disabled: c.querySelector('.btns button').disabled }))")
             sellable = [p for p in packs if not p["disabled"]]
             check("a pack on sale always has roads in it",
-                  sellable and all("climb" in p["tag"] for p in sellable),
+                  sellable and all(("climb" in p["tag"] or "sector" in p["tag"]) for p in sellable),
                   "sellable %r" % ([(p["name"], p["tag"]) for p in sellable],))
             empty = [p for p in packs if "in the works" in p["tag"]]
             check("a pack with no roads cannot be bought",
@@ -412,6 +549,18 @@ async def main():
             check("the Pyrenees pack is no longer an empty box",
                   any(p["name"] == "The Pyrenees" and "climb" in p["tag"] for p in packs),
                   "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
+            check("every advertised pack now has roads, including the cobbles",
+                  not empty and len(sellable) == 3,
+                  "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
+            # A sector has no gradient and no summit, so listing it like a climb prints
+            # "at undefined%". It is rated in stars, the way pave actually is.
+            roads = await pg.evaluate(
+                "[...document.querySelectorAll('#routesBody .card .note')].map(n => n.textContent)")
+            cobble_lines = [r for r in roads if "pave" in r]
+            check("a cobbled sector is described as pave, not as a climb",
+                  cobble_lines and all("undefined" not in r and "%" not in r
+                                       for r in cobble_lines),
+                  "sector lines %r" % (cobble_lines,))
         finally:
             await ctx.close()
 
