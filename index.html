@@ -345,7 +345,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 26</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 27</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -7890,6 +7890,49 @@ function stageTowns(seed, idx) {
   if (b === a) b = (b + 1 + (idx % 3)) % TOWNS.length;
   return { start: TOWNS[a], finish: TOWNS[b] };
 }
+// ★ RACES HAVE NAMES NOW. A stage was "Bourg → Le Grand-Bornand" and the race around it was
+// "Three-day tour", which is a menu row rather than a race. These are nods to the real
+// calendar without being it: the pattern is to name a race after the TERRAIN, the REGION or
+// the thing that hurts, which is also how the sport's own epithets work ("Hell of the North",
+// "the Old Lady", "the Race of the Falling Leaves"). What is deliberately avoided is a real
+// event's name plus a year, which reads as the official race rather than a wink at it.
+//
+// One-day races draw from the classics, tours from the stage races, and three weeks from the
+// grand tours, so the name tells you what shape of race you are looking at as well.
+const RACE_NICKS = {
+  one: ["Hell of the Cobbles", "Ronde van Pijn", "The Long Sprint", "The Old Lady",
+    "The Falling Leaves", "The White Roads", "The Golden Hills", "The Stone Classic",
+    "Purgatory Pavé", "The Wall Hunt", "The Northern Cobbles", "La Doyenne du Nord"],
+  short: ["Race to the Sun", "The Dauphin", "Tour de Suffering", "The Tirreno Crossing",
+    "The Basque Grind", "Route du Mal", "The Catalan Week", "Tour de Pain"],
+  // "La Grande Souffrance" is deliberately absent: it is reserved for THE Grand Tour, which
+  // keeps one name rather than drawing a new one every time you ride it.
+  grand: ["Tour de Pain", "Giro d'Agonia", "The Red Chase", "The Three-Week Reckoning"]
+};
+// DERIVED, NOT DRAWN. It uses the seed with its own hash and never touches the course PRNG:
+// adding an R() call inside generation shifts every downstream value and changes every course
+// (DEV-LOOP, "course PRNG discipline"). It also lives view-side, so the sim is untouched and
+// the golden does not move.
+function raceNick(seed, len) {
+  const pool = len === 1 ? RACE_NICKS.one : len >= 14 ? RACE_NICKS.grand : RACE_NICKS.short;
+  // A cheap deterministic hash of the seed and the length, so the same race is always the
+  // same race and a one-day and a three-day off one seed are not forced to share a name.
+  let h = (seed >>> 0) ^ 0x9e3779b9;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) ^ (len * 0x27d4eb2d);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return pool[Math.abs(h >>> 0) % pool.length];
+}
+// The name of the race you are actually riding, or "" when there is no race with a name: a
+// training ride and the daily are not races on a calendar, they are a practice lap and a
+// shared puzzle, and both already say so in their own eyebrow.
+function tourNick() {
+  if (!tour || !tour.schedule || tour.practice || tour.daily) return "";
+  // THE Grand Tour is one specific race you unlock by taking Division 1, not a category, so
+  // it gets one name and keeps it. Drawing it from the pool would give the thing you spent a
+  // whole career opening a different title every time you rode it.
+  if (tour.grand) return "La Grande Souffrance";
+  return raceNick(tour.seed >>> 0, tour.schedule.length);
+}
 function stageTitle(i) {
   if (!tour || !tour.schedule) return "";
   const idx = i === undefined ? tour.stage : i;
@@ -7973,7 +8016,8 @@ function showBriefing() {
     ? "Training · Division " + tour.practice.div + " · " + spec.sub + " · " + dims
     : tour.daily
     ? "Daily challenge #" + tour.daily.n + " · " + spec.sub + " · " + dims
-    : "Division " + ladder.div + " · " + stageLabel() + " · " + spec.sub + " · " + dims;
+    : [tourNick(), "Division " + ladder.div, stageLabel(), spec.sub, dims]
+        .filter(Boolean).join(" · ");
   // THE TOWNS ARE THE TITLE. The flavour line that used to live here says the same thing
   // the eyebrow's "Mountains" already says, so it moves down to the notes where it reads as
   // a remark about the day rather than the name of it.
@@ -8153,10 +8197,12 @@ function finishStage() {
     }
   }
   $("pauseBtn").classList.add("hide");
-  $("rEyebrow").textContent = lastStage
+  // The race's name leads the finish line, because "you won the Hell of the Cobbles" is a
+  // result and "tour finished" is a state change.
+  $("rEyebrow").textContent = [tourNick(), lastStage
     ? (oneDay ? "Race finished · Division " : "Tour finished · Division ")
       + (moved === "up" ? ladder.div + 1 : moved === "down" ? ladder.div - 1 : ladder.div)
-    : stageLabel() + " · " + fmt(you.time);
+    : stageLabel() + " · " + fmt(you.time)].filter(Boolean).join(" · ");
   $("rVerdict").textContent = lastStage
     ? (lanterneJustWon ? "Lanterne rouge"
       : gcPlace === 1 ? (tour.grand ? "You win the Grand Tour" : oneDay ? "You win the race" : "You win the tour") : gcPlace + "th overall")

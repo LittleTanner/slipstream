@@ -269,6 +269,13 @@ async def flow_race(browser, uri):
         await pg.locator("#build").wait_for(state="visible")
         await pg.click("#bLock")
         await pg.locator("#brief").wait_for(state="visible")
+        # THE RACE HAS A NAME. It leads the briefing eyebrow, ahead of the division and the
+        # stage. Asserted against the shape rather than a specific name, because the name is
+        # derived from the tour's seed and the seed is not fixed on this path — pinning one
+        # nickname here would be a test of the seed rather than of the feature.
+        eyebrow = (await pg.locator("#bEyebrow").text_content() or "")
+        if " · Division " not in eyebrow or eyebrow.startswith("Division "):
+            return (False, "briefing eyebrow carries no race name: %r" % eyebrow), pause_res
         await pg.click("#rollBtn")
         try:
             # startStage un-hides the pause button: that is "the race is on"
