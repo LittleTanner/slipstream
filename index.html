@@ -345,7 +345,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 25</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 26</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -2871,9 +2871,31 @@ function aiThink(race, r, dt) {
   // enough to read it, follows a genuine dig. Sharper divisions react more often and sooner,
   // so at Division 8 you often go alone and at Division 1 you rarely do.
   const yr = race.you;
-  if (r.inPeloton && !yr.inPeloton && yr.eff === "attack" && yr.dist > r.dist
+  // ★ AND IT WORKS INSIDE A BREAKAWAY TOO. This read `r.inPeloton && !yr.inPeloton`, which is
+  // "a rider in the bunch, when you have gone clear of it" — so once you were IN a break,
+  // nobody in it ever reacted to you going again. Measured before the fix: break riders
+  // attacked on 8.3% of frames against the peloton's 8.8%, so attacks were never RESTRICTED
+  // in a break (the burst<0.12 test further up is about who swings off, not about attacking).
+  // What was missing was specifically the REACTION: every trigger that responds to something
+  // was gated on being in the peloton, so a break was a place where digs went unanswered.
+  // Written as "the two of you are in the same group and you have just gone" so the peloton
+  // case is untouched and only the break case is new — the golden diff stays attributable.
+  // ★ AND THE TELL INSIDE A BREAK IS A LAUNCH, NOT THE EFFORT LABEL. The swing-off code below
+  // already spells this out and I did not read it closely enough first time: "break riders
+  // ride 'attack' as their normal hard state". Keying the break case on `eff === "attack"`
+  // therefore fired on every frame of ordinary through-and-off, every rival attacked
+  // permanently, and the rotation died — `refusal.test.js` lost the elbow flick and
+  // `rotation-dropback.test.js` dropped to 2 steady-state drop-backs. A JUMP is the physical
+  // tell that separates a dig from a turn on the front, which is the same test used to decide
+  // who swings off.
+  const brk = race.breakaway || [];
+  const together = (r.inPeloton && !yr.inPeloton)                 // you have left the bunch
+    || (brk.indexOf(r) >= 0 && brk.indexOf(yr) >= 0 && (yr.burst || 0) > 0.12);
+  if (together && yr.eff === "attack" && yr.dist > r.dist
     && yr.dist - r.dist < 26 && r.energy > 40 && togo > 260
     && r.sharp > 0.30 + 0.45 * (1 - ai)) want = "attack";
+  // Still peloton-only, and correctly: this is the BUNCH deciding to chase a break up the
+  // road. A rider already in that break has nothing to chase.
   if (r.inPeloton && race.chase > 0.35 - 0.16 * ai && r.energy > 45 && race.breakGap > 20) want = "attack";
   if (r.inPeloton && race.chase < 0.12 && want === "attack" && togo > 320 && p.k !== "raid" && g < 0.25) want = "tempo";
 
