@@ -171,7 +171,11 @@
     box-shadow:0 -12px 34px rgba(46,49,47,.18)}
   #chanceCard.hide{display:none}
   #chanceCard .go{width:100%;margin-bottom:8px}
+  /* `.go{display:block}` beats `.hide{display:none}` at equal specificity, so every one of
+     these needs its own id rule or it can never be hidden. This has bitten four times. */
   #pCal.hide{display:none}
+  #pTilt.hide{display:none}
+  #pLean.hide{display:none}
   #pauseCard .go{width:100%;margin-bottom:8px}
   #tutCard.hide{display:none}
   .tcInner{text-align:left}
@@ -289,7 +293,16 @@
   <h3 id="pTitle">Nature break</h3>
   <p id="pBody"></p>
   <button class="go" id="pResume">Back on</button>
+  <!-- ★ STEERING IS CHANGEABLE MID-RACE. It only lived in Settings, so discovering that
+       tilt was wrong for you meant abandoning the stage to go and change it, which is a
+       punishment for experimenting with the control scheme. Same three controls as
+       Settings, driven by the same functions and painted by the same code, because two
+       copies of one setting is how they end up disagreeing. -->
+  <div class="secthead">Steering</div>
+  <button class="go ghost" id="pSteer">Drag</button>
   <button class="go ghost hide" id="pCal">Recalibrate tilt</button>
+  <button class="go ghost hide" id="pTilt">Tilt sensitivity: normal</button>
+  <button class="go ghost hide" id="pLean">Lean direction: normal</button>
   <button class="go ghost" id="pQuit">Save and step off</button>
   <button class="go ghost" id="pAbandon">Abandon the tour</button>
   <p id="pFoot" class="sub"></p>
@@ -332,7 +345,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 24</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 25</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -4610,6 +4623,15 @@ function refreshMenu() {
   $("leanBtn").classList.toggle("hide", ladder.steer !== "tilt");
   $("tiltBtn").textContent = "Tilt sensitivity: " + tiltSens().name;
   $("tiltBtn").classList.toggle("hide", ladder.steer !== "tilt");
+  // The pause card's copies, painted from the same values. `.go` sets `display`, so `.hide`
+  // loses to it on equal specificity unless the id has its own rule — the CSS trap this file
+  // has hit four times — which is why each of these has one in the stylesheet.
+  $("pSteer").textContent = ladder.steer === "tilt" ? "Tilt" : "Drag";
+  $("pTilt").textContent = "Tilt sensitivity: " + tiltSens().name;
+  $("pTilt").classList.toggle("hide", ladder.steer !== "tilt");
+  $("pLean").textContent = "Lean direction: " + (ladder.leanInvert ? "inverted" : "normal");
+  $("pLean").classList.toggle("hide", ladder.steer !== "tilt");
+  $("pCal").classList.toggle("hide", ladder.steer !== "tilt");
   $("calBtn").classList.toggle("hide", ladder.steer !== "tilt");
   $("calBtn").textContent = ladder.tiltCal ? "Recalibrate tilt" : "Calibrate tilt";
   $("mSteer").textContent = ladder.steer === "tilt" ? Tilt.label()
@@ -7610,7 +7632,11 @@ function setPaused(v) {
   $("pauseCard").classList.toggle("hide", !v);
   // Tilt drifts with how you sit; mid-race is exactly when you notice. Tilt riders
   // can re-level from the nature break without digging back out to Settings.
-  if (v) { $("pCal").classList.toggle("hide", ladder.steer !== "tilt"); $("pCal").textContent = "Recalibrate tilt"; }
+  // refreshMenu paints every steering control on both screens, so calling it here is what
+  // makes the pause card's copies correct on open rather than showing whatever they read
+  // last time. `pCal`'s label is set after, because it is the one control whose text depends
+  // on having been pressed rather than on the setting.
+  if (v) { refreshMenu(); $("pCal").textContent = "Recalibrate tilt"; }
   const t = tour && tour.schedule ? tour.schedule.length : 1;
   // Riders stop for all sorts of reasons and the bunch waits. A pause is one of them.
   const REASONS = [
@@ -8192,10 +8218,30 @@ $("pCal").addEventListener("click", () => {
   else b.textContent = "Tilt is not reporting";
   setTimeout(() => { b.textContent = "Recalibrate tilt"; }, 1600);
 });
-$("tiltBtn").addEventListener("click", () => {
+// ★ ONE ACTION PER SETTING, TWO BUTTONS. The pause card carries the same steering controls
+// as Settings so a control scheme can be changed mid-stage rather than by abandoning the
+// race to go and find it. They call these, never their own copies: a second implementation
+// of "cycle the tilt sensitivity" is how the two screens end up disagreeing, and this file
+// already has a record of exactly that (the corridor computed in one place and drawn from
+// another). `refreshMenu()` paints both sets, so neither can be left stale either.
+function cycleTiltSens() {
   ladder.tiltSens = ((ladder.tiltSens ?? 1) + 1) % TILT_SENS.length;
   Store.save(ladder); refreshMenu();
-});
+}
+function toggleLeanInvert() {
+  ladder.leanInvert = !ladder.leanInvert; Store.save(ladder); refreshMenu();
+}
+// Async and awaited: enabling tilt asks for the motion permission, which the browser only
+// grants inside the gesture that requested it, so this cannot be deferred or wrapped.
+async function toggleSteer() {
+  if (ladder.steer === "tilt") { ladder.steer = "drag"; Tilt.disable(); }
+  else { ladder.steer = "tilt"; await Tilt.enable(); }
+  Store.save(ladder); refreshMenu();
+}
+$("tiltBtn").addEventListener("click", cycleTiltSens);
+$("pTilt").addEventListener("click", cycleTiltSens);
+$("pLean").addEventListener("click", toggleLeanInvert);
+$("pSteer").addEventListener("click", toggleSteer);
 // ★ THE TEST SHORTCUT, BEHIND A GESTURE. This used to be a plainly labelled button in
 // Settings that handed over the $4.99 career and every $2.99 route pack for free and
 // rewrote a real save doing it — the pre-ship blocker in CLAUDE.md. Now: hold the build
@@ -8367,14 +8413,8 @@ function renderDebug() {
   });
   rs.appendChild(wipe);
 }
-$("leanBtn").addEventListener("click", () => {
-  ladder.leanInvert = !ladder.leanInvert; Store.save(ladder); refreshMenu();
-});
-$("steerBtn").addEventListener("click", async () => {
-  if (ladder.steer === "tilt") { ladder.steer = "drag"; Tilt.disable(); }
-  else { ladder.steer = "tilt"; await Tilt.enable(); }     // must be inside the gesture
-  Store.save(ladder); refreshMenu();
-});
+$("leanBtn").addEventListener("click", toggleLeanInvert);
+$("steerBtn").addEventListener("click", toggleSteer);
 function resumeTour() {
   const sv = ladder.savedTour; if (!sv || !sv.schedule) return;
   playerType = sv.type || playerType;
