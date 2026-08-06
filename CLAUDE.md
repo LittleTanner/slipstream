@@ -31,6 +31,11 @@ Measure before claiming. Several features were reported "done" and were not:
 - The pace car's slipstream could never fire because the car only existed in the renderer.
 - Half the "race craft" hints were written from intuition; two were false, one exactly
   backwards.
+- `window.storage` was read in four places and defined in none, so a browser silently
+  discarded every save and the career reset on reload. It survived 30+ builds because the
+  browser tests inject the very object whose absence was the bug. **A harness that supplies
+  the missing piece cannot see it missing** — when a test needs a shim, ask what the shim is
+  standing in for and whether anything checks that the real thing exists.
 
 A feature is not done because both halves exist. Check they are in the same scope and that
 the visible half renders.

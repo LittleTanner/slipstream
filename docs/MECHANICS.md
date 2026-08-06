@@ -83,6 +83,7 @@ The most player-facing mechanic; it has its own suite. All of it lives in
 | Piece | Promise | Test |
 |---|---|---|
 | Turn cue order | YOUR TURN only when the front's pull is done AND you are next in the working file | `rotation-cue.test.js` |
+| Saving | `window.storage` is defined by the page when the host does not provide one, backed by `localStorage`, probed with a real write (it THROWS rather than returning null when blocked) and falling back to an in-memory Map. Never clobbers an injected or host-provided store. **It was read in four places and defined in none until build 34**, so a browser silently discarded every save and the career reset on reload; the try/catch hid it and the test shim hid it harder. The diagnostics page's first row names the live store | `career.py` case "save: the game can save with no shim" - deliberately does NOT inject the shim, and proves it by reloading |
 | Swing-off + rejoin | A relieved rider swings aside, drifts outside the file, tucks in ON the last wheel, never mid-file, never colliding | `rotation-rejoin.test.js` |
 | The queue | You are only called again once you have BEEN TO THE BACK since your last pull; a shirking mate waives that after a full cycle | `rotation-recall.test.js` |
 | Cohesion | The working rotation is the cohesive chain at the head of the break (gaps > 10 m break it); a companion you dropped keeps no rotation alive and no cue fires while you are functionally alone | `rotation-cohesion.test.js` |
