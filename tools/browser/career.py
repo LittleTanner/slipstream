@@ -673,6 +673,37 @@ async def main():
             div = await pg.evaluate(
                 "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).div)")
             check("debug: jumping division rewrites the save", div == 1, "div %r" % div)
+            # ---- the Experiments panel ---------------------------------------
+            # BOTH TOGGLES, AND BOTH HALVES OF EACH. An experiment is exactly the shape of
+            # bug this project has shipped repeatedly: a button that paints itself ON while
+            # the sim flag it is supposed to own stays false, so the feature "exists" and
+            # never fires. So assert the CFG flag, not the caption.
+            exps = await pg.evaluate(
+                "[...document.querySelectorAll('#dbgExp button')].map(b => b.id)")
+            check("debug: the experiments panel carries both toggles",
+                  set(exps) >= {"dbgGears", "dbgSwing"}, "buttons %r" % (exps,))
+            flags = await pg.evaluate(
+                "({g: Sim.CFG.gearsOn, s: Sim.CFG.swingBudget, n: Sim.CFG.gearRatios.length})")
+            check("debug: both experiments start off, as a shipped build must",
+                  flags["g"] is False and flags["s"] is False, "flags %r" % (flags,))
+            # The caption reads the ratio count from the sim rather than hard-coding it, so
+            # this also catches a gearbox size changing in CFG and not on the button.
+            cap = await pg.locator("#dbgGears").text_content()
+            check("debug: the gearing button reports the sim's own ratio count",
+                  ("%d speed" % flags["n"]) in cap and flags["n"] == 4,
+                  "caption %r, ratios %r" % (cap, flags["n"]))
+            for bid, key in (("dbgGears", "gearsOn"), ("dbgSwing", "swingBudget")):
+                await pg.click("#" + bid)
+                await pg.wait_for_timeout(120)
+                on = await pg.evaluate("Sim.CFG.%s" % key)
+                cls = await pg.locator("#" + bid).get_attribute("class")
+                check("debug: %s sets the sim flag and drops the ghost class" % bid,
+                      on is True and "ghost" not in (cls or ""),
+                      "CFG.%s %r, class %r" % (key, on, cls))
+                await pg.click("#" + bid)
+                await pg.wait_for_timeout(120)
+                off = await pg.evaluate("Sim.CFG.%s" % key)
+                check("debug: %s switches back off" % bid, off is False, "CFG.%s %r" % (key, off))
         finally:
             await ctx.close()
 

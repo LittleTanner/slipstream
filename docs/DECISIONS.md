@@ -335,8 +335,13 @@ fixed `ttCadence` and becomes `speed / (ratio * cadScale)`. A bigger gear turns 
 same road speed, so it pulls the target down toward grinding; a smaller one pushes it up until
 you cannot tap fast enough. The right gear is the one that puts the target back where a rider
 sustains it, so the ideal gear is a function of your speed and it drifts as the speed does.
-What sits beside the bar is a GEAR LADDER, an index into the six ratios with the one to aim
+What sits beside the bar is a GEAR LADDER, an index into the ratios with the one to aim
 for ringed, which cannot contradict the rhythm bar because it is not measuring cadence.
+
+**Superseded in part by build 32**, which cut six ratios to four, recalibrated them off the
+interquartile speed range rather than p5-p95, and added the lag and hysteresis that the six-speed
+lacked. The 3.5x span quoted just above is the p5-p95 figure and is the wrong window: p5 is a
+standing start and p95 is a descent. The rest of this section still holds.
 
 **That also deleted two mechanisms.** The road version had a separate `gearCost` economy
 penalty and an explicit spin-out power cap. Both are gone: the wrong gear moves the target
@@ -371,6 +376,104 @@ takes a team car and rides on. Harness, not mechanic.
 **The golden does not regenerate.** `CFG.gearsOn` is false in a shipped build and the golden
 never turns it on, so TT times only move with the toggle. An earlier note in this
 conversation said the golden would have to be regenerated; that was wrong.
+
+## Gearing asked for a shift every three seconds, and three separate things caused it (build 32)
+
+Kevin rode build 24's six-speed and asked for four changes before trying auto-shift. All four
+are in, and the fault they were aimed at was real and worse than it looked: **40 shifts a ride
+at Division 8, 50 at 4, 56 at 1**, across a 110-140s time trial. That is one every two or
+three seconds. Gearing had stopped being a decision and become a second pedalling task laid
+over the first. I had those figures at build 24 and reported them as a neutral statistic
+rather than recognising a broken mechanic, which is the failure worth recording here.
+
+Three independent causes, none of which is "the numbers wanted tuning":
+
+1. **Six rungs 26% apart**, so a breath of speed crossed a boundary. Now four rungs 30% apart.
+2. **`gearIdeal` was recomputed from the instantaneous speed**, so it flickered many times a
+   second. Now both the target and the recommendation read a LAGGED speed (`gearLag`, about a
+   one-second time constant), which is roughly how long it takes a rider to notice the road
+   has tilted.
+3. **No hysteresis**, so once it moved it flickered straight back. The recommendation is now
+   seeded with the gear you are IN and another has to beat it by `gearHyst` to light a chevron.
+
+Also: the band widens when gears are on (`gearBand`). A moving target scored against a fixed
+target's window would charge you for the act of shifting, since a shift steps the target 30%
+at once.
+
+**Recalibrated to the bulk of a ride, not its tails.** The six-speed span came from the p5-p95
+speeds, 5 to 16 m/s. That was the wrong window: p5 is a standing start and p95 is a descent,
+and neither is ridden to a cadence. The measured interquartile range is about 6 to 14 m/s, so
+the four gears cover that and the extremes pin at gear 1 or 4 — which is the truth of it. On a
+fast descent you have run out of gear, exactly as in life.
+
+**Result: 4.4 / 7.3 / 8.3 shift decisions a ride** at Divisions 8 / 4 / 1, and the mechanic is
+worth MORE than before, not less: chasing the ideal gear against sitting in one went from
++3.8s to **+8.7s** mean. Auto-shift is not needed and stays unbuilt.
+
+### Three measurement traps, all of which would have shipped a wrong number
+
+- **The harness could not see the band at all.** Its rider tapped at `cadTgt` exactly, every
+  frame, so `hold` was pinned at 1.0 in every run and the tolerance could have been set to any
+  width with no measured difference. It was only ever measuring whether the target had gone
+  above the tap ceiling. A real hand cannot jump 30% in a frame; it chases. The harness rider
+  now lags, so a shift costs a real dip in `hold`.
+- **Counting clicks scored the width of the ladder.** Dumping four gears at the foot of a climb
+  is one decision and three clicks, and the click count can never fall below the gear span
+  however clean the recommendation is. Traced at Division 1, the shifts arrive as pure
+  sequential sweeps with no reversals at all — 4-3-2-1 slowing onto a ramp, 1-2-3-4 coming off
+  it. So the gate counts DECISIONS, a run of clicks in one direction.
+- **Most of the residual count was the harness crashing.** It never steers (`tx: you.x`), so it
+  crashes into bends, takes a team car and sets off from a dead stop, and each restart costs a
+  full climb back up the ladder. On one Division 4 ride that was 25 of the 27 shifts. The gate
+  now scores crash-free rides and prints the stop count beside it.
+
+**A tuning trap worth writing down, because a sweep will find it again.** Hysteresis of 1.25
+looked best on shift count alone — 3/7/7 a ride — and is a broken mechanic. One gear off puts
+the miss at 1.02 or 0.785 cadence, so a dead zone above 0.785 means a ONE-GEAR error can never
+light a chevron: you are only ever told to shift once you are two gears out and you spend the
+race chasing from behind. The ceiling is 0.785 and it is now written in the CFG comment rather
+than left for the next sweep to rediscover. Shipped at 0.45.
+
+**Also fixed: the gear number printed at `W / 2`**, which is the centre of the action button.
+A rider carrying full team support got "GEAR 2" laid straight over "STICKY BOTTLE · TAKES A
+PENALTY". The number now sits in both shifter pills, which is cheaper than the collision and
+puts the gear under whichever thumb you are looking at. The chevrons themselves went from
+about 53px to 84px on an ordinary phone with a glyph that scales off the pill: gearing only
+exists in a time trial, and a time trial clears feeds, items and litter, so the action button
+has almost nothing to show there.
+
+## The distance-budget drop-back is worse, and the tail it was built for never existed (build 32)
+
+Kevin asked for a debug toggle so he could ride the drop-back rewrite. It is built and it is
+behind `CFG.swingBudget`, off by default. It is also **measurably worse than what ships**, and
+the reason it was ever wanted was a third harness fault.
+
+Build 21 recorded the rewrite as halving the worst case, 39.1s to 20.1s. **There was no 39s
+case.** `tools/aiswing.js` started its clock whenever `race.breakFront` changed — including in
+breaks that were NOT ROTATING, where that name just means "whoever is furthest up the road"
+and it changes for reasons that have nothing to do with a handover. Instrumented, those long
+runs had `race.rotating` false and `swingOff` 0 for their entire length: the rider was never
+relieved and was never dropping back. Gate the trigger on `race.rotating` and the tail vanishes:
+
+|  | median | range |
+|---|---|---|
+| fixed pace cut (ships) | 3.17s | 0.35-4.83s |
+| distance budget | 3.90s | 0.73-28.68s |
+
+The shipped rule is better than the player's own drop-back (3.30s median, 8.90s worst) and
+inside the 4-6s this design claims. The budget is slower in the middle and introduces a 28s
+tail of its own; the floor is why, since a 13 m gap asks for about 75% of the front's pace and
+the 0.82 floor binds first.
+
+**That is the SECOND drop-back figure this harness invented.** The first was 11.91s from timing
+contiguous runs of `swingOff`, retracted in build 21 (see the section below). Both times the
+number was written into docs and treated as a defect before the harness was checked. The
+standing lesson: a drop-back is a rotation event, so a measurement window that outlives the
+rotation is not a slow drop-back, it is not a drop-back.
+
+The toggle stays, because feel is the one question a harness cannot answer and Kevin asked to
+ride it. If it does not feel better in the hand, delete the branch rather than tune it — there
+is no problem left for it to solve.
 
 ## Gearing on the road: built behind a toggle, and the numbers could not tell you whether it was good (build 23)
 
@@ -654,23 +757,31 @@ anyone measured the thing itself rather than the flag.
 
 | | median | worst |
 |---|---|---|
-| a rival | **3.65s** | 39.07s |
+| a rival | **3.17s** | 4.83s |
 | the player (`easeCut`) | 3.3s | 8.9s |
 
-So rivals drop back in about the same time you do, and the design's "four-to-six seconds"
-is met. **What is genuinely wrong is the TAIL**: the worst case runs to ~39s, which is a
-rider stranded off the back of a small break for most of a minute, and that is probably what
-Kevin was seeing when he said rivals seemed slower.
+So rivals drop back slightly FASTER than you do, and the design's "four-to-six seconds" is met
+at both ends.
 
-**A distance-budget swing was built, measured and NOT shipped (build 21).** It replaces the
-fixed pace cut with "work out how far you still have to drop and take the deficit that
-clears it in four seconds", which cannot overshoot and is the more principled mechanism. It
-passed every gate — 38/38 mechanics, second chance unchanged at 7/7 and 6/7, sanity clean,
-and no dominance verdict that repeated across seed sets — and it **halved the tail, 39.1s to
-20.1s**. It was held because the median goes marginally the wrong way (3.65s to 3.83s) and
-shipping it costs a golden regen (every finishing order, every purse) to fix a tail, on the
-back of a premise that had just evaporated. Revisit if the tail is what bothers you in the
-hand; the branch work is described here well enough to redo in an hour.
+**★ THE TAIL IN THIS TABLE USED TO READ 39.07s, AND THAT WAS THE SAME HARNESS BEING WRONG A
+SECOND TIME (corrected build 32).** The fix above stopped it timing the flag; it still started
+its clock whenever `race.breakFront` changed, including in breaks that were NOT ROTATING, where
+that name only means "whoever is furthest up the road". Instrumented, every long run had
+`race.rotating` false and `swingOff` 0 for its whole length: the rider was never relieved and
+was never dropping back. Gating the trigger on `race.rotating` collapses the worst case from
+39.07s to 4.83s. There was never a tail, so there was never anything for the rewrite to fix.
+
+**A distance-budget swing exists behind `CFG.swingBudget` (rebuilt build 32) and is worse.**
+It replaces the fixed pace cut with "work out how far you still have to drop and take the
+deficit that clears it in four seconds", which is the more principled question and still loses
+on every axis: median 3.90s against 3.17s, worst 28.68s against 4.83s, with that tail entirely
+its own. The floor is why — a 13 m gap asks for about 75% of the front's pace and the 0.82
+floor binds before that, so the budget ends up weaker than the flat cut it replaced. Build 21
+recorded it as halving the tail; that figure was the ungated trigger, not the mechanism.
+
+It stays behind the toggle because Kevin asked to ride it and feel is the one question a
+harness cannot answer. If it does not feel better, delete the branch. Do not tune it: there is
+no problem left for it to solve.
 
 The old entry's conclusion still stands on its own terms and is worth keeping: **raising
 `swingCut` breaks the rotation rather than speeding it up.** Swept against the refusal
