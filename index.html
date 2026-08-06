@@ -183,6 +183,12 @@
   .cbDay{display:flex;align-items:center;gap:10px;margin-top:9px}
   .cbDay .n{font-size:11px;font-weight:700;opacity:.45;min-width:44px;letter-spacing:.1em}
   .cbDay .segmented{flex:1;margin-top:0}
+  #cbShape{width:100%;height:46px;display:block;margin-top:12px}
+  #cbChar{margin-top:6px;font-weight:700;opacity:.75}
+  /* A text button: found rather than advertised. Underlined so it reads as pressable
+     without becoming a fifth card competing with the real races. */
+  .linky{background:none;border:0;padding:0;font:inherit;color:var(--ink);
+    font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
   #pCal.hide{display:none}
   #pTilt.hide{display:none}
   #pLean.hide{display:none}
@@ -355,7 +361,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 29</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 30</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -411,6 +417,12 @@
   <input id="cbName" type="text" maxlength="34" placeholder="Name your race" autocomplete="off" />
   <div class="secthead">Length</div>
   <div class="segmented" id="cbLen"></div>
+  <!-- The shape of the week, so you can see you have stacked the mountains badly BEFORE you
+       ride it. Schematic glyphs, not real profiles: a real profile needs a generated course
+       per day and reads as noise at this size. -->
+  <canvas id="cbShape"></canvas>
+  <p class="sub" id="cbChar"></p>
+  <button class="go ghost" id="cbRollBtn">Roll me one</button>
   <div class="secthead">The days</div>
   <div id="cbDays"></div>
   <div class="secthead">Purse</div>
@@ -8410,6 +8422,7 @@ $("debugBtn").addEventListener("click", () => { renderDebug(); show("debug"); })
 $("dbgBack").addEventListener("click", () => show("settings"));
 $("cbBack").addEventListener("click", () => { renderPick(); show("pick"); });
 $("cbName").addEventListener("input", () => { if (cb) cb.name = $("cbName").value; });
+$("cbRollBtn").addEventListener("click", () => { cbRoll(); renderBuilder(); });
 
 function dbgRow(host, label, value) {
   const d = document.createElement("div"); d.className = "note";
@@ -10128,8 +10141,116 @@ function customPayFactor(schedule) {
 // "where was it last spent" rather than a per-division ledger, so a long career that visits
 // Division 5 three times gets a custom race each time instead of one forever.
 const customReady = () => (ladder.customAtDiv === undefined || ladder.customAtDiv !== ladder.div);
+// ★ THE BUILDER IS SOMETHING A ROUTE PACK BUYS YOU. It is not for sale on its own and it is
+// not a starting feature: own one paid pack and it appears. That keeps it on the right side
+// of the rule the whole economy rests on — money buys BREADTH, never power — because a
+// custom race pays money and touches neither the ladder nor your wins. What you are buying
+// is another way to play, which is exactly what a pack of roads should be.
+const builderOpen = () => paidRoutes().length > 0;
+
+// FOUR TYPES, NOT SIX. Six segmented buttons a day down seven days is fourteen rows of
+// controls on a phone, which is admin. Pan flat and the queen stage are deliberately absent:
+// what makes a day extreme is the COL ON IT, so the extremes come from the road you pick,
+// and those two stay as things a drawn tour hands you rather than things you can specify.
+const CB_TYPES = [
+  { i: 0, name: "Flat" }, { i: 1, name: "Hills" },
+  { i: 2, name: "Mountains" }, { i: 5, name: "Time trial" }
+];
+// ROLL ME ONE. The point of the builder is CURATING, not composing from a blank form, so it
+// always opens holding a real race and one tap gives you another. Shaped like a race rather
+// than drawn at random: a flat opener, the mountains in the middle where they decide it, a
+// time trial once the race is long enough to need one, and never three mountain days stacked
+// back to back.
+function cbRoll() {
+  const n = cb.len, out = [];
+  const R = () => Math.random();
+  for (let d = 0; d < n; d++) {
+    const first = d === 0, last = d === n - 1;
+    let pick;
+    if (first) pick = R() < 0.75 ? 0 : 1;                 // an opener for the sprinters
+    else if (last) pick = n <= 3 ? 2 : (R() < 0.6 ? 0 : 2);
+    else pick = R() < 0.42 ? 2 : R() < 0.6 ? 1 : 0;
+    // Never a third mountain day in a row: that is not a parcours, it is a punishment.
+    if (pick === 2 && d >= 2 && out[d - 1] === 2 && out[d - 2] === 2) pick = 1;
+    out.push(pick);
+  }
+  // A race of five days or more earns a time trial, and never on the opening day.
+  if (n >= 5) {
+    const slot = 1 + Math.floor(R() * (n - 2));
+    out[slot] = 5;
+  }
+  cb.days = out;
+  cb.roads = {};                                          // the roads belonged to the old race
+}
+// WHAT DID YOU JUST BUILD? A line with some character, so the screen answers back instead of
+// only counting. This is the difference between designing a race and filling in a form.
+function cbCharacter() {
+  const d = cb.days;
+  const mtn = d.filter(x => x === 2 || x === 4).length;
+  const tt = d.filter(x => x === 5).length;
+  const flat = d.filter(x => x === 0 || x === 3).length;
+  const summits = Object.keys(cb.roads || {}).filter(k => {
+    const r = Sim.ROUTES.filter(x => x.id === cb.roads[k])[0];
+    return r && r.summit;
+  }).length;
+  const bits = [];
+  if (mtn >= Math.ceil(d.length / 2)) bits.push("A climber's race");
+  else if (flat >= Math.ceil(d.length * 0.7)) bits.push("A sprinter's week");
+  else if (tt && mtn <= 1) bits.push("One for the rouleurs");
+  else bits.push("A balanced race");
+  if (summits >= 2) bits.push(summits + " summit finishes");
+  else if (summits === 1) bits.push("a summit finish");
+  if (!tt && d.length >= 5) bits.push("and no time trial to claw it back");
+  else if (tt) bits.push("with the clock to settle it");
+  return bits.join(", ") + ".";
+}
+// THE SHAPE OF THE WEEK, at a glance. Schematic glyphs rather than real profiles: a real
+// profile needs a generated course per day and reads as noise at this size, where a flat
+// line, a rise, a peak and a clock read instantly. This is what tells you that you have
+// stacked the mountains badly before you ride it rather than after.
+function cbDrawShape() {
+  const cv = $("cbShape"); if (!cv) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = cv.clientWidth || 320, h = 46;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const n = cb.days.length, cell = w / n;
+  for (let d = 0; d < n; d++) {
+    const x0 = d * cell + 3, cw = cell - 6, base = h - 13, k = cb.days[d];
+    g.strokeStyle = "rgba(46,49,47,.30)"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x0, base + 0.5); g.lineTo(x0 + cw, base + 0.5); g.stroke();
+    g.strokeStyle = k === 5 ? PAL.water : k === 2 ? PAL.spot : k === 1 ? PAL.fuel : PAL.ink;
+    g.lineWidth = 2; g.lineCap = "round"; g.lineJoin = "round";
+    g.beginPath();
+    if (k === 5) {                                        // the clock: a TT is not terrain
+      g.arc(x0 + cw / 2, base - 9, 6.5, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.moveTo(x0 + cw / 2, base - 9); g.lineTo(x0 + cw / 2, base - 13.5);
+      g.moveTo(x0 + cw / 2, base - 9); g.lineTo(x0 + cw / 2 + 4, base - 9);
+    } else if (k === 2 || k === 4) {                      // one big peak
+      g.moveTo(x0, base); g.lineTo(x0 + cw * 0.55, base - 22); g.lineTo(x0 + cw, base - 4);
+    } else if (k === 1) {                                 // rolling
+      g.moveTo(x0, base - 2);
+      g.lineTo(x0 + cw * 0.25, base - 11); g.lineTo(x0 + cw * 0.5, base - 4);
+      g.lineTo(x0 + cw * 0.75, base - 12); g.lineTo(x0 + cw, base - 3);
+    } else {                                              // flat, with a ripple so it is a road
+      g.moveTo(x0, base - 3); g.lineTo(x0 + cw * 0.45, base - 5);
+      g.lineTo(x0 + cw * 0.7, base - 2); g.lineTo(x0 + cw, base - 4);
+    }
+    g.stroke();
+    // NOT `label()`: that helper writes to the global race canvas, so the day numbers would
+    // have been painted onto the road instead of onto this strip.
+    g.save();
+    g.font = '700 8.5px "Space Grotesk", system-ui, sans-serif';
+    g.fillStyle = "rgba(46,49,47,.42)"; g.textAlign = "center";
+    g.fillText(String(d + 1), x0 + cw / 2, h - 2);
+    g.restore();
+  }
+}
 function openBuilder() {
-  if (!cb) cb = { len: 3, days: [0, 2, 0], name: "", ranked: true };
+  // OPENS HOLDING A REAL RACE. A blank form is work; editing something is play.
+  if (!cb) { cb = { len: 3, days: [], roads: {}, name: "", ranked: true }; cbRoll(); }
   cb.ranked = cb.ranked && customReady();
   show("builder"); renderBuilder();
 }
@@ -10152,7 +10273,12 @@ function renderBuilder() {
       // board because you wanted one more stage.
       const old = cb.days.slice();
       cb.days = []; for (let i = 0; i < n; i++) cb.days.push(old[i] === undefined ? 0 : old[i]);
-      cb.len = n; renderBuilder();
+      cb.len = n;
+      // A length change that ADDS days pads them with flat, which is a worse race than the
+      // one you had. Re-roll instead, so changing your mind about the length still leaves you
+      // holding something worth riding.
+      if (n > old.length) cbRoll();
+      renderBuilder();
     });
     seg.appendChild(b);
   }
@@ -10165,13 +10291,16 @@ function renderBuilder() {
     const n = document.createElement("span"); n.className = "n"; n.textContent = "DAY " + (d + 1);
     row.appendChild(n);
     const s = document.createElement("div"); s.className = "segmented";
-    Sim.STAGES.forEach((st, i) => {
+    for (const t of CB_TYPES) {
       const b = document.createElement("button");
-      b.textContent = st.sub;
-      b.setAttribute("aria-pressed", cb.days[d] === i ? "true" : "false");
-      b.addEventListener("click", () => { cb.days[d] = i; renderBuilder(); });
+      b.textContent = t.name;
+      // A rolled day can be a pan-flat or a queen stage, which have no button of their own.
+      // Show the nearest one pressed rather than nothing, so the row never reads as empty.
+      const shown = cb.days[d] === 3 ? 0 : cb.days[d] === 4 ? 2 : cb.days[d];
+      b.setAttribute("aria-pressed", shown === t.i ? "true" : "false");
+      b.addEventListener("click", () => { cb.days[d] = t.i; renderBuilder(); });
       s.appendChild(b);
-    });
+    }
     row.appendChild(s); host.appendChild(row);
     // A ROAD FOR THE DAY, and only the roads that belong on it: a climb on a mountain stage,
     // a cobbled sector on a flat one. Same split assignRoute enforces, for the same reason —
@@ -10199,6 +10328,8 @@ function renderBuilder() {
     }
   }
 
+  cbDrawShape();
+  $("cbChar").textContent = cbCharacter();
   const f = customPayFactor(cb.days);
   $("cbPurse").textContent = cb.ranked
     ? "This race pays " + Math.round(f * 100) + "% of a drawn race of the same length. "
@@ -10315,33 +10446,30 @@ function renderPick() {
     btns.appendChild(b); card.appendChild(btns);
     box.appendChild(card);
   }
-  // BUILD YOUR OWN, at the bottom of the drawn races rather than on a screen of its own: it
-  // is a way to choose a race, which is what this screen is for. Held back while you are
-  // holding an abandoned tour, exactly like every other row — you cannot shop for a parcours
-  // that suits you by building one either.
-  {
-    const card = document.createElement("div");
-    card.className = "card" + (holding ? " locked" : "");
-    const top = document.createElement("div"); top.className = "top";
-    const nb = document.createElement("b"); nb.textContent = "Build your own"; top.appendChild(nb);
-    const tag = document.createElement("span"); tag.className = "pips";
-    tag.textContent = customReady() ? "one a division" : "unranked only";
-    top.appendChild(tag); card.appendChild(top);
-    const note = document.createElement("div"); note.className = "note";
-    note.textContent = "Pick every day, pick the roads, name it. Pays for what you build, "
-      + "and never counts toward promotion.";
-    card.appendChild(note);
-    const btns2 = document.createElement("div"); btns2.className = "btns";
-    const b2 = document.createElement("button"); b2.className = "mini";
-    b2.textContent = holding ? "Finish the other one first" : "Build it";
-    b2.disabled = !!holding;
-    b2.addEventListener("click", openBuilder);
-    btns2.appendChild(b2); card.appendChild(btns2);
-    box.appendChild(card);
+  // ★ DEMOTED TO A LINE, and only once a route pack has been bought. As a CARD it sat
+  // between the real races looking like a mainline mode, which is the opposite of what it
+  // is: a small optional pleasure. As a line under them it is found rather than advertised.
+  // Owning a pack is the gate, so it arrives as something a purchase gave you.
+  if (builderOpen() && !holding) {
+    const p = document.createElement("p"); p.className = "sub"; p.style.marginTop = "14px";
+    const link = document.createElement("button"); link.className = "linky"; link.id = "byoLink";
+    link.textContent = "or build your own race";
+    link.addEventListener("click", openBuilder);
+    p.appendChild(link);
+    const tail = document.createElement("span");
+    tail.textContent = customReady() ? "  ·  one ranked race a division" : "  ·  unranked only";
+    tail.style.opacity = ".6";
+    p.appendChild(tail);
+    box.appendChild(p);
   }
 }
 function renderRoutes() {
-  $("routesSub").textContent = "Prize money is only ever spent here.";
+  // SAY WHAT A PACK BUYS. It is not just roads any more: the first one opens the race
+  // builder, and a selling point nobody is told about is not a selling point.
+  $("routesSub").textContent = paidRoutes().length
+    ? "Prize money is only ever spent here."
+    : "Prize money is only ever spent here. Your first pack also opens the race builder, "
+      + "where you pick every day of a race, choose the roads and name it yourself.";
   const box = $("routesBody"); box.innerHTML = "";
 
   const bal = document.createElement("div");

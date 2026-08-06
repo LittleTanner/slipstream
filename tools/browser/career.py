@@ -351,19 +351,23 @@ async def main():
         # use limit: the purse scales with what you BUILT (so a soft race pays soft money and
         # farming defeats itself) and it never touches the ladder or your wins. Every one of
         # those is asserted here, because "the builder opens" proves none of them.
+        # OWNING A PACK IS THE GATE, so every case here seeds one. The no-pack case below is
+        # what proves the gate is real rather than decorative.
         ctx, pg = await open_case(browser, url,
-                                  {"tutorialDone": True, "div": 5, "tours": 4, "money": 700}, [], errs)
+                                  {"tutorialDone": True, "div": 5, "tours": 4, "money": 700,
+                                   "packs": ["alps"]}, [], errs)
         try:
             await pg.click("#startBtn")
             await pg.wait_for_selector("#pick:not(.hide)")
-            byo = pg.locator("#pickBody .card", has_text="Build your own")
-            check("builder: the picker offers it", await byo.count() == 1,
+            check("builder: a route pack opens it", await pg.locator("#byoLink").count() == 1,
                   "cards %r" % (await pg.evaluate(
                       "[...document.querySelectorAll('#pickBody .card b')].map(b => b.textContent)"),))
+            check("builder: it is a LINE, not a fifth card competing with the real races",
+                  await pg.locator("#pickBody .card", has_text="Build your own").count() == 0, "")
+            line = await pg.locator("#byoLink").locator("xpath=..").text_content() or ""
             check("builder: a fresh division has its ranked race",
-                  (await byo.locator(".pips").text_content() or "").strip() == "one a division",
-                  "tag %r" % (await byo.locator(".pips").text_content(),))
-            await byo.locator(".btns button").click()
+                  "one ranked race a division" in line, "line %r" % (line.strip(),))
+            await pg.click("#byoLink")
             await pg.wait_for_selector("#builder:not(.hide)")
             # REGISTERED WITH show(): an unregistered screen leaves the previous one visible
             # underneath, which is a bug class this codebase has shipped before.
@@ -374,6 +378,17 @@ async def main():
                   not leaked, "still visible: %r" % (leaked,))
 
             days = lambda: pg.locator("#cbDays .cbStage").count()
+            pressed = lambda: pg.evaluate(
+                "[...document.querySelectorAll('#cbDays .cbStage')]"
+                ".map(r => [...r.querySelectorAll('button')].findIndex(b => b.getAttribute('aria-pressed') === 'true'))")
+            # READ THIS FIRST, BEFORE ANY CLICK. This assertion used to sit further down, after
+            # the purse case had set every day to Mountains, so it was reading leftovers and
+            # would have passed against a builder that opened completely blank.
+            opening = await pressed()
+            check("builder: it opens holding a race, not a blank form",
+                  len(opening) == 3 and all(i >= 0 for i in opening), "day types %r" % (opening,))
+            check("builder: and the race it opens with is a sensible shape",
+                  opening[0] in (0, 1), "opens on day-1 type %r, wanted flat or hills" % (opening[0],))
             check("builder: three days by default", await days() == 3, "%d rows" % await days())
             await pg.locator("#cbLen button", has_text="7 days").click()
             check("builder: the length picker adds days", await days() == 7, "%d rows" % await days())
@@ -385,20 +400,46 @@ async def main():
                 t = await pg.locator("#cbPurse").text_content() or ""
                 m = re.search(r"(\d+)%", t)
                 return int(m.group(1)) if m else None
+            # Four types now, not six: pan flat and the queen stage have no button, because
+            # what makes a day extreme is the col on it and those two stay as things a DRAWN
+            # tour hands you. So the soft/hard comparison uses the two that exist.
             for row in range(3):
                 await pg.locator("#cbDays .cbStage").nth(row).locator(
-                    "button", has_text=re.compile(r"^Pan flat$")).click()
+                    "button", has_text=re.compile(r"^Flat$")).click()
             soft = await purse()
             for row in range(3):
                 await pg.locator("#cbDays .cbStage").nth(row).locator(
-                    "button", has_text=re.compile(r"^High mountains$")).click()
+                    "button", has_text=re.compile(r"^Mountains$")).click()
             hard = await purse()
             check("builder: a soft race pays less than a hard one",
                   soft is not None and hard is not None and soft < hard,
-                  "pan flat %r%% against high mountains %r%%" % (soft, hard))
+                  "three flat days %r%% against three mountain days %r%%" % (soft, hard))
             check("builder: and a hard race pays no MORE than a drawn one",
                   hard is not None and hard <= 100, "hard %r%%" % (hard,))
 
+            # ROLL ME ONE has to actually give you a different race. Over several rolls,
+            # because two landing the same is luck rather than a broken button.
+            seen = set()
+            for _ in range(8):
+                await pg.click("#cbRollBtn")
+                seen.add(tuple(await pressed()))
+            check("builder: rolling gives you different races",
+                  len(seen) > 1, "%d distinct races in 8 rolls" % len(seen))
+            check("builder: and every rolled race still opens flat or hilly",
+                  all(r[0] in (0, 1) for r in seen), "day-1 types seen %r" % (sorted({r[0] for r in seen}),))
+            # THE SHAPE STRIP AND THE CHARACTER LINE both have to actually render. A canvas
+            # that is never drawn and a line that is never written are exactly the "both
+            # halves exist but the visible one does not" failure this project keeps hitting.
+            painted = await pg.evaluate(
+                "(() => { const c = document.getElementById('cbShape');"
+                " if (!c || !c.width) return 0;"
+                " const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;"
+                " let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; })()")
+            check("builder: the shape of the week is drawn", painted > 200,
+                  "%r opaque pixels on the strip" % (painted,))
+            char = (await pg.locator("#cbChar").text_content() or "").strip()
+            check("builder: it says what you built", len(char) > 10 and char.endswith("."),
+                  "character line %r" % (char,))
             await pg.fill("#cbName", "Tour de Pain")
             await pg.locator("#cbGo button", has_text="Ride it").click()
             await pg.wait_for_selector("#build:not(.hide)")
@@ -417,13 +458,33 @@ async def main():
         # Having spent it, the picker offers the unranked build only.
         ctx, pg = await open_case(browser, url,
                                   {"tutorialDone": True, "div": 5, "tours": 4, "money": 700,
-                                   "customAtDiv": 5}, [], errs)
+                                   "packs": ["alps"], "customAtDiv": 5}, [], errs)
         try:
             await pg.click("#startBtn")
             await pg.wait_for_selector("#pick:not(.hide)")
-            tag = await pg.locator("#pickBody .card", has_text="Build your own").locator(".pips").text_content()
+            line = await pg.locator("#byoLink").locator("xpath=..").text_content() or ""
             check("builder: once spent, only unranked is offered",
-                  (tag or "").strip() == "unranked only", "tag %r" % (tag,))
+                  "unranked only" in line, "line %r" % (line.strip(),))
+        finally:
+            await ctx.close()
+
+        # THE GATE ITSELF. Own no pack and the builder does not exist — which is the whole
+        # reason it is a selling point, so the shop has to say so as well.
+        ctx, pg = await open_case(browser, url,
+                                  {"tutorialDone": True, "div": 5, "tours": 4, "money": 700,
+                                   "packs": []}, [], errs)
+        try:
+            await pg.click("#startBtn")
+            await pg.wait_for_selector("#pick:not(.hide)")
+            check("builder: owning no pack, there is no builder",
+                  await pg.locator("#byoLink").count() == 0, "")
+            await pg.click("#pickBack")
+            await pg.wait_for_selector("#menu:not(.hide)")
+            await pg.click("#routesBtn")
+            await pg.wait_for_selector("#routes:not(.hide)")
+            sub = await pg.locator("#routesSub").text_content() or ""
+            check("builder: and the shop sells it as a reason to buy one",
+                  "race builder" in sub, "routes sub %r" % (sub,))
         finally:
             await ctx.close()
 
