@@ -208,7 +208,12 @@ async def launch(p):
 
 async def open_case(browser, url, ladder, history, errs, rand_seed=None):
     ctx = await browser.new_context()
-    ctx.set_default_timeout(15000)
+    # 30s, not 15. Every wait here is on a condition that is either true within a frame or
+    # never true at all, so a generous ceiling costs a passing run nothing and only makes a
+    # FAILING one slower to report. 15s was chosen on a fast machine and this sandbox has been
+    # serving the page in 13, which left the first real wait with two seconds of headroom and
+    # duly failed on an assertion that had nothing wrong with it.
+    ctx.set_default_timeout(30000)
     await ctx.add_init_script(init_script(ladder, history, rand_seed))
     pg = await ctx.new_page()
     pg.on("pageerror", lambda e: errs.append(str(e)))
