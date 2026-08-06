@@ -37,10 +37,21 @@ const { CFG } = Sim;
 
 const TT = 5;                                   // STAGES[5] is the race of truth
 const SEEDS = [11, 23, 37, 52, 71, 89];
+const SHIFT_SEEDS = [11, 23, 37, 52, 71, 89, 104, 118, 127, 143, 156, 168, 179, 191, 203, 214];
 const DIVS = [8, 4, 1];
 
-// Ride a time trial to the line and return the elapsed time. Pedalling is identical in every
-// run; only the shifting differs.
+// ★ THE HAND HAS TO LAG, OR THE BAND IS UNMEASURABLE. The first version of this tapped at
+// `cadTgt` EXACTLY, every frame, which means `hold` was pinned at 1.0 in every run — so the
+// tolerance band could be set to any width at all and this harness would report no difference.
+// It was measuring one thing only: whether the target had gone above the 5.0 tap ceiling. A
+// real hand cannot jump 30% in a frame when you shift; it chases. HAND_LAG is the time
+// constant of that chase, so a shift now costs a real dip in `hold` and widening the band is
+// visible as the thing it actually is.
+const HAND_LAG = 2.6;                           // per second; ~0.4s to close a gap
+const TAP_MAX = 4.6;                            // what a thumb can actually sustain
+
+// Ride a time trial to the line and return the elapsed time. Pedalling policy is identical in
+// every run; only the shifting differs.
 function ttRun(shiftPolicy, seed, div, opts) {
   const o = opts || {};
   const gc = {}; for (const n of ['YOU', ...Sim.FIELD.map(f => f.name)]) gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
@@ -49,19 +60,39 @@ function ttRun(shiftPolicy, seed, div, opts) {
   race.you.stats = P.buildStats(P.neutralBuild());
   if (o.startGear && race.gears) race.you.gear = o.startGear;
   const seen = new Set();
-  let g = 0, shifts = 0;
+  let g = 0, shifts = 0, hand = CFG.ttCadence, holdSum = 0, holdN = 0;
+  // ★ COUNT THE RESTARTS, OR THE SHIFT COUNT IS MOSTLY THEM. This harness never steers
+  // (`tx: you.x`), so it crashes into bends, takes a team car and sets off again from a dead
+  // stop. Traced on one Division 4 ride: five stops, and each one costs a full climb back up
+  // the ladder from gear 1, which was 25 of the 27 shifts. A rider who brakes and takes a line
+  // does not do that, so the raw count was measuring the harness, not the mechanic.
+  let stops = 0, rolling = false;
+  // ★ DECISIONS, NOT CLICKS, IS THE NUMBER THAT MATTERS. Dumping four gears at the foot of a
+  // climb is ONE decision and three clicks, and the click count can never fall below the gear
+  // span however clean the recommendation is. Traced at Division 1 the shifts arrive as pure
+  // sequential sweeps with no reversals at all — 4-3-2-1 slowing onto a ramp, 1-2-3-4 coming
+  // off it — so counting clicks was scoring the width of the ladder, not how often the game
+  // interrupts you. A run of clicks in one direction is one decision.
+  let decisions = 0, lastDir = 0;
   while (!race.you.finished && g++ < 120 * 900) {
+    if (race.you.speed > 5) rolling = true;
+    else if (rolling && race.you.speed < 1) { stops++; rolling = false; }
     const want = shiftPolicy ? shiftPolicy(race.you, g) : 0;
-    if (want !== 0 && (race.you.shiftT || 0) <= 0) shifts++;
+    if (want !== 0 && (race.you.shiftT || 0) <= 0) {
+      shifts++;
+      if (want !== lastDir) { decisions++; lastDir = want; }
+    }
     if (race.gears && race.you.gearIdeal) seen.add(race.you.gearIdeal);
-    // Tap at the target the bar is showing. A TT is ridden to the rhythm, so this is the
-    // honest "competent rider" policy: chase the target, whatever the gear has made it.
+    // Chase the target the bar is showing, at the speed a hand can chase it. A TT is ridden
+    // to the rhythm, so this is the honest "competent rider" policy.
     const tgt = race.you.cadTgt === null || race.you.cadTgt === undefined ? CFG.ttCadence : race.you.cadTgt;
-    const rate = Math.min(5.0, Math.max(0, tgt));
-    Sim.step(race, CFG.fixedDt, { rate, ease: false, launch: false, stumble: false,
+    hand += (Math.min(TAP_MAX, Math.max(0, tgt)) - hand) * Math.min(1, CFG.fixedDt * HAND_LAG);
+    Sim.step(race, CFG.fixedDt, { rate: hand, ease: false, launch: false, stumble: false,
       tx: race.you.x, shiftUp: want > 0, shiftDown: want < 0 });
+    if (race.you.ttHold !== null && race.you.ttHold !== undefined) { holdSum += race.you.ttHold; holdN++; }
   }
-  return { time: race.you.time, shifts, idealSeen: seen };
+  return { time: race.you.time, shifts, decisions, stops, idealSeen: seen,
+    hold: holdN ? holdSum / holdN : 0 };
 }
 
 // Aim for the gear the sim says is ideal, one click at a time.
@@ -75,14 +106,30 @@ const stuck = () => 0;
 const churn = (you, g) => (g % 40 === 0 ? (g % 80 === 0 ? 1 : -1) : 0);
 
 console.log('=== 1. DOES THE IDEAL GEAR MOVE THROUGH A TIME TRIAL? ===');
+// ★ SHIFTS A RIDE IS A GATE, NOT A STATISTIC. A time trial runs 110-140s, so the six-gear
+// build's 40 to 56 was one shift every two or three seconds: gearing had stopped being a
+// decision and become a second pedalling task. Target is under 10, which is a shift when the
+// road changes. Scored on CLEAN rides only, with the crash count printed beside it, because a
+// restart from a dead stop costs four shifts that no rider who brakes would ever make.
+let worstClean = 0;
 for (const div of DIVS) {
   const all = new Set();
-  let sh = 0;
-  for (const seed of SEEDS) { const r = ttRun(chase, seed, div); for (const x of r.idealSeen) all.add(x); sh += r.shifts; }
+  // More seeds here than the timing section uses, because the crash-free subset is what is
+  // being averaged and at Division 1 six seeds left it standing on a single ride.
+  const rs = SHIFT_SEEDS.map(s => ttRun(chase, s, div));
+  for (const r of rs) for (const x of r.idealSeen) all.add(x);
+  const clean = rs.filter(r => r.stops === 0);
   const list = [...all].sort((a, b) => a - b);
+  const av = (xs, k) => xs.length ? xs.reduce((a, r) => a + r[k], 0) / xs.length : NaN;
+  const cd = av(clean, 'decisions');
+  if (clean.length) worstClean = Math.max(worstClean, cd);
   console.log('  div ' + div + ': ideal gear visited ' + list.join(', ')
-    + '  (' + list.length + ' of ' + CFG.gearRatios.length + ')'
-    + ', ' + (sh / SEEDS.length).toFixed(0) + ' shifts a ride');
+    + '  (' + list.length + ' of ' + CFG.gearRatios.length + ')');
+  console.log('    crash-free rides: ' + av(clean, 'decisions').toFixed(1) + ' decisions, '
+    + av(clean, 'shifts').toFixed(1) + ' clicks'
+    + '   |  all rides: ' + av(rs, 'decisions').toFixed(1) + ' / ' + av(rs, 'shifts').toFixed(1)
+    + '   |  ' + clean.length + '/' + rs.length + ' crash-free, '
+    + av(rs, 'stops').toFixed(1) + ' stops a ride');
 }
 
 console.log('\n=== 2 & 3. TIME AGAINST THE CLOCK ===  (lower is better)');
@@ -123,6 +170,8 @@ const pass = [
     ttRun(chase, 11, 4).idealSeen.size > 1],
   ['2. chasing the ideal gear beats sitting in one', meanGain > 0],
   ['3. and beats mashing the chevrons', meanOverChurn > 0],
+  ['4. under 10 shift DECISIONS on a crash-free ride (worst division '
+    + worstClean.toFixed(1) + ')', worstClean > 0 && worstClean < 10],
 ];
 console.log('\n--- GATES ---');
 for (const [n, ok] of pass) console.log('  ' + (ok ? 'ok  ' : 'FAIL') + ' ' + n);

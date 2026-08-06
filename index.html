@@ -361,7 +361,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 31</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 32</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -624,6 +624,32 @@ const CFG = {
   // three separate paths, so it was chaining several swings into one. `tools/aiswing.js`
   // measures it correctly now. Revisit only if the TAIL is what bothers you in the hand.
   swingCut: 0.09,                     // how much of their pace a swinging rider gives up
+  // ★ THE DISTANCE-BUDGET SWING, RIDEABLE BEHIND THE DEBUG PANEL AND MEASURABLY WORSE.
+  // Off by default, so a shipped build and the golden both take the fixed-cut path above and
+  // nothing moves. It exists so the rotation can be judged BY FEEL, which is the one question
+  // a harness cannot answer; on the numbers the question is already settled.
+  //
+  // It asks a better question than the fixed cut — "how far do I still have to drop, and what
+  // deficit clears it in `swingSecs`" instead of "give up 9% and hope" — and it still loses:
+  //   fixed pace cut    median 3.17s   range 0.35-4.83s
+  //   distance budget   median 3.90s   range 0.73-28.68s
+  // Slower in the middle and it introduces a 28s tail of its own. The floor is why: a 13 m gap
+  // asks for about 75% of the front's pace, the 0.82 floor binds before that, and the budget
+  // ends up weaker than the flat cut it replaced.
+  //
+  // ★★ AND THE REASON IT WAS EVER WANTED WAS THE HARNESS. Build 21 recorded this as halving
+  // the worst case, 39.1s to 20.1s. There was no 39s case. `tools/aiswing.js` started its
+  // clock whenever `race.breakFront` changed, including in breaks that were NOT ROTATING,
+  // where that name just means "furthest up the road" — those runs had `rotating` false and
+  // `swingOff` 0 for their whole length, so the rider was never relieved and never dropping
+  // back. Gate the trigger on `race.rotating` and the tail disappears entirely. That is the
+  // SECOND drop-back figure this harness invented; the first was 11.91s from timing contiguous
+  // runs of `swingOff`. The shipped rule was never slow: 3.17s against the player's own 3.30s.
+  //
+  // VERIFY ANY CHANGE HERE AGAINST THE GOLDEN, NOT THE MECHANICS SUITE — the false green on
+  // swing constants documented above applies to this path too.
+  swingBudget: false,
+  swingSecs: 4.0,                     // how long the budget gives itself to clear the train
   // ★ YOUR DELIBERATE SOFT-PEDAL IS ITS OWN NUMBER, NOT THE SWINGER'S. A rival's swingOff
   // is an automatic 2.2s drift after their turn; a human holding both pads is ASKING to go
   // backwards now, and a rider who wants to drift back stops pedalling rather than easing
@@ -704,15 +730,50 @@ const CFG = {
   // race RECORDS it at creation, so a race never changes rules underneath itself and
   // determinism holds.
   gearsOn: false,
-  // Six ratios, geometric at ~1.26 a click. Calibrated so gears 1 to 6 put the target at
-  // `ttCadence` across the TT's MEASURED speed range, 5.0 to 16.0 m/s (`tools/gearing.js`
-  // drives full time trials with the sim's own AI). Below gear 1 you are spinning however
-  // small you go; above gear 6 you are grinding however big.
-  gearRatios: [0.50, 0.63, 0.79, 1.00, 1.26, 1.59],
-  gearStart: 3,
-  // target cadence = speed / (ratio * cadScale). 2.96 puts gear 6 dead on `ttCadence` at the
-  // TT's 95th-percentile speed and gear 1 dead on it at the 5th.
-  cadScale: 2.96,
+  // ★ FOUR GEARS, NOT SIX, AND CALIBRATED TO THE BULK OF A RIDE RATHER THAN ITS TAILS.
+  // Six ratios measured 40 shifts a ride at Division 8 and 56 at Division 1 — one every two
+  // or three seconds across a 110s time trial, which is not gearing, it is a second pedalling
+  // task laid over the first. Three separate causes, all fixed here and below: the rungs sat
+  // 26% apart so a breath of speed crossed a boundary, `gearIdeal` was recomputed from the
+  // INSTANTANEOUS speed so it flickered, and nothing held it once it moved so it flickered
+  // straight back.
+  //
+  // The old span came from the p5-p95 speeds, 5 to 16 m/s. That was the wrong window: p5 is a
+  // standing start and p95 is a descent, and neither is ridden to a cadence. The measured
+  // INTERQUARTILE range is about 6 to 14 m/s (`tools/gearing.js`), so the four gears cover
+  // that at `ttCadence` and the extremes pin at gear 1 or gear 4 — which is the truth of it.
+  // On a fast descent you have run out of gear, exactly as you do in life.
+  gearRatios: [0.65, 0.85, 1.10, 1.43],
+  gearStart: 2,
+  // target cadence = speed / (ratio * cadScale). 2.75 puts gear 1 on `ttCadence` at 6.0 m/s
+  // and gear 4 on it at 14.3, with the boundaries at roughly 6.9, 8.9 and 11.6.
+  cadScale: 2.75,
+  // WIDER BAND, GEARS ONLY. You are now being asked to hold a target that MOVES, and every
+  // shift steps it by 30% at once. Scored against the fixed-target window, a shift would be a
+  // guaranteed dip clean through the wall of the pocket, so the mechanic would be punishing
+  // the act of using it. Gated on `race.gears` so the shipped time trial's band does not move
+  // by a float and the golden needs no regeneration.
+  gearBand: 1.45,
+  // THE TARGET FOLLOWS A LAGGED SPEED, NOT THE LIVE ONE. This is the single biggest reason the
+  // shift count falls. At 120 Hz the raw speed jitters across a gear boundary constantly, so a
+  // chevron lit, went out and lit again several times a second and shifting felt urgent every
+  // moment. A time constant near a second is roughly how long it takes a rider to notice the
+  // road has tilted, which is when they actually reach for the lever. Swept: 0.45 cuts the
+  // count further but the target then arrives so late that chasing it is worth 4.3s at
+  // Division 4 instead of 6.8s, so the mechanic pays less for the same work.
+  gearLag: 0.65,
+  // How much better another gear must be, in cadence, before the chevron asks for it. Even
+  // with the lag, "nearest gear" has no dead zone, so sitting on a boundary still chatters.
+  // Riders do not shift for a kilometre an hour.
+  //
+  // ★ THERE IS A HARD CEILING ON THIS AND IT IS 0.785. One gear off puts the target at
+  // 3.4 x 1.30 = 4.42 or 3.4 / 1.30 = 2.62, so the miss is 1.02 or 0.785. Set the dead zone
+  // above 0.785 and a ONE-GEAR error can never light a chevron: you are only ever told to
+  // shift once you are two gears out, and you spend the race chasing from behind. A sweep
+  // found 1.25 "best" on shift count alone (3/7/7 a ride) and it is exactly that broken
+  // mechanic — which is why the ceiling is written down here rather than left to the next
+  // sweep to rediscover.
+  gearHyst: 0.45,
   // A SHIFT COSTS WHAT IT COSTS IN LIFE. The chain takes a moment to move, and shifting
   // under full load is the mistake: you lose a beat, which is why riders shift BEFORE the
   // ramp and ease as they do it. Free and instant shifting would just be another
@@ -2223,7 +2284,7 @@ function createRace(opts) {
     gears: (opts.gears === undefined ? CFG.gearsOn : !!opts.gears) && !!course.spec.tt,
     leaders: opts.leaders || {}
   };
-  if (race.gears) { you.gear = CFG.gearStart; you.shiftT = 0; you.shiftLoad = 0; you.cadTgt = CFG.ttCadence; you.gearIdeal = CFG.gearStart; }
+  if (race.gears) { you.gear = CFG.gearStart; you.shiftT = 0; you.shiftLoad = 0; you.cadTgt = CFG.ttCadence; you.gearIdeal = CFG.gearStart; you.cadSpeed = 0; }
   if (ttGap > 0) {
     // Reverse GC order: the rider lying last sets off first, the leader goes off last, as
     // in the sport. With no GC yet (practice, a one-day TT) it falls back to rider index,
@@ -2714,6 +2775,12 @@ function updateGroups(race, dt) {
           // longer needs slack for time spent still on the front — and a fuller budget
           // over-drifts the swinger into a strand when the slot ahead keeps receding.
           if (wasRotating && r.swingT < 3 && rear && r.dist > rear.dist - 1.6) r.swingOff = 1;
+          // ★ HOW FAR IS LEFT TO DROP. Recorded HERE, where `rear` is already known, and spent
+          // in stepRider, because stepRider has no view of the rotation. This block runs before
+          // stepRider in the same step, so the gap it reads is this frame's. It is the whole
+          // input to the distance-budget swing: a deficit sized to the gap cannot overshoot the
+          // slot or stall short of it the way a flat percentage of pace does.
+          r.swingGap = rear ? r.dist - (rear.dist - 1.6) : 0;
           // ABOUT A METRE OUT, not to the verge. Swinging to the road edge parked riders in
           // the gutter and broke the group up; a real rotation is a narrow circle you could
           // cover with two bike widths.
@@ -3383,17 +3450,30 @@ function stepRider(race, r, dt) {
   // of your speed, which is nowhere near enough to launch anything; sitting in the hole a
   // car punches slings you properly, and that is the whole point of the trick.
   if (r.swingOff > 0) {
-    tgt *= 1 - CFG.swingCut * r.swingOff;                     // pulling aside after a turn
-    // The cut must bite RELATIVE TO THE TRAIN, not the swinger's own ambition: 91% of a
-    // raider's target can still match a soft-pedalling group's pace, which parked the
-    // relieved rider alongside instead of letting them drift back. Capping against the
-    // front's actual speed makes the drop-back happen at any group pace — but the cap
-    // is itself floored at 82% of the swinger's own target, because coupling fully to
-    // the front means a momentary dip in THEIR speed (a regroup, a corner) flings the
-    // swinger metres off the back, and a rider stranded alone behind a break cannot close.
     const bf = race.breakFront;
-    if (!r.you && bf && bf !== r && race.rotating)
-      tgt = Math.max(Math.min(tgt, bf.speed * (1 - CFG.swingCut * r.swingOff)), tgt * 0.88);
+    const budget = CFG.swingBudget && !r.you && bf && bf !== r && race.rotating
+      && (r.swingGap || 0) > 0;
+    if (budget) {
+      // ★ THE DISTANCE BUDGET. Take exactly the deficit that clears the gap that is LEFT in
+      // `swingSecs`, measured against the front's real pace. When the gap is nearly closed the
+      // deficit fades to nothing, so the rider settles onto the last wheel instead of sailing
+      // past it; when the group is soft-pedalling the deficit is still whatever the distance
+      // demands, which is the case the fixed 9% cut cannot handle and where its 39s tail came
+      // from. Floored at 82% of their own target for the same reason the fixed cut is: fully
+      // coupling to the front strands them on any dip in the front's speed.
+      tgt = Math.max(bf.speed - (r.swingGap || 0) / CFG.swingSecs, tgt * 0.82);
+    } else {
+      tgt *= 1 - CFG.swingCut * r.swingOff;                   // pulling aside after a turn
+      // The cut must bite RELATIVE TO THE TRAIN, not the swinger's own ambition: 91% of a
+      // raider's target can still match a soft-pedalling group's pace, which parked the
+      // relieved rider alongside instead of letting them drift back. Capping against the
+      // front's actual speed makes the drop-back happen at any group pace — but the cap
+      // is itself floored at 82% of the swinger's own target, because coupling fully to
+      // the front means a momentary dip in THEIR speed (a regroup, a corner) flings the
+      // swinger metres off the back, and a rider stranded alone behind a break cannot close.
+      if (!r.you && bf && bf !== r && race.rotating)
+        tgt = Math.max(Math.min(tgt, bf.speed * (1 - CFG.swingCut * r.swingOff)), tgt * 0.88);
+    }
   }
   // Coming around a front who finished their turn and slowed without moving aside:
   // ride just above their pace so the pass actually happens.
@@ -4093,7 +4173,10 @@ function step(race, frameDt, input) {
         // go fast is to find the rhythm and hold it.
         // Far more forgiving at the bottom, tighter at the top: Division 8 should be able
         // to find the rhythm by feel, Division 1 should have to hold it precisely.
-        const band = CFG.ttBand * (1.9 - 1.15 * race.D.t);
+        // ★ WIDER WITH GEARS. A moving target scored against a fixed target's window would
+        // charge you for every shift, so the band opens when the gear is what steers it. Gated
+        // on `race.gears`, so with the toggle off this is the float it always was.
+        const band = CFG.ttBand * (1.9 - 1.15 * race.D.t) * (race.gears ? CFG.gearBand : 1);
         // ★ WITH GEARS, THE GEAR MOVES THE TARGET. Without them the target is the fixed
         // `ttCadence` it has always been. A bigger gear turns slower at the same road speed,
         // so it pulls the target DOWN toward grinding; a smaller one pushes it up until you
@@ -4113,17 +4196,31 @@ function step(race, frameDt, input) {
         // pedals harder than their efficient cadence, so the target never instructs you
         // below tempo — and at crawling speed every gear reads the same, which is true: your
         // gear hardly matters at 5 km/h, you are just getting the thing moving.
+        // ★ A LAGGED SPEED FEEDS THE GEARING, NOT THE LIVE ONE. Both the target and the
+        // recommendation read `cadSpeed`, so they cannot disagree, and both stop twitching.
+        // First measured behaviour was 40 to 56 shifts a ride, because the live speed crosses
+        // a gear boundary many times a second and every crossing read as an instruction.
+        if (race.gears)
+          you.cadSpeed = you.cadSpeed === undefined ? you.speed
+            : you.cadSpeed + (you.speed - you.cadSpeed) * Math.min(1, frameDt * CFG.gearLag);
+        const gs = race.gears ? you.cadSpeed : you.speed;
         const tgt = race.gears
-          ? Math.max(CFG.strokeTempo, you.speed / (ratio * CFG.cadScale)) : CFG.ttCadence;
+          ? Math.max(CFG.strokeTempo, gs / (ratio * CFG.cadScale)) : CFG.ttCadence;
         you.cadTgt = tgt;
         if (race.gears) {
           // Which gear would put the target closest to a cadence you can hold? Computed
           // here, beside the rule, so the ladder the view draws cannot disagree with what
           // the riding actually rewards.
-          let bi = 0, bd = Infinity;
+          // ★ SEEDED WITH THE GEAR YOU ARE IN, AND ANOTHER HAS TO BEAT IT BY `gearHyst`.
+          // That makes this "the gear you should shift to", not "the nearest gear" — which is
+          // what a chevron is for. Without the dead zone, sitting on a boundary is a
+          // flickering instruction; with it, it is a settled state you can ignore.
+          const gNow = clamp(you.gear || CFG.gearStart, 1, CFG.gearRatios.length);
+          const miss = i => Math.abs(gs / (CFG.gearRatios[i] * CFG.cadScale) - CFG.ttCadence);
+          let bi = gNow - 1, bd = miss(gNow - 1);
           for (let i = 0; i < CFG.gearRatios.length; i++) {
-            const d = Math.abs(you.speed / (CFG.gearRatios[i] * CFG.cadScale) - CFG.ttCadence);
-            if (d < bd) { bd = d; bi = i; }
+            const d = miss(i);
+            if (d < bd - CFG.gearHyst) { bd = d; bi = i; }
           }
           you.gearIdeal = bi + 1;
         }
@@ -4896,6 +4993,12 @@ let btn = { ease: false, attack: false };
 // trial. That is deliberate — a second switch the view could disagree with is how half a
 // mechanic ships. Not persisted, so a reload comes up in the shipped configuration.
 let gearsOn = false;
+// THE DROP-BACK EXPERIMENT, same shape and for the same reason: a mirror the debug panel
+// paints from, while the mechanism itself reads only `Sim.CFG.swingBudget`. Unlike gearing
+// this one has no view side at all — it changes how fast a relieved rival slides to the back
+// of a rotation and nothing about what is drawn — so the ONLY way to judge it is to ride a
+// breakaway and watch the rotation. Not persisted.
+let swingBudgetOn = false;
 const touches = new Map();     // id -> { x, y, t }
 let binRect = null, binHit = false;
 // ★ THE MUSETTE. In a feed zone a soigneur holds out a cloth bag; take it cleanly at speed
@@ -4974,7 +5077,14 @@ function btnR() {
   // A ROAD STAGE NEVER GIVES UP THE ROOM, because gearing is a time-trial mechanic: the
   // road version added difficulty without fun and is gone. `race.gears` is already gated on
   // the stage, so reading it here is what keeps the road layout byte-for-byte as it was.
-  const shW = (race && race.gears) ? Math.max(50, Math.min(76, W * 0.135)) : 0;
+  // ★ BIG, BECAUSE THIS ROW IS NEARLY EMPTY IN A TIME TRIAL. At W * 0.135 these came out
+  // around 53px on an ordinary phone — the smallest permanent control on the screen, and the
+  // one under the most time pressure. Gearing only exists in a time trial, and a time trial
+  // clears feeds, items and litter (`spec.tt` at the course build), so the contextual action
+  // button has nothing to show there but a sticky bottle, and only for a rider carrying the
+  // full team-support tactic. So the shifters take the room and the middle keeps enough for
+  // the widest label that can still appear.
+  const shW = (race && race.gears) ? Math.max(62, Math.min(122, W * 0.215)) : 0;
   const rowY = y - 62, rowH = 56;
   return { h, w, y, easeX: m, atkX: W / 2 + m * 0.5,
     thX: m + shW, thY: rowY, thW: W - m * 2 - shW * 2, thH: rowH,
@@ -6377,8 +6487,10 @@ function drawHud(dt) {
     // ★ THE GEAR LADDER, beside the rhythm bar rather than a second cadence bar next to it.
     // Kevin asked for "a bar for the ideal gear" and a literal second bar would have put two
     // definitions of cadence on one screen to contradict each other. This is an INDEX INTO
-    // THE GEARS instead: six rungs, the one you are in filled, the one to aim for ringed. It
-    // cannot disagree with the rhythm bar because it is not measuring cadence at all.
+    // THE GEARS instead: a rung a gear, the one you are in filled, the one to aim for ringed.
+    // It cannot disagree with the rhythm bar because it is not measuring cadence at all.
+    // Rung count comes from `gearRatios`, so cutting six gears to four widened the rungs
+    // rather than leaving four gears drawn on a six-rung ladder.
     if (race.gears) {
       const lx = bx + bw + 13, lw = Math.max(13, bw * 0.62);
       const n = Sim.CFG.gearRatios.length;
@@ -6543,14 +6655,17 @@ function drawHud(dt) {
     // chevron you need now lights up and the other one dims. Zero translation.
     const gNow = you.gear || Sim.CFG.gearStart, gWant = you.gearIdeal || gNow;
     const wantUp = gWant > gNow, wantDown = gWant < gNow;
+    // Scaled off the pill rather than fixed at 9px, so the glyph grows with the button and a
+    // wider phone does not just get more empty pill around the same tiny arrow.
+    const cw = Math.max(11, b.shW * 0.21), ch = cw * 0.62;
     const chev = (cx, cy, up, live) => {
       ctx.strokeStyle = live ? PAL.ink : "rgba(46,49,47,.28)";
-      ctx.lineWidth = live ? 4 : 3;
+      ctx.lineWidth = live ? 5 : 3.5;
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.beginPath();
-      ctx.moveTo(cx - 9, cy + (up ? 5 : -5));
-      ctx.lineTo(cx, cy + (up ? -5 : 5));
-      ctx.lineTo(cx + 9, cy + (up ? 5 : -5));
+      ctx.moveTo(cx - cw, cy + (up ? ch : -ch));
+      ctx.lineTo(cx, cy + (up ? -ch : ch));
+      ctx.lineTo(cx + cw, cy + (up ? ch : -ch));
       ctx.stroke();
     };
     for (const s of [{ x: b.shDownX, up: false, live: wantDown }, { x: b.shUpX, up: true, live: wantUp }]) {
@@ -6558,7 +6673,13 @@ function drawHud(dt) {
       roundRect(s.x, b.shY, b.shW, b.shH, 14); ctx.fill();
       ctx.strokeStyle = s.live ? gcol : "rgba(46,49,47,.20)"; ctx.lineWidth = s.live ? 2.2 : 1.5;
       roundRect(s.x, b.shY, b.shW, b.shH, 14); ctx.stroke();
-      chev(s.x + b.shW / 2, b.shY + b.shH * 0.40, s.up, s.live);
+      chev(s.x + b.shW / 2, b.shY + b.shH * 0.38, s.up, s.live);
+      // ★ THE GEAR NUMBER GOES IN BOTH PILLS, NOT ONCE IN THE MIDDLE OF THE ROW. It used to
+      // print at W / 2, which is the CENTRE OF THE ACTION BUTTON — so a rider carrying full
+      // team support got "GEAR 2" laid straight over "STICKY BOTTLE · TAKES A PENALTY". Two
+      // copies of one character is cheaper than that collision, and it means the gear is
+      // under whichever thumb you happen to be looking at, the way a lever display works.
+      label(String(gNow), s.x + b.shW / 2, b.shY + b.shH - 9, 12, 700, gcol, "center", 0.6);
       // MID-SHIFT IS VISIBLE. The chain is moving and the power is gone; without showing
       // it, a lost beat reads as the game dropping an input rather than as the cost of
       // shifting under load, which is the one thing this mechanic is trying to teach.
@@ -6570,7 +6691,6 @@ function drawHud(dt) {
         ctx.restore();
       }
     }
-    label("GEAR " + gNow, W / 2, b.shY + b.shH - 10, 11, 700, gcol, "center", 1.0);
   }
 
   // Riders off the top of the screen, as pips on a rail with how far up the road they
@@ -8577,34 +8697,53 @@ function renderDebug() {
   // ladder and refreshes the menu). Setting both the sim flag and the view mirror in one
   // place is the point: two switches for one feature is how half a mechanic ships.
   const xv = $("dbgExp"); xv.innerHTML = "";
-  {
+  // ONE SHAPE FOR EVERY EXPERIMENT, because the second one was going to be a copy of the
+  // first with three words changed. `flip` is handed the new state and is the ONLY place that
+  // sets both the sim flag and the view mirror; `caption` and `note` are read fresh on every
+  // paint so a button can never describe a configuration the sim is not in.
+  //
+  // WRITTEN INTO NODES THAT ARE ALREADY IN THE TREE, and repainted in place rather than by
+  // re-rendering the screen. The arming caption for this panel's own gesture was once written
+  // to a detached node because the render ran first, and the message never appeared at all.
+  const xToggle = (id, isOn, flip, caption, note) => {
     const b = document.createElement("button");
-    b.id = "dbgGears";
-    const note = document.createElement("p"); note.className = "sub";
-    // WRITTEN INTO A NODE THAT IS ALREADY IN THE TREE, and repainted in place rather than
-    // by re-rendering the screen. The arming caption for this panel's own gesture was once
-    // written to a detached node because the render ran first, and the message never
-    // appeared at all.
+    b.id = id;
+    const p = document.createElement("p"); p.className = "sub";
     const paint = () => {
       // Solid vs ghost is the file's existing on/off convention for a `.go` button; the
       // `.on` class only styles `.card .btns button`, so it would do nothing here.
-      b.className = gearsOn ? "go" : "go ghost";
-      b.textContent = "Gearing in time trials: " + (gearsOn ? "ON" : "off") + " · 6 speed";
-      note.textContent = (gearsOn
-        ? "On from the NEXT time trial you start: a race records the rules when it is created, so an in-progress stage is left alone rather than having its physics changed under a result. "
-        : "Off from the next time trial you start. ")
-        + "TIME TRIALS ONLY. On road stages it added difficulty without fun, so that half is gone. "
-        + "Six ratios, and the gear MOVES the rhythm target rather than adding a second bar to argue with it: a bigger gear turns slower at the same road speed, so it pulls the target down toward grinding, and a smaller one pushes it up until you cannot tap fast enough. The gear ladder beside the rhythm bar rings the one to aim for. "
-        + "Chevrons sit at the ends of the action row, down on the left and up on the right, or , and . on a keyboard. Shifting under load costs you a beat, so shift before the drag, not on it.";
+      b.className = isOn() ? "go" : "go ghost";
+      b.textContent = caption(isOn());
+      p.textContent = note(isOn());
     };
-    b.addEventListener("click", () => {
-      gearsOn = !gearsOn;
-      Sim.CFG.gearsOn = gearsOn;      // one switch for one feature, set in one place
-      paint();
-    });
-    xv.appendChild(b); xv.appendChild(note);
+    b.addEventListener("click", () => { flip(!isOn()); paint(); });
+    xv.appendChild(b); xv.appendChild(p);
     paint();
-  }
+  };
+
+  xToggle("dbgGears", () => gearsOn,
+    v => { gearsOn = v; Sim.CFG.gearsOn = v; },
+    // Reads the ratio count rather than hard-coding it, so cutting six gears to four cannot
+    // leave the button advertising a gearbox the sim does not have.
+    on => "Gearing in time trials: " + (on ? "ON" : "off")
+      + " · " + Sim.CFG.gearRatios.length + " speed",
+    on => (on
+      ? "On from the NEXT time trial you start: a race records the rules when it is created, so an in-progress stage is left alone rather than having its physics changed under a result. "
+      : "Off from the next time trial you start. ")
+      + "TIME TRIALS ONLY. On road stages it added difficulty without fun, so that half is gone. "
+      + "Four ratios, and the gear MOVES the rhythm target rather than adding a second bar to argue with it: a bigger gear turns slower at the same road speed, so it pulls the target down toward grinding, and a smaller one pushes it up until you cannot tap fast enough. The gear ladder beside the rhythm bar rings the one to aim for. "
+      + "It was six, which asked for a shift every two or three seconds. Four ratios, a target that lags your speed by about a second, and a dead zone on the recommendation bring that down to seven or eight shifts a ride. "
+      + "Chevrons sit at the ends of the action row, down on the left and up on the right, or , and . on a keyboard. Shifting under load costs you a beat, so shift before the drag, not on it.");
+
+  xToggle("dbgSwing", () => swingBudgetOn,
+    v => { swingBudgetOn = v; Sim.CFG.swingBudget = v; },
+    on => "Rival drop-back: " + (on ? "DISTANCE BUDGET" : "fixed pace cut"),
+    on => (on
+      ? "On IMMEDIATELY, including mid-race: unlike gearing this is not recorded at race creation, so a rotation you are already in changes under you. "
+      : "Off immediately. ")
+      + "How fast a rival slides from the front of a breakaway to the back of it. The shipped rule gives up a flat 9% of the front's pace and hopes that clears the train; this one works out how far it still has to drop and takes the deficit that clears it in four seconds. "
+      + "ON THE NUMBERS THE SHIPPED RULE WINS and this is here for feel only: fixed cut 3.17s median, 4.83s worst; distance budget 3.90s median, 28.68s worst. The ‘39s tail’ that made this look necessary was the harness starting its clock on breaks that were not rotating at all. "
+      + "There is nothing to look at on the HUD. Get into a break, take a turn on the front, then watch whether the rider you relieved slots onto the last wheel or hangs alongside the group.");
 
   const rs = $("dbgReset"); rs.innerHTML = "";
   dbgButton(rs, "Clear the saved tour", () => { ladder.savedTour = null; });
