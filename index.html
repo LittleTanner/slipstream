@@ -171,7 +171,27 @@
     box-shadow:0 -12px 34px rgba(46,49,47,.18)}
   #chanceCard.hide{display:none}
   #chanceCard .go{width:100%;margin-bottom:8px}
+  /* `.go{display:block}` beats `.hide{display:none}` at equal specificity, so every one of
+     these needs its own id rule or it can never be hidden. This has bitten four times. */
+  /* The one text field in the game. Matches the ghost-button look rather than inventing a
+     second visual language for a single control. */
+  #cbName{width:100%;box-sizing:border-box;margin-top:10px;padding:13px 14px;
+    font:inherit;font-size:15px;font-weight:700;color:var(--ink);background:transparent;
+    border:1.5px solid rgba(46,49,47,.22);border-radius:12px}
+  #cbName::placeholder{font-weight:500;color:rgba(46,49,47,.38)}
+  #cbName:focus{outline:none;border-color:var(--ink)}
+  .cbDay{display:flex;align-items:center;gap:10px;margin-top:9px}
+  .cbDay .n{font-size:11px;font-weight:700;opacity:.45;min-width:44px;letter-spacing:.1em}
+  .cbDay .segmented{flex:1;margin-top:0}
+  #cbShape{width:100%;height:46px;display:block;margin-top:12px}
+  #cbChar{margin-top:6px;font-weight:700;opacity:.75}
+  /* A text button: found rather than advertised. Underlined so it reads as pressable
+     without becoming a fifth card competing with the real races. */
+  .linky{background:none;border:0;padding:0;font:inherit;color:var(--ink);
+    font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
   #pCal.hide{display:none}
+  #pTilt.hide{display:none}
+  #pLean.hide{display:none}
   #pauseCard .go{width:100%;margin-bottom:8px}
   #tutCard.hide{display:none}
   .tcInner{text-align:left}
@@ -289,7 +309,16 @@
   <h3 id="pTitle">Nature break</h3>
   <p id="pBody"></p>
   <button class="go" id="pResume">Back on</button>
+  <!-- ★ STEERING IS CHANGEABLE MID-RACE. It only lived in Settings, so discovering that
+       tilt was wrong for you meant abandoning the stage to go and change it, which is a
+       punishment for experimenting with the control scheme. Same three controls as
+       Settings, driven by the same functions and painted by the same code, because two
+       copies of one setting is how they end up disagreeing. -->
+  <div class="secthead">Steering</div>
+  <button class="go ghost" id="pSteer">Drag</button>
   <button class="go ghost hide" id="pCal">Recalibrate tilt</button>
+  <button class="go ghost hide" id="pTilt">Tilt sensitivity: normal</button>
+  <button class="go ghost hide" id="pLean">Lean direction: normal</button>
   <button class="go ghost" id="pQuit">Save and step off</button>
   <button class="go ghost" id="pAbandon">Abandon the tour</button>
   <p id="pFoot" class="sub"></p>
@@ -332,7 +361,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 24</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 31</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -371,6 +400,34 @@
   <h2>Choose your race</h2>
   <p class="sub" id="pickSub"></p>
   <div id="pickBody"></div>
+</div></div>
+
+<!-- ★ BUILD YOUR OWN RACE. Pick the shape of every day and the road it goes over, and name
+     it whatever you like. Two rules keep it from eating the career: the purse scales with
+     what you actually BUILT rather than with the division you are standing in, so a soft
+     tour pays soft money and farming defeats itself; and a custom race never fills a
+     promotion credit, so money yes, ladder no. "Money buys breadth, never power" survives.
+     One RANKED custom race per division on top of that, as a belt and braces. Unranked is
+     unlimited and pays nothing, which is the free-play version. -->
+<div class="screen hide" id="builder"><div class="inner">
+  <button class="navback" id="cbBack" aria-label="Back">&#8592;</button>
+  <h2>Build your own race</h2>
+  <p class="sub" id="cbSub"></p>
+  <div class="secthead">Name</div>
+  <input id="cbName" type="text" maxlength="34" placeholder="Name your race" autocomplete="off" />
+  <div class="secthead">Length</div>
+  <div class="segmented" id="cbLen"></div>
+  <!-- The shape of the week, so you can see you have stacked the mountains badly BEFORE you
+       ride it. Schematic glyphs, not real profiles: a real profile needs a generated course
+       per day and reads as noise at this size. -->
+  <canvas id="cbShape"></canvas>
+  <p class="sub" id="cbChar"></p>
+  <button class="go ghost" id="cbRollBtn">Roll me one</button>
+  <div class="secthead">The days</div>
+  <div id="cbDays"></div>
+  <div class="secthead">Purse</div>
+  <p class="sub" id="cbPurse"></p>
+  <div id="cbGo"></div>
 </div></div>
 
 <div class="screen hide" id="rest"><div class="inner">
@@ -1084,6 +1141,43 @@ const ROUTES = [
     note: "Shallow enough to ride fast, long enough that riding it fast is a mistake." },
   { id: "peyresourde", pack: "pyrenees", name: "Col de Peyresourde", km: 13.2, grade: 7.0, top: 1569, summit: false,
     note: "Even gradients the whole way up, which is exactly why it splits a tired bunch." },
+  // --- California. Long, hot, exposed climbs from the state's own racing, and a different
+  // problem from the Alps: nothing here is above 1700 m, so it is not altitude that hurts,
+  // it is length at a steady grade with no shade and no let-up. Real figures, as every named
+  // road in this game uses, so the categories fall out of the climb rather than being set by
+  // hand — Baldy and Palomar both rate HC on their own numbers.
+  { id: "baldy", pack: "california", name: "Mount Baldy", km: 20.4, grade: 6.7, top: 1980, summit: true,
+    note: "Twenty kilometres of it, and the last four hundred metres average thirteen percent." },
+  { id: "palomar", pack: "california", name: "Palomar Mountain", km: 20.0, grade: 6.9, top: 1681, summit: true,
+    note: "Eighteen unbroken hairpins at a metronomic six to eight. Nothing to hide behind." },
+  { id: "gibraltar", pack: "california", name: "Gibraltar Road", km: 14.5, grade: 7.0, top: 1062, summit: true,
+    note: "Off the ocean and straight up. Dry, brushy switchbacks with the sea behind you." },
+  { id: "diablo", pack: "california", name: "Mount Diablo", km: 17.1, grade: 5.7, top: 1173, summit: true,
+    note: "Shallow enough to ride hard all the way, until a wall of a final two hundred metres." },
+  // --- the white roads. GRAVEL, which plays nothing like pave: cobbles cut drafting to 0.62
+  // and tear the bunch apart, gravel leaves the shelter almost intact (0.88) and goes after
+  // your GRIP instead (0.78 against the cobbles' 0.86). A cobbled sector is decided by
+  // position; a gravel one is decided by how you steer. Rated in stars like any sector,
+  // because a surface has no gradient to quote.
+  { id: "sterrato", pack: "gravel", kind: "gravel", name: "Sterrato di Monteaperti", km: 2.4, stars: 4,
+    note: "White dust and a rising drag. The bunch stays together and still loses people." },
+  { id: "lucignano", pack: "gravel", kind: "gravel", name: "Lucignano d'Asso", km: 3.1, stars: 5,
+    note: "The long one. Loose over hardpack, and the line you pick is the whole race." },
+  { id: "pievina", pack: "gravel", kind: "gravel", name: "La Pievina", km: 1.8, stars: 3,
+    note: "Short, but it comes at you off a fast descent with no time to think." },
+  // --- the walls. A COL AND A WALL ARE NOT THE SAME TERRAIN, and every climb pack so far was
+  // a col: 13 to 20 km at 5 to 8%. These are one to two kilometres at ten to twenty, which is
+  // a different effort, a different rider and a different race — you cannot pace a wall, you
+  // can only be strong enough for it. Placed on HILLY days, because a 1 km wall as the
+  // decisive climb of a mountain stage is an anticlimax.
+  { id: "huy", pack: "walls", kind: "wall", name: "Mur de Huy", km: 1.3, grade: 9.6, top: 204, summit: true,
+    note: "Nine hundred metres of it over twenty percent. Everyone knows what is coming and it still hurts." },
+  { id: "koppenberg", pack: "walls", kind: "wall", name: "Koppenberg", km: 0.6, grade: 11.6, top: 77, summit: false,
+    note: "Six hundred metres, cobbled, and steep enough that riders walk it. Position is everything." },
+  { id: "paterberg", pack: "walls", kind: "wall", name: "Paterberg", km: 0.4, grade: 12.9, top: 82, summit: false,
+    note: "Four hundred metres at nearly thirteen percent. Over in a minute and it decides the day." },
+  { id: "planche", pack: "walls", kind: "wall", name: "La Planche des Belles Filles", km: 5.9, grade: 8.5, top: 1035, summit: true,
+    note: "The long wall. Steady until the last ramp, which touches twenty on gravel." },
   // --- the cobbles. A SECTOR, NOT A CLIMB, which is why this pack sat unbuilt while the
   // others shipped: a route stamps a gradient into the terrain, and pave has no gradient.
   // The machinery for it existed all along in SURFACES.cobbles — drag, jostle, lost grip,
@@ -1098,7 +1192,16 @@ const ROUTES = [
 ];
 // A climb route reshapes the terrain; a sector route lays pave on flat road. Everything
 // that asks "is this a climb road" asks this, so neither kind can leak into the other.
-const isSector = r => !!(r && r.kind === "cobbles");
+// ★ A SURFACE ROUTE, not just a cobbled one. A road can be a SECTOR rather than a climb —
+// it stamps itself into the surfaces list instead of into the terrain — and pave was only
+// ever the first kind. Gravel was already in SURFACES with real numbers (drag 0.034, grip
+// 0.78, draft 0.88) and already turned up as a GENERATED section, but no named road could be
+// one, which is the same "the machinery exists and nothing can reach it" state the cobbles
+// sat in before build 21. The two play differently and that is the point: cobbles cut
+// drafting to 0.62 and break the bunch apart, gravel barely touches the shelter (0.88) and
+// goes after your GRIP instead, so one is about position and the other is about handling.
+const SURFACE_KINDS = { cobbles: 1, gravel: 1 };
+const isSector = r => !!(r && SURFACE_KINDS[r.kind]);
 const ROUTE_BY_ID = {};
 for (const r of ROUTES) ROUTE_BY_ID[r.id] = r;
 
@@ -1492,7 +1595,9 @@ function buildStage(seed, spec0, D) {
     const sLen = Math.round(route.km * 1000 / CFG.scaleM);
     const sAt = Math.max(200, Math.round(spec.len * 0.62) - sLen);
     if (sAt + sLen < spec.len - 260) {
-      surfaces.push(MAKE.surface("cobbles", sAt, sLen, 1.0));
+      // The route's OWN kind, not a hardcoded one: a gravel road that stamped itself as pave
+      // would look right on the profile and play as the wrong terrain entirely.
+      surfaces.push(MAKE.surface(route.kind, sAt, sLen, 1.0));
       sector = { route: route.id, s: sAt, e: sAt + sLen };
     }
   }
@@ -2101,7 +2206,12 @@ function createRace(opts) {
     // nobody can attack and nobody gains a metre, so where you sit when the flag drops is
     // your first decision of the stage rather than dead time. The CLOCK does not run yet.
     neutral: false, pacer: { x: 0, gone: false },
-    payScale: 1 + 2.5 * D.t, kit: kitId,
+    // A CUSTOM RACE PAYS FOR WHAT YOU BUILT, not for where you are standing. Without this
+    // the exploit is to build the softest legal race at Division 1 and collect Division 1
+    // money for Division 8 racing — and capping HOW OFTEN you can do it only slows that
+    // down, it does not stop it paying. Defaults to 1, so every drawn race is untouched and
+    // the golden does not move.
+    payScale: (1 + 2.5 * D.t) * (opts.payMul === undefined ? 1 : opts.payMul), kit: kitId,
     stageIndex: opts.stageIndex, seed: opts.seed,
     rnd: null, rndN: 0, clock: 0, acc: 0, chase: 0, pelotonHead: 0, pelotonPace: 0, driver: null, youDriving: false,
     ttChecks: course.spec.tt ? [course.len / 3, course.len * 2 / 3] : null, bestSplit: [], ttCheck: null,
@@ -2858,9 +2968,31 @@ function aiThink(race, r, dt) {
   // enough to read it, follows a genuine dig. Sharper divisions react more often and sooner,
   // so at Division 8 you often go alone and at Division 1 you rarely do.
   const yr = race.you;
-  if (r.inPeloton && !yr.inPeloton && yr.eff === "attack" && yr.dist > r.dist
+  // ★ AND IT WORKS INSIDE A BREAKAWAY TOO. This read `r.inPeloton && !yr.inPeloton`, which is
+  // "a rider in the bunch, when you have gone clear of it" — so once you were IN a break,
+  // nobody in it ever reacted to you going again. Measured before the fix: break riders
+  // attacked on 8.3% of frames against the peloton's 8.8%, so attacks were never RESTRICTED
+  // in a break (the burst<0.12 test further up is about who swings off, not about attacking).
+  // What was missing was specifically the REACTION: every trigger that responds to something
+  // was gated on being in the peloton, so a break was a place where digs went unanswered.
+  // Written as "the two of you are in the same group and you have just gone" so the peloton
+  // case is untouched and only the break case is new — the golden diff stays attributable.
+  // ★ AND THE TELL INSIDE A BREAK IS A LAUNCH, NOT THE EFFORT LABEL. The swing-off code below
+  // already spells this out and I did not read it closely enough first time: "break riders
+  // ride 'attack' as their normal hard state". Keying the break case on `eff === "attack"`
+  // therefore fired on every frame of ordinary through-and-off, every rival attacked
+  // permanently, and the rotation died — `refusal.test.js` lost the elbow flick and
+  // `rotation-dropback.test.js` dropped to 2 steady-state drop-backs. A JUMP is the physical
+  // tell that separates a dig from a turn on the front, which is the same test used to decide
+  // who swings off.
+  const brk = race.breakaway || [];
+  const together = (r.inPeloton && !yr.inPeloton)                 // you have left the bunch
+    || (brk.indexOf(r) >= 0 && brk.indexOf(yr) >= 0 && (yr.burst || 0) > 0.12);
+  if (together && yr.eff === "attack" && yr.dist > r.dist
     && yr.dist - r.dist < 26 && r.energy > 40 && togo > 260
     && r.sharp > 0.30 + 0.45 * (1 - ai)) want = "attack";
+  // Still peloton-only, and correctly: this is the BUNCH deciding to chase a break up the
+  // road. A rider already in that break has nothing to chase.
   if (r.inPeloton && race.chase > 0.35 - 0.16 * ai && r.energy > 45 && race.breakGap > 20) want = "attack";
   if (r.inPeloton && race.chase < 0.12 && want === "attack" && togo > 320 && p.k !== "raid" && g < 0.25) want = "tempo";
 
@@ -4543,6 +4675,12 @@ let lanterneJustWon = false;
 function applyLadder(place, kind) {
   ladder.tours++;
   let moved = "held";
+  // ★ A RACE YOU BUILT IS OUTSIDE THE LADDER, and outside your WINS as well. No promotion
+  // credit is the obvious half; no `wins` is the half that matters, because wins drive
+  // tactic LEVELS (WIN_STEPS) and winning a race you designed to be soft must not sharpen
+  // your race radio. It still counts as a race ridden, so it appears in the palmares. The
+  // money is the whole reward, and the purse already scales with what you built.
+  if (tour && tour.custom) { Store.save(ladder); return "held"; }
   if (place === 1) ladder.wins++;
   if (kind && place <= reqPlace(ladder.div)) {
     (ladder.req || (ladder.req = {}))[kind] = true;
@@ -4610,6 +4748,15 @@ function refreshMenu() {
   $("leanBtn").classList.toggle("hide", ladder.steer !== "tilt");
   $("tiltBtn").textContent = "Tilt sensitivity: " + tiltSens().name;
   $("tiltBtn").classList.toggle("hide", ladder.steer !== "tilt");
+  // The pause card's copies, painted from the same values. `.go` sets `display`, so `.hide`
+  // loses to it on equal specificity unless the id has its own rule — the CSS trap this file
+  // has hit four times — which is why each of these has one in the stylesheet.
+  $("pSteer").textContent = ladder.steer === "tilt" ? "Tilt" : "Drag";
+  $("pTilt").textContent = "Tilt sensitivity: " + tiltSens().name;
+  $("pTilt").classList.toggle("hide", ladder.steer !== "tilt");
+  $("pLean").textContent = "Lean direction: " + (ladder.leanInvert ? "inverted" : "normal");
+  $("pLean").classList.toggle("hide", ladder.steer !== "tilt");
+  $("pCal").classList.toggle("hide", ladder.steer !== "tilt");
   $("calBtn").classList.toggle("hide", ladder.steer !== "tilt");
   $("calBtn").textContent = ladder.tiltCal ? "Recalibrate tilt" : "Calibrate tilt";
   $("mSteer").textContent = ladder.steer === "tilt" ? Tilt.label()
@@ -4712,6 +4859,9 @@ function startStage() {
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
         out: tour.out || [],
         route: stageRoute(tour.stage),
+        // A CUSTOM RACE PAYS FOR WHAT YOU BUILT. Unranked pays nothing at all, so the purse
+        // is zeroed at the source rather than filtered out of six different readouts later.
+        payMul: tour.custom ? (tour.custom.ranked ? tour.custom.pay : 0) : 1,
         fatigue: tour.fatigue, playerStats: bStats });
   // Your chosen bib, worn on the dot. View-only (the sim neither reads nor saves
   // num), so it is applied after createRace here and after Sim.restore on resume.
@@ -7610,7 +7760,11 @@ function setPaused(v) {
   $("pauseCard").classList.toggle("hide", !v);
   // Tilt drifts with how you sit; mid-race is exactly when you notice. Tilt riders
   // can re-level from the nature break without digging back out to Settings.
-  if (v) { $("pCal").classList.toggle("hide", ladder.steer !== "tilt"); $("pCal").textContent = "Recalibrate tilt"; }
+  // refreshMenu paints every steering control on both screens, so calling it here is what
+  // makes the pause card's copies correct on open rather than showing whatever they read
+  // last time. `pCal`'s label is set after, because it is the one control whose text depends
+  // on having been pressed rather than on the setting.
+  if (v) { refreshMenu(); $("pCal").textContent = "Recalibrate tilt"; }
   const t = tour && tour.schedule ? tour.schedule.length : 1;
   // Riders stop for all sorts of reasons and the bunch waits. A pause is one of them.
   const REASONS = [
@@ -7736,7 +7890,7 @@ function frame(now) {
 // ---------------------------------------------------------------- screens
 const $ = id => document.getElementById(id);
 const show = id => {
-  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest", "gloss", "debug"])
+  for (const s of ["menu", "brief", "result", "build", "daily", "practice", "settings", "rules", "drills", "drillBrief", "data", "routes", "pick", "rest", "gloss", "debug", "builder"])
     $(s).classList.toggle("hide", s !== id);
   $("drillDone").classList.add("hide");       // never leaves it stranded over a screen
 };
@@ -7842,6 +7996,52 @@ function stageTowns(seed, idx) {
   if (b === a) b = (b + 1 + (idx % 3)) % TOWNS.length;
   return { start: TOWNS[a], finish: TOWNS[b] };
 }
+// ★ RACES HAVE NAMES NOW. A stage was "Bourg → Le Grand-Bornand" and the race around it was
+// "Three-day tour", which is a menu row rather than a race. These are nods to the real
+// calendar without being it: the pattern is to name a race after the TERRAIN, the REGION or
+// the thing that hurts, which is also how the sport's own epithets work ("Hell of the North",
+// "the Old Lady", "the Race of the Falling Leaves"). What is deliberately avoided is a real
+// event's name plus a year, which reads as the official race rather than a wink at it.
+//
+// One-day races draw from the classics, tours from the stage races, and three weeks from the
+// grand tours, so the name tells you what shape of race you are looking at as well.
+const RACE_NICKS = {
+  one: ["Hell of the Cobbles", "Ronde van Pijn", "The Long Sprint", "The Old Lady",
+    "The Falling Leaves", "The White Roads", "The Golden Hills", "The Stone Classic",
+    "Purgatory Pavé", "The Wall Hunt", "The Northern Cobbles", "La Doyenne du Nord"],
+  short: ["Race to the Sun", "The Dauphin", "Tour de Suffering", "The Tirreno Crossing",
+    "The Basque Grind", "Route du Mal", "The Catalan Week", "Tour de Pain"],
+  // "La Grande Souffrance" is deliberately absent: it is reserved for THE Grand Tour, which
+  // keeps one name rather than drawing a new one every time you ride it.
+  grand: ["Tour de Pain", "Giro d'Agonia", "The Red Chase", "The Three-Week Reckoning"]
+};
+// DERIVED, NOT DRAWN. It uses the seed with its own hash and never touches the course PRNG:
+// adding an R() call inside generation shifts every downstream value and changes every course
+// (DEV-LOOP, "course PRNG discipline"). It also lives view-side, so the sim is untouched and
+// the golden does not move.
+function raceNick(seed, len) {
+  const pool = len === 1 ? RACE_NICKS.one : len >= 14 ? RACE_NICKS.grand : RACE_NICKS.short;
+  // A cheap deterministic hash of the seed and the length, so the same race is always the
+  // same race and a one-day and a three-day off one seed are not forced to share a name.
+  let h = (seed >>> 0) ^ 0x9e3779b9;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) ^ (len * 0x27d4eb2d);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return pool[Math.abs(h >>> 0) % pool.length];
+}
+// The name of the race you are actually riding, or "" when there is no race with a name: a
+// training ride and the daily are not races on a calendar, they are a practice lap and a
+// shared puzzle, and both already say so in their own eyebrow.
+function tourNick() {
+  if (!tour || !tour.schedule || tour.practice || tour.daily) return "";
+  // A race you built and named is called what you called it. Falls through to the drawn pool
+  // when the field was left blank, because an unnamed race still deserves a name.
+  if (tour.custom && tour.custom.name) return tour.custom.name;
+  // THE Grand Tour is one specific race you unlock by taking Division 1, not a category, so
+  // it gets one name and keeps it. Drawing it from the pool would give the thing you spent a
+  // whole career opening a different title every time you rode it.
+  if (tour.grand) return "La Grande Souffrance";
+  return raceNick(tour.seed >>> 0, tour.schedule.length);
+}
 function stageTitle(i) {
   if (!tour || !tour.schedule) return "";
   const idx = i === undefined ? tour.stage : i;
@@ -7915,6 +8115,9 @@ function showBriefing() {
         playerType, kit: ladder.kit, gc: tour.gc, leaders: tour.leaders, div: ladder.div,
         out: tour.out || [],
         route: stageRoute(tour.stage),
+        // A CUSTOM RACE PAYS FOR WHAT YOU BUILT. Unranked pays nothing at all, so the purse
+        // is zeroed at the source rather than filtered out of six different readouts later.
+        payMul: tour.custom ? (tour.custom.ranked ? tour.custom.pay : 0) : 1,
         fatigue: tour.fatigue, playerStats: Sim.buildStats(committedBuild || Sim.neutralBuild()) });
   const c = preview.course;
   // How much climbing is in it: the number every rider looks at first.
@@ -7925,7 +8128,8 @@ function showBriefing() {
     ? "Training · Division " + tour.practice.div + " · " + spec.sub + " · " + dims
     : tour.daily
     ? "Daily challenge #" + tour.daily.n + " · " + spec.sub + " · " + dims
-    : "Division " + ladder.div + " · " + stageLabel() + " · " + spec.sub + " · " + dims;
+    : [tourNick(), "Division " + ladder.div, stageLabel(), spec.sub, dims]
+        .filter(Boolean).join(" · ");
   // THE TOWNS ARE THE TITLE. The flavour line that used to live here says the same thing
   // the eyebrow's "Mountains" already says, so it moves down to the notes where it reads as
   // a remark about the day rather than the name of it.
@@ -7955,12 +8159,19 @@ function showBriefing() {
   // figures come from the catalogue rather than being measured off the terrain, so they
   // read as the climb's real, exact numbers.
   const rt = c.spec && c.spec.route ? Sim.ROUTES.filter(x => x.id === c.spec.route)[0] : null;
-  if (rt && rt.kind === "cobbles") {
+  if (rt && Sim.isSector(rt)) {
     // A sector is described by what it does to you, not by a gradient it does not have:
-    // its length, its rating, and the fact that cobbles tear the shelter up.
+    // its length, its rating, and what that surface actually does. GRAVEL IS NOT PAVE and
+    // must not claim to be: cobbles cut the shelter to 0.62 and tear the bunch up, gravel
+    // leaves it at 0.88 and takes your grip instead. Saying "of pave" for both would be
+    // telling the rider the wrong thing about the day in the one place they are told it.
+    const gravelly = rt.kind === "gravel";
     notes.push(rt.name + " \u00b7 " + "\u2605".repeat(rt.stars || 5) + " \u00b7 "
-      + M.long(rt.km * 1000 / Sim.CFG.scaleM) + " of pave. Shelter is worth barely half of "
-      + "what it is on tar here, and the holes puncture. " + rt.note);
+      + M.long(rt.km * 1000 / Sim.CFG.scaleM) + (gravelly ? " of gravel. " : " of pave. ")
+      + (gravelly
+        ? "The shelter mostly holds here; it is your grip that goes, and the loose stuff punctures. "
+        : "Shelter is worth barely half of what it is on tar here, and the holes puncture. ")
+      + rt.note);
   } else if (rt) notes.push(rt.name + " \u00b7 " + Sim.climbCat(c, rcl) + " \u00b7 "
     + M.long(rt.km * 1000 / Sim.CFG.scaleM) + " at " + rt.grade.toFixed(1) + "%, "
     + Sim.routeGain(c) + " m of climbing, topping out at " + M.alt(rt.top) + ". " + rt.note);
@@ -8105,10 +8316,12 @@ function finishStage() {
     }
   }
   $("pauseBtn").classList.add("hide");
-  $("rEyebrow").textContent = lastStage
+  // The race's name leads the finish line, because "you won the Hell of the Cobbles" is a
+  // result and "tour finished" is a state change.
+  $("rEyebrow").textContent = [tourNick(), lastStage
     ? (oneDay ? "Race finished · Division " : "Tour finished · Division ")
       + (moved === "up" ? ladder.div + 1 : moved === "down" ? ladder.div - 1 : ladder.div)
-    : stageLabel() + " · " + fmt(you.time);
+    : stageLabel() + " · " + fmt(you.time)].filter(Boolean).join(" · ");
   $("rVerdict").textContent = lastStage
     ? (lanterneJustWon ? "Lanterne rouge"
       : gcPlace === 1 ? (tour.grand ? "You win the Grand Tour" : oneDay ? "You win the race" : "You win the tour") : gcPlace + "th overall")
@@ -8192,10 +8405,30 @@ $("pCal").addEventListener("click", () => {
   else b.textContent = "Tilt is not reporting";
   setTimeout(() => { b.textContent = "Recalibrate tilt"; }, 1600);
 });
-$("tiltBtn").addEventListener("click", () => {
+// ★ ONE ACTION PER SETTING, TWO BUTTONS. The pause card carries the same steering controls
+// as Settings so a control scheme can be changed mid-stage rather than by abandoning the
+// race to go and find it. They call these, never their own copies: a second implementation
+// of "cycle the tilt sensitivity" is how the two screens end up disagreeing, and this file
+// already has a record of exactly that (the corridor computed in one place and drawn from
+// another). `refreshMenu()` paints both sets, so neither can be left stale either.
+function cycleTiltSens() {
   ladder.tiltSens = ((ladder.tiltSens ?? 1) + 1) % TILT_SENS.length;
   Store.save(ladder); refreshMenu();
-});
+}
+function toggleLeanInvert() {
+  ladder.leanInvert = !ladder.leanInvert; Store.save(ladder); refreshMenu();
+}
+// Async and awaited: enabling tilt asks for the motion permission, which the browser only
+// grants inside the gesture that requested it, so this cannot be deferred or wrapped.
+async function toggleSteer() {
+  if (ladder.steer === "tilt") { ladder.steer = "drag"; Tilt.disable(); }
+  else { ladder.steer = "tilt"; await Tilt.enable(); }
+  Store.save(ladder); refreshMenu();
+}
+$("tiltBtn").addEventListener("click", cycleTiltSens);
+$("pTilt").addEventListener("click", cycleTiltSens);
+$("pLean").addEventListener("click", toggleLeanInvert);
+$("pSteer").addEventListener("click", toggleSteer);
 // ★ THE TEST SHORTCUT, BEHIND A GESTURE. This used to be a plainly labelled button in
 // Settings that handed over the $4.99 career and every $2.99 route pack for free and
 // rewrote a real save doing it — the pre-ship blocker in CLAUDE.md. Now: hold the build
@@ -8229,6 +8462,9 @@ let debugOn = false;
 })();
 $("debugBtn").addEventListener("click", () => { renderDebug(); show("debug"); });
 $("dbgBack").addEventListener("click", () => show("settings"));
+$("cbBack").addEventListener("click", () => { renderPick(); show("pick"); });
+$("cbName").addEventListener("input", () => { if (cb) cb.name = $("cbName").value; });
+$("cbRollBtn").addEventListener("click", () => { cbRoll(); renderBuilder(); });
 
 function dbgRow(host, label, value) {
   const d = document.createElement("div"); d.className = "note";
@@ -8262,7 +8498,14 @@ function renderDebug() {
   dbgRow(st, "Owned physique", (ladder.physique || []).join(", ") || "none");
   dbgRow(st, "Training budget", fittedTraining().reduce((a, t) => a + t.pts, 0)
     + " of " + trainingBudget(ladder.career, ladder.div));
-  dbgRow(st, "Tactics", (ladder.tactics || []).join(", ") || "none");
+  // ★ SHOW THE LEVELS, NOT JUST WHICH ARE FITTED. "Everything at once" left every tactic at
+  // level 1 and the panel said "radio, powerMeter" as though all was well, so the one number
+  // that was wrong was the one number not on screen. A diagnostics page that cannot show you
+  // the bug is decoration.
+  dbgRow(st, "Tactics", TACTICS.map(t => t.name + " "
+    + (isFitted(t.key) ? "L" + Math.max(1, tacticLevel(t.key, ladder.wins || 0)) : "-")).join("   "));
+  dbgRow(st, "Race craft needs", "wins for max: "
+    + Object.keys(WIN_STEPS).map(k => k + " " + WIN_STEPS[k][WIN_STEPS[k].length - 1]).join(", "));
   dbgRow(st, "Parts owned", String((ladder.parts || []).length));
   dbgRow(st, "Saved tour", ladder.savedTour
     ? "stage " + ((ladder.savedTour.stage || 0) + 1) + " of " + (ladder.savedTour.schedule || []).length
@@ -8301,7 +8544,22 @@ function renderDebug() {
   dbgButton(gv, "Own every bike part", () => { ladder.parts = Sim.SLOTS
     .reduce((a, [s]) => a.concat(Sim.PARTS[s].map(p => p.id)), []); });
   dbgButton(gv, "Open the Grand Tour", () => { ladder.topWins = Math.max(1, ladder.topWins || 0); });
+  // ★ WINS ARE WHAT SHARPEN A TACTIC, and nothing here was setting them. Fitting the radio
+  // gave you a level 1 radio forever however much else you unlocked, because the LEVEL comes
+  // from `tacticLevel(key, ladder.wins)` against WIN_STEPS and no debug button touched wins.
+  // The highest threshold in the table is the bar for maxing everything, read from the table
+  // rather than hardcoded so a re-tuned WIN_STEPS cannot leave this quietly short again.
+  const maxCraftWins = () => Object.keys(WIN_STEPS)
+    .reduce((n, k) => Math.max(n, WIN_STEPS[k][WIN_STEPS[k].length - 1]), 0);
+  dbgButton(gv, "Max the race craft (levels III, and fitted)", () => {
+    ladder.wins = Math.max(ladder.wins || 0, maxCraftWins());
+    // Fitting matters as much as the level: an unfitted tactic is level 0 whatever your
+    // wins. Takes the first FIT_TACTICS in the pool, which is all the slots there are.
+    ladder.tactics = TACTICS.slice(0, FIT_TACTICS).map(t => t.key);
+  });
   dbgButton(gv, "Everything at once", () => {
+    ladder.wins = Math.max(ladder.wins || 0, maxCraftWins());
+    ladder.tactics = TACTICS.slice(0, FIT_TACTICS).map(t => t.key);
     ladder.tutorialDone = true;
     ladder.div = 1; ladder.peakDiv = 1; ladder.best = 1;
     ladder.topWins = Math.max(1, ladder.topWins || 0);
@@ -8367,14 +8625,8 @@ function renderDebug() {
   });
   rs.appendChild(wipe);
 }
-$("leanBtn").addEventListener("click", () => {
-  ladder.leanInvert = !ladder.leanInvert; Store.save(ladder); refreshMenu();
-});
-$("steerBtn").addEventListener("click", async () => {
-  if (ladder.steer === "tilt") { ladder.steer = "drag"; Tilt.disable(); }
-  else { ladder.steer = "tilt"; await Tilt.enable(); }     // must be inside the gesture
-  Store.save(ladder); refreshMenu();
-});
+$("leanBtn").addEventListener("click", toggleLeanInvert);
+$("steerBtn").addEventListener("click", toggleSteer);
 function resumeTour() {
   const sv = ladder.savedTour; if (!sv || !sv.schedule) return;
   playerType = sv.type || playerType;
@@ -9839,7 +10091,10 @@ const nth = n => {
 const ROUTE_PACKS = [
   { id: "alps", name: "The high Alps", note: "Three passes that decide grand tours." },
   { id: "cobbles", name: "The cobbles", note: "Flat, brutal, and decided by position rather than legs." },
-  { id: "pyrenees", name: "The Pyrenees", note: "Shorter climbs, steeper ramps, no time to recover." }
+  { id: "pyrenees", name: "The Pyrenees", note: "Shorter climbs, steeper ramps, no time to recover." },
+  { id: "california", name: "California", note: "Four long, exposed climbs where the heat and the length do the damage." },
+  { id: "gravel", name: "The white roads", note: "Gravel sectors. The bunch holds together and still loses people." },
+  { id: "walls", name: "The walls", note: "One to two kilometres at ten to twenty percent. Nothing to pace, only to survive." }
 ];
 // PACKS GET DEARER AS YOU COLLECT THEM, and the price depends on HOW MANY YOU OWN rather
 // than on which pack it is — tie it to the pack and whoever wants the Pyrenees first pays
@@ -9871,20 +10126,29 @@ function assignRoute(t, len) {
   // on a mountain day. Keeping the lists apart is what stops a pack you bought for the
   // cobbles turning up on a col.
   const byId = id => Sim.ROUTES.filter(r => r.id === id)[0];
-  const climbs = own.filter(id => !Sim.isSector(byId(id)));
+  // ★ THREE KINDS OF ROAD NOW, NOT TWO. A col belongs on a mountain day, a surface sector on
+  // a flat one, and a WALL on a hilly one — one to two kilometres at ten to twenty percent is
+  // an anticlimax as the decisive climb of a mountain stage and exactly right as the sting on
+  // a hilly day. Keeping the lists apart is what stops a pack bought for the walls turning up
+  // as somebody's queen stage.
+  const isWall = r => !!(r && r.kind === "wall");
+  const climbs = own.filter(id => !Sim.isSector(byId(id)) && !isWall(byId(id)));
+  const walls = own.filter(id => isWall(byId(id)));
   const setts = own.filter(id => Sim.isSector(byId(id)));
   const paidSet = new Set(paidRoutes());
-  const mtn = [], flat = [];
+  const mtn = [], flat = [], hilly = [];
   for (let i = 1; i < len - 1; i++) {
     const k = t.schedule[i];
     if (k === 2 || k === 4) mtn.push(i);
     else if (k === 0 || k === 3) flat.push(i);
+    else if (k === 1) hilly.push(i);
   }
   // PAID FIRST, FREE FILLS. A road you paid for must never be crowded out by one you did
   // not, so each list is split and the premium half is placed before the free half.
   const split = list => [list.filter(id => paidSet.has(id)), list.filter(id => !paidSet.has(id))];
   const [paidClimbs, freeClimbs] = split(climbs);
-  const [paidSetts] = split(setts);            // there is no free cobbled sector
+  const [paidSetts] = split(setts);            // there is no free surface sector
+  const [paidWalls] = split(walls);            // nor a free wall
 
   const spread = (days, list) => {
     for (let k = 0; k < list.length && k < days.length; k++)
@@ -9904,6 +10168,7 @@ function assignRoute(t, len) {
     spread(mtn, paidClimbs.length ? paidClimbs : freeClimbs);
     if (paidClimbs.length) fill(mtn, freeClimbs);
     spread(flat, paidSetts);
+    spread(hilly, paidWalls);
     return;
   }
   // ★ EVERY MOUNTAIN DAY, NOT JUST SEVEN-DAY TOURS. This used to bail below seven stages,
@@ -9920,8 +10185,271 @@ function assignRoute(t, len) {
   if (flat.length && paidSetts.length)
     t.routeMap[flat[((t.seed >>> 7) >>> 0) % flat.length]] =
       paidSetts[((t.seed >>> 11) >>> 0) % paidSetts.length];
+  // And one wall per race, on a hilly day, for the same reason: a wall is the sting in a
+  // single day, not a feature of the week. Different shifts of the same seed so the sector
+  // and the wall are chosen independently rather than always landing in step.
+  if (hilly.length && paidWalls.length)
+    t.routeMap[hilly[((t.seed >>> 13) >>> 0) % hilly.length]] =
+      paidWalls[((t.seed >>> 17) >>> 0) % paidWalls.length];
 }
 const stageRoute = st => (tour && tour.routeMap) ? (tour.routeMap[st] || null) : null;
+
+// ---- build your own race --------------------------------------------------------
+// Pick the shape of every day, the road it goes over if you own one, and a name. Two rules
+// stop it eating the career, and only one of them is the use limit.
+//
+// 1. THE PURSE SCALES WITH WHAT YOU BUILT. Frequency caps how often you can farm, not
+//    whether farming pays: a soft race at Division 1 would otherwise collect Division 1
+//    money for Division 8 racing. Softer than a drawn race pays less, and the factor is
+//    CAPPED AT 1, so building a monster is never a payday either — the honest build is
+//    simply the only one that pays in full.
+// 2. IT NEVER TOUCHES THE LADDER OR YOUR WINS. No promotion credit, no relegation strike,
+//    and no `wins`, because wins drive tactic LEVELS and a race you designed to be easy must
+//    not sharpen your race radio. Money is breadth, wins are power, and the rule this whole
+//    economy rests on is that money never buys power.
+// One RANKED custom race per division on top of that. Unranked is unlimited and pays
+// nothing, which is the free-play version.
+const CB_LENGTHS = [3, 5, 7];
+let cb = null;                     // { len, days: [stageIndex], name, ranked }
+// A day's hardness, from the stage's own numbers rather than a second opinion about them.
+const cbHard = i => { const s = Sim.STAGES[i]; return s.hilly + s.len / 3600 + (s.tt ? 0.10 : 0); };
+function customPayFactor(schedule) {
+  let all = 0; for (let i = 0; i < Sim.STAGES.length; i++) all += cbHard(i);
+  const avg = all / Sim.STAGES.length;
+  let mine = 0; for (const i of schedule) mine += cbHard(i);
+  return clamp((mine / schedule.length) / avg, 0.35, 1);
+}
+// One per division, refreshed whenever the division CHANGES — including downwards. Keyed on
+// "where was it last spent" rather than a per-division ledger, so a long career that visits
+// Division 5 three times gets a custom race each time instead of one forever.
+const customReady = () => (ladder.customAtDiv === undefined || ladder.customAtDiv !== ladder.div);
+// ★ THE BUILDER IS SOMETHING A ROUTE PACK BUYS YOU. It is not for sale on its own and it is
+// not a starting feature: own one paid pack and it appears. That keeps it on the right side
+// of the rule the whole economy rests on — money buys BREADTH, never power — because a
+// custom race pays money and touches neither the ladder nor your wins. What you are buying
+// is another way to play, which is exactly what a pack of roads should be.
+const builderOpen = () => paidRoutes().length > 0;
+
+// FOUR TYPES, NOT SIX. Six segmented buttons a day down seven days is fourteen rows of
+// controls on a phone, which is admin. Pan flat and the queen stage are deliberately absent:
+// what makes a day extreme is the COL ON IT, so the extremes come from the road you pick,
+// and those two stay as things a drawn tour hands you rather than things you can specify.
+const CB_TYPES = [
+  { i: 0, name: "Flat" }, { i: 1, name: "Hills" },
+  { i: 2, name: "Mountains" }, { i: 5, name: "Time trial" }
+];
+// ROLL ME ONE. The point of the builder is CURATING, not composing from a blank form, so it
+// always opens holding a real race and one tap gives you another. Shaped like a race rather
+// than drawn at random: a flat opener, the mountains in the middle where they decide it, a
+// time trial once the race is long enough to need one, and never three mountain days stacked
+// back to back.
+function cbRoll() {
+  const n = cb.len, out = [];
+  const R = () => Math.random();
+  for (let d = 0; d < n; d++) {
+    const first = d === 0, last = d === n - 1;
+    let pick;
+    if (first) pick = R() < 0.75 ? 0 : 1;                 // an opener for the sprinters
+    else if (last) pick = n <= 3 ? 2 : (R() < 0.6 ? 0 : 2);
+    else pick = R() < 0.42 ? 2 : R() < 0.6 ? 1 : 0;
+    // Never a third mountain day in a row: that is not a parcours, it is a punishment.
+    if (pick === 2 && d >= 2 && out[d - 1] === 2 && out[d - 2] === 2) pick = 1;
+    out.push(pick);
+  }
+  // A race of five days or more earns a time trial, and never on the opening day.
+  if (n >= 5) {
+    const slot = 1 + Math.floor(R() * (n - 2));
+    out[slot] = 5;
+  }
+  cb.days = out;
+  cb.roads = {};                                          // the roads belonged to the old race
+}
+// WHAT DID YOU JUST BUILD? A line with some character, so the screen answers back instead of
+// only counting. This is the difference between designing a race and filling in a form.
+function cbCharacter() {
+  const d = cb.days;
+  const mtn = d.filter(x => x === 2 || x === 4).length;
+  const tt = d.filter(x => x === 5).length;
+  const flat = d.filter(x => x === 0 || x === 3).length;
+  const summits = Object.keys(cb.roads || {}).filter(k => {
+    const r = Sim.ROUTES.filter(x => x.id === cb.roads[k])[0];
+    return r && r.summit;
+  }).length;
+  const bits = [];
+  if (mtn >= Math.ceil(d.length / 2)) bits.push("A climber's race");
+  else if (flat >= Math.ceil(d.length * 0.7)) bits.push("A sprinter's week");
+  else if (tt && mtn <= 1) bits.push("One for the rouleurs");
+  else bits.push("A balanced race");
+  if (summits >= 2) bits.push(summits + " summit finishes");
+  else if (summits === 1) bits.push("a summit finish");
+  if (!tt && d.length >= 5) bits.push("and no time trial to claw it back");
+  else if (tt) bits.push("with the clock to settle it");
+  return bits.join(", ") + ".";
+}
+// THE SHAPE OF THE WEEK, at a glance. Schematic glyphs rather than real profiles: a real
+// profile needs a generated course per day and reads as noise at this size, where a flat
+// line, a rise, a peak and a clock read instantly. This is what tells you that you have
+// stacked the mountains badly before you ride it rather than after.
+function cbDrawShape() {
+  const cv = $("cbShape"); if (!cv) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = cv.clientWidth || 320, h = 46;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const n = cb.days.length, cell = w / n;
+  for (let d = 0; d < n; d++) {
+    const x0 = d * cell + 3, cw = cell - 6, base = h - 13, k = cb.days[d];
+    g.strokeStyle = "rgba(46,49,47,.30)"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x0, base + 0.5); g.lineTo(x0 + cw, base + 0.5); g.stroke();
+    g.strokeStyle = k === 5 ? PAL.water : k === 2 ? PAL.spot : k === 1 ? PAL.fuel : PAL.ink;
+    g.lineWidth = 2; g.lineCap = "round"; g.lineJoin = "round";
+    g.beginPath();
+    if (k === 5) {                                        // the clock: a TT is not terrain
+      g.arc(x0 + cw / 2, base - 9, 6.5, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.moveTo(x0 + cw / 2, base - 9); g.lineTo(x0 + cw / 2, base - 13.5);
+      g.moveTo(x0 + cw / 2, base - 9); g.lineTo(x0 + cw / 2 + 4, base - 9);
+    } else if (k === 2 || k === 4) {                      // one big peak
+      g.moveTo(x0, base); g.lineTo(x0 + cw * 0.55, base - 22); g.lineTo(x0 + cw, base - 4);
+    } else if (k === 1) {                                 // rolling
+      g.moveTo(x0, base - 2);
+      g.lineTo(x0 + cw * 0.25, base - 11); g.lineTo(x0 + cw * 0.5, base - 4);
+      g.lineTo(x0 + cw * 0.75, base - 12); g.lineTo(x0 + cw, base - 3);
+    } else {                                              // flat, with a ripple so it is a road
+      g.moveTo(x0, base - 3); g.lineTo(x0 + cw * 0.45, base - 5);
+      g.lineTo(x0 + cw * 0.7, base - 2); g.lineTo(x0 + cw, base - 4);
+    }
+    g.stroke();
+    // NOT `label()`: that helper writes to the global race canvas, so the day numbers would
+    // have been painted onto the road instead of onto this strip.
+    g.save();
+    g.font = '700 8.5px "Space Grotesk", system-ui, sans-serif';
+    g.fillStyle = "rgba(46,49,47,.42)"; g.textAlign = "center";
+    g.fillText(String(d + 1), x0 + cw / 2, h - 2);
+    g.restore();
+  }
+}
+function openBuilder() {
+  // OPENS HOLDING A REAL RACE. A blank form is work; editing something is play.
+  if (!cb) { cb = { len: 3, days: [], roads: {}, name: "", ranked: true }; cbRoll(); }
+  cb.ranked = cb.ranked && customReady();
+  show("builder"); renderBuilder();
+}
+function renderBuilder() {
+  const ready = customReady();
+  $("cbSub").textContent = ready
+    ? "One ranked race a division, and it pays for what you build rather than for the division you are standing in. It never counts toward promotion."
+    : "You have already ridden your ranked race at Division " + ladder.div
+      + ". Build as many unranked ones as you like: they pay nothing and change nothing.";
+  const nameEl = $("cbName");
+  if (nameEl.value !== cb.name) nameEl.value = cb.name;
+
+  const seg = $("cbLen"); seg.innerHTML = "";
+  for (const n of CB_LENGTHS) {
+    const b = document.createElement("button");
+    b.textContent = n + " days";
+    b.setAttribute("aria-pressed", n === cb.len ? "true" : "false");
+    b.addEventListener("click", () => {
+      // Keep the days you already chose when the length changes, rather than wiping the
+      // board because you wanted one more stage.
+      const old = cb.days.slice();
+      cb.days = []; for (let i = 0; i < n; i++) cb.days.push(old[i] === undefined ? 0 : old[i]);
+      cb.len = n;
+      // A length change that ADDS days pads them with flat, which is a worse race than the
+      // one you had. Re-roll instead, so changing your mind about the length still leaves you
+      // holding something worth riding.
+      if (n > old.length) cbRoll();
+      renderBuilder();
+    });
+    seg.appendChild(b);
+  }
+
+  const own = ownedRoutes();
+  const byId = id => Sim.ROUTES.filter(r => r.id === id)[0];
+  const host = $("cbDays"); host.innerHTML = "";
+  for (let d = 0; d < cb.len; d++) {
+    const row = document.createElement("div"); row.className = "cbDay cbStage";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = "DAY " + (d + 1);
+    row.appendChild(n);
+    const s = document.createElement("div"); s.className = "segmented";
+    for (const t of CB_TYPES) {
+      const b = document.createElement("button");
+      b.textContent = t.name;
+      // A rolled day can be a pan-flat or a queen stage, which have no button of their own.
+      // Show the nearest one pressed rather than nothing, so the row never reads as empty.
+      const shown = cb.days[d] === 3 ? 0 : cb.days[d] === 4 ? 2 : cb.days[d];
+      b.setAttribute("aria-pressed", shown === t.i ? "true" : "false");
+      b.addEventListener("click", () => { cb.days[d] = t.i; renderBuilder(); });
+      s.appendChild(b);
+    }
+    row.appendChild(s); host.appendChild(row);
+    // A ROAD FOR THE DAY, and only the roads that belong on it: a climb on a mountain stage,
+    // a cobbled sector on a flat one. Same split assignRoute enforces, for the same reason —
+    // a pack bought for the cobbles must never turn up on a col.
+    const k = cb.days[d];
+    const wants = (k === 2 || k === 4) ? "climb" : (k === 0 || k === 3) ? "sector" : null;
+    const pool = wants === null ? [] : own.filter(id => {
+      const r = byId(id); return wants === "climb" ? !Sim.isSector(r) : Sim.isSector(r);
+    });
+    if (pool.length) {
+      const rr = document.createElement("div"); rr.className = "cbDay cbRoad";
+      const rn = document.createElement("span"); rn.className = "n"; rn.textContent = "ROAD";
+      rr.appendChild(rn);
+      const rs = document.createElement("div"); rs.className = "segmented";
+      const mk = (label, id) => {
+        const b = document.createElement("button");
+        b.textContent = label;
+        b.setAttribute("aria-pressed", (cb.roads && cb.roads[d]) === id ? "true" : "false");
+        b.addEventListener("click", () => { (cb.roads || (cb.roads = {}))[d] = id; renderBuilder(); });
+        rs.appendChild(b);
+      };
+      mk("Any", undefined);
+      for (const id of pool) mk(byId(id).name, id);
+      rr.appendChild(rs); host.appendChild(rr);
+    }
+  }
+
+  cbDrawShape();
+  $("cbChar").textContent = cbCharacter();
+  const f = customPayFactor(cb.days);
+  $("cbPurse").textContent = cb.ranked
+    ? "This race pays " + Math.round(f * 100) + "% of a drawn race of the same length. "
+      + (f >= 0.99 ? "As hard as the game would have handed you."
+        : f > 0.6 ? "Softer than a drawn race, so it pays less." : "Much softer than a drawn race.")
+    : "Unranked: no prize money, no fatigue carried, nothing recorded.";
+
+  const go = $("cbGo"); go.innerHTML = "";
+  if (ready) {
+    const rk = document.createElement("button");
+    rk.className = cb.ranked ? "go" : "go ghost";
+    rk.textContent = cb.ranked ? "Ranked · spends this division's one" : "Unranked · pays nothing";
+    rk.addEventListener("click", () => { cb.ranked = !cb.ranked; renderBuilder(); });
+    go.appendChild(rk);
+  }
+  const b = document.createElement("button");
+  b.className = "go"; b.textContent = "Ride it";
+  b.addEventListener("click", startCustom);
+  go.appendChild(b);
+}
+function startCustom() {
+  ghost = null;
+  const seed = (Math.random() * 1e9) | 0;
+  const name = ($("cbName").value || "").trim().slice(0, 34);
+  cb.name = name;
+  tour = { seed, stage: 0, gc: {}, leaders: {}, fatigue: {},
+    schedule: cb.days.slice(),
+    custom: { name: name, ranked: !!cb.ranked, pay: customPayFactor(cb.days) } };
+  // Auto-assign first so every eligible day still gets a road, then stamp the ones the
+  // player picked over the top. Picking "Any" leaves the automatic choice in place, which is
+  // what "any" should mean.
+  assignRoute(tour, cb.days.length);
+  if (cb.roads) for (const d in cb.roads) if (cb.roads[d] !== undefined) tour.routeMap[d] = cb.roads[d];
+  if (cb.ranked) { ladder.customAtDiv = ladder.div; Store.save(ladder); }
+  const names = [Sim.YOU.name].concat(Sim.FIELD.map(f => f.name));
+  for (const n of names) tour.gc[n] = { time: 0, sprintPts: 0, komPts: 0 };
+  openBuild("tour");
+}
 
 // ---- the grand tour -------------------------------------------------------------
 // THE SUMMIT OF THE LADDER. Winning Division 1 used to increment a counter and nothing
@@ -10000,9 +10528,30 @@ function renderPick() {
     btns.appendChild(b); card.appendChild(btns);
     box.appendChild(card);
   }
+  // ★ DEMOTED TO A LINE, and only once a route pack has been bought. As a CARD it sat
+  // between the real races looking like a mainline mode, which is the opposite of what it
+  // is: a small optional pleasure. As a line under them it is found rather than advertised.
+  // Owning a pack is the gate, so it arrives as something a purchase gave you.
+  if (builderOpen() && !holding) {
+    const p = document.createElement("p"); p.className = "sub"; p.style.marginTop = "14px";
+    const link = document.createElement("button"); link.className = "linky"; link.id = "byoLink";
+    link.textContent = "or build your own race";
+    link.addEventListener("click", openBuilder);
+    p.appendChild(link);
+    const tail = document.createElement("span");
+    tail.textContent = customReady() ? "  ·  one ranked race a division" : "  ·  unranked only";
+    tail.style.opacity = ".6";
+    p.appendChild(tail);
+    box.appendChild(p);
+  }
 }
 function renderRoutes() {
-  $("routesSub").textContent = "Prize money is only ever spent here.";
+  // SAY WHAT A PACK BUYS. It is not just roads any more: the first one opens the race
+  // builder, and a selling point nobody is told about is not a selling point.
+  $("routesSub").textContent = paidRoutes().length
+    ? "Prize money is only ever spent here."
+    : "Prize money is only ever spent here. Your first pack also opens the race builder, "
+      + "where you pick every day of a race, choose the roads and name it yourself.";
   const box = $("routesBody"); box.innerHTML = "";
 
   const bal = document.createElement("div");
@@ -10054,7 +10603,8 @@ function renderRoutes() {
       // A sector has no gradient and no summit, so describing it like a climb would print
       // "at undefined%". Rated in stars, the way pave actually is.
       li.textContent = Sim.isSector(c)
-        ? c.name + " \u00b7 " + M.long(c.km * 1000 / Sim.CFG.scaleM) + " of pave \u00b7 "
+        ? c.name + " \u00b7 " + M.long(c.km * 1000 / Sim.CFG.scaleM)
+          + (c.kind === "gravel" ? " of gravel \u00b7 " : " of pave \u00b7 ")
           + "\u2605".repeat(c.stars || 5)
         : c.name + " \u00b7 " + M.long(c.km * 1000 / Sim.CFG.scaleM)
           + " at " + c.grade.toFixed(1) + "% \u00b7 tops out at " + M.alt(c.top);

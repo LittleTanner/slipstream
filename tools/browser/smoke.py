@@ -211,9 +211,28 @@ async def pause_check(pg):
         await pg.locator("#pauseCard").wait_for(state="visible", timeout=2000)
     except Exception:
         return False, "#pauseCard never appeared after tapping #pauseBtn"
-    # judge #pCal, but ALWAYS resume: leaving the game paused would fail the race
+    # judge everything, but ALWAYS resume: leaving the game paused would fail the race
     # flow too and bury this verdict under a secondary timeout
     pcal_shown = not await pg.locator("#pCal").is_hidden()
+    # STEERING IS CHANGEABLE FROM THE PAUSE CARD. The method button is always there; the
+    # three tilt-only controls stay hidden under drag. That hiding is the assertion worth
+    # making, because `.go{display:block}` beats `.hide{display:none}` at equal specificity
+    # and every one of these needed its own id rule to be hideable at all — the CSS trap
+    # this project has hit four times, and the reason "the button is in the DOM" proves
+    # nothing on its own.
+    steer_shown = not await pg.locator("#pSteer").is_hidden()
+    steer_label = (await pg.locator("#pSteer").text_content() or "").strip()
+    tilt_shown = not await pg.locator("#pTilt").is_hidden()
+    lean_shown = not await pg.locator("#pLean").is_hidden()
+    # Toggling to tilt from mid-race must reveal them, which is the whole point of the
+    # feature: discovering tilt is wrong for you should not cost the stage.
+    await pg.click("#pSteer")
+    await pg.wait_for_timeout(150)
+    after_label = (await pg.locator("#pSteer").text_content() or "").strip()
+    tilt_after = not await pg.locator("#pTilt").is_hidden()
+    await pg.click("#pSteer")            # back to drag, so the rest of the run is unchanged
+    await pg.wait_for_timeout(150)
+    back_label = (await pg.locator("#pSteer").text_content() or "").strip()
     await pg.click("#pResume")
     try:
         await pg.locator("#pauseCard").wait_for(state="hidden", timeout=2000)
@@ -221,7 +240,18 @@ async def pause_check(pg):
         return False, "#pauseCard stuck open after #pResume"
     if pcal_shown:
         return False, "#pCal (recalibrate tilt) visible while steering is drag"
-    return True, "card opened, #pCal hidden under drag, resumed"
+    if not steer_shown:
+        return False, "#pSteer (steering method) missing from the pause card"
+    if steer_label != "Drag":
+        return False, "#pSteer read %r, expected 'Drag'" % steer_label
+    if tilt_shown or lean_shown:
+        return False, "tilt-only controls visible under drag (#pTilt %s, #pLean %s)" % (tilt_shown, lean_shown)
+    if after_label != "Tilt" or not tilt_after:
+        return False, ("switching to tilt mid-race did not take: #pSteer %r, #pTilt shown %s"
+                       % (after_label, tilt_after))
+    if back_label != "Drag":
+        return False, "switching back to drag did not take: #pSteer %r" % back_label
+    return True, "card opened, steering switched to tilt and back mid-race, resumed"
 
 
 async def flow_race(browser, uri):
@@ -239,6 +269,13 @@ async def flow_race(browser, uri):
         await pg.locator("#build").wait_for(state="visible")
         await pg.click("#bLock")
         await pg.locator("#brief").wait_for(state="visible")
+        # THE RACE HAS A NAME. It leads the briefing eyebrow, ahead of the division and the
+        # stage. Asserted against the shape rather than a specific name, because the name is
+        # derived from the tour's seed and the seed is not fixed on this path — pinning one
+        # nickname here would be a test of the seed rather than of the feature.
+        eyebrow = (await pg.locator("#bEyebrow").text_content() or "")
+        if " · Division " not in eyebrow or eyebrow.startswith("Division "):
+            return (False, "briefing eyebrow carries no race name: %r" % eyebrow), pause_res
         await pg.click("#rollBtn")
         try:
             # startStage un-hides the pause button: that is "the race is on"

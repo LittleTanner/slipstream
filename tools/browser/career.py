@@ -83,6 +83,13 @@ def build_throwaway(scratch):
          "  if ((you.stats.radio || 0) >= 2) {\n"
          "    window.__hud.leader = 1;\n"
          "    label(leader === you ? \"LEADING\""),
+        # Publish how many route packs exist, so the shop test asserts "a card per pack"
+        # rather than a literal count that a new pack silently breaks. Published from the
+        # RENDERER, because ROUTE_PACKS is a const inside the view IIFE and unreachable from
+        # evaluate — the same reason every other assertion here goes through window.
+        ("function renderRoutes() {",
+         "function renderRoutes() {\n  window.__packCount = ROUTE_PACKS.length;"
+         "\n  window.__packIds = ROUTE_PACKS.map(p => p.id);"),
         ("    const lo = Sim.CFG.ease;",
          "    window.__hud.power = 1;\n"
          "    const lo = Sim.CFG.ease;"),
@@ -201,11 +208,24 @@ async def launch(p):
 
 async def open_case(browser, url, ladder, history, errs, rand_seed=None):
     ctx = await browser.new_context()
-    ctx.set_default_timeout(15000)
+    # 30s, not 15. Every wait here is on a condition that is either true within a frame or
+    # never true at all, so a generous ceiling costs a passing run nothing and only makes a
+    # FAILING one slower to report. 15s was chosen on a fast machine and this sandbox has been
+    # serving the page in 13, which left the first real wait with two seconds of headroom and
+    # duly failed on an assertion that had nothing wrong with it.
+    ctx.set_default_timeout(30000)
     await ctx.add_init_script(init_script(ladder, history, rand_seed))
     pg = await ctx.new_page()
     pg.on("pageerror", lambda e: errs.append(str(e)))
-    await pg.goto(url)
+    # ★ DO NOT WAIT ON ANY EXTERNAL RESOURCE TO CONSIDER THE PAGE OPEN. `load` waits on every
+    # subresource including the blocked font CDN (measured at 13.2s against this context's 15s
+    # timeout, so the suite was one slow proxy from failing on page one, and duly did), and
+    # `domcontentloaded` is no escape either, because a stylesheet in <head> blocks DCL as
+    # well. `commit` means the navigation happened and nothing more, which is all this needs:
+    # the very next line waits on a REAL condition — the seeded money reaching the menu status
+    # line — and that cannot come true until the page has parsed, run and loaded the save.
+    # A page-open assertion should depend on the page, never on a CDN.
+    await pg.goto(url, wait_until="commit", timeout=30000)
     # the save loads asynchronously; the money suffix in the menu status line
     # only exists once the seeded ladder (tours > 0) has been merged in
     await pg.wait_for_function(
@@ -217,8 +237,12 @@ async def open_case(browser, url, ladder, history, errs, rand_seed=None):
 async def read_routes(pg):
     await pg.click("#routesBtn")
     await pg.wait_for_selector("#routes:not(.hide)")
+    # ONE CARD PER PACK, whatever the pack count is. This waited for a literal 3 and broke the
+    # moment a fourth pack shipped, which is a test asserting today's content rather than the
+    # behaviour ("the shop renders every pack"). The count comes from the page's own list.
     await pg.wait_for_function(
-        "() => document.querySelectorAll('#routesBody .card').length === 3")
+        "() => { const n = document.querySelectorAll('#routesBody .card').length;"
+        " return n > 0 && n === window.__packCount; }")
     return await pg.evaluate("""() => {
       const paras = [...document.querySelectorAll('#routesBody p.sub')].map(p => p.textContent);
       const card = document.querySelector('#routesBody .card');   // alps is first
@@ -326,6 +350,148 @@ async def main():
         check("relegation cannot withdraw the tour you are holding",
               bool(three_week) and not three_week[0]["disabled"],
               "cards rendered %r" % (names,))
+
+        # ---- 4ter. build your own race ---------------------------------------
+        # Two rules keep a custom race from eating the career, and only one of them is the
+        # use limit: the purse scales with what you BUILT (so a soft race pays soft money and
+        # farming defeats itself) and it never touches the ladder or your wins. Every one of
+        # those is asserted here, because "the builder opens" proves none of them.
+        # OWNING A PACK IS THE GATE, so every case here seeds one. The no-pack case below is
+        # what proves the gate is real rather than decorative.
+        ctx, pg = await open_case(browser, url,
+                                  {"tutorialDone": True, "div": 5, "tours": 4, "money": 700,
+                                   "packs": ["alps"]}, [], errs)
+        try:
+            await pg.click("#startBtn")
+            await pg.wait_for_selector("#pick:not(.hide)")
+            check("builder: a route pack opens it", await pg.locator("#byoLink").count() == 1,
+                  "cards %r" % (await pg.evaluate(
+                      "[...document.querySelectorAll('#pickBody .card b')].map(b => b.textContent)"),))
+            check("builder: it is a LINE, not a fifth card competing with the real races",
+                  await pg.locator("#pickBody .card", has_text="Build your own").count() == 0, "")
+            line = await pg.locator("#byoLink").locator("xpath=..").text_content() or ""
+            check("builder: a fresh division has its ranked race",
+                  "one ranked race a division" in line, "line %r" % (line.strip(),))
+            await pg.click("#byoLink")
+            await pg.wait_for_selector("#builder:not(.hide)")
+            # REGISTERED WITH show(): an unregistered screen leaves the previous one visible
+            # underneath, which is a bug class this codebase has shipped before.
+            leaked = await pg.evaluate(
+                "['menu','pick','settings','build'].filter(id =>"
+                " !document.getElementById(id).classList.contains('hide'))")
+            check("builder: the screen is registered, nothing shows underneath",
+                  not leaked, "still visible: %r" % (leaked,))
+
+            days = lambda: pg.locator("#cbDays .cbStage").count()
+            pressed = lambda: pg.evaluate(
+                "[...document.querySelectorAll('#cbDays .cbStage')]"
+                ".map(r => [...r.querySelectorAll('button')].findIndex(b => b.getAttribute('aria-pressed') === 'true'))")
+            # READ THIS FIRST, BEFORE ANY CLICK. This assertion used to sit further down, after
+            # the purse case had set every day to Mountains, so it was reading leftovers and
+            # would have passed against a builder that opened completely blank.
+            opening = await pressed()
+            check("builder: it opens holding a race, not a blank form",
+                  len(opening) == 3 and all(i >= 0 for i in opening), "day types %r" % (opening,))
+            check("builder: and the race it opens with is a sensible shape",
+                  opening[0] in (0, 1), "opens on day-1 type %r, wanted flat or hills" % (opening[0],))
+            check("builder: three days by default", await days() == 3, "%d rows" % await days())
+            await pg.locator("#cbLen button", has_text="7 days").click()
+            check("builder: the length picker adds days", await days() == 7, "%d rows" % await days())
+            await pg.locator("#cbLen button", has_text="3 days").click()
+
+            # THE PURSE MUST FALL FOR A SOFT BUILD. This is the rule that makes farming
+            # pointless, so it is asserted as a NUMBER, not as the presence of a sentence.
+            async def purse():
+                t = await pg.locator("#cbPurse").text_content() or ""
+                m = re.search(r"(\d+)%", t)
+                return int(m.group(1)) if m else None
+            # Four types now, not six: pan flat and the queen stage have no button, because
+            # what makes a day extreme is the col on it and those two stay as things a DRAWN
+            # tour hands you. So the soft/hard comparison uses the two that exist.
+            for row in range(3):
+                await pg.locator("#cbDays .cbStage").nth(row).locator(
+                    "button", has_text=re.compile(r"^Flat$")).click()
+            soft = await purse()
+            for row in range(3):
+                await pg.locator("#cbDays .cbStage").nth(row).locator(
+                    "button", has_text=re.compile(r"^Mountains$")).click()
+            hard = await purse()
+            check("builder: a soft race pays less than a hard one",
+                  soft is not None and hard is not None and soft < hard,
+                  "three flat days %r%% against three mountain days %r%%" % (soft, hard))
+            check("builder: and a hard race pays no MORE than a drawn one",
+                  hard is not None and hard <= 100, "hard %r%%" % (hard,))
+
+            # ROLL ME ONE has to actually give you a different race. Over several rolls,
+            # because two landing the same is luck rather than a broken button.
+            seen = set()
+            for _ in range(8):
+                await pg.click("#cbRollBtn")
+                seen.add(tuple(await pressed()))
+            check("builder: rolling gives you different races",
+                  len(seen) > 1, "%d distinct races in 8 rolls" % len(seen))
+            check("builder: and every rolled race still opens flat or hilly",
+                  all(r[0] in (0, 1) for r in seen), "day-1 types seen %r" % (sorted({r[0] for r in seen}),))
+            # THE SHAPE STRIP AND THE CHARACTER LINE both have to actually render. A canvas
+            # that is never drawn and a line that is never written are exactly the "both
+            # halves exist but the visible one does not" failure this project keeps hitting.
+            painted = await pg.evaluate(
+                "(() => { const c = document.getElementById('cbShape');"
+                " if (!c || !c.width) return 0;"
+                " const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;"
+                " let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; })()")
+            check("builder: the shape of the week is drawn", painted > 200,
+                  "%r opaque pixels on the strip" % (painted,))
+            char = (await pg.locator("#cbChar").text_content() or "").strip()
+            check("builder: it says what you built", len(char) > 10 and char.endswith("."),
+                  "character line %r" % (char,))
+            await pg.fill("#cbName", "Tour de Pain")
+            await pg.locator("#cbGo button", has_text="Ride it").click()
+            await pg.wait_for_selector("#build:not(.hide)")
+            await pg.click("#bLock")
+            await pg.wait_for_selector("#brief:not(.hide)")
+            eyebrow = await pg.locator("#bEyebrow").text_content() or ""
+            check("builder: the race is called what you called it",
+                  eyebrow.startswith("Tour de Pain"), "eyebrow %r" % (eyebrow,))
+            spent = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).customAtDiv)")
+            check("builder: a ranked race spends this division's one", spent == 5,
+                  "customAtDiv %r" % (spent,))
+        finally:
+            await ctx.close()
+
+        # Having spent it, the picker offers the unranked build only.
+        ctx, pg = await open_case(browser, url,
+                                  {"tutorialDone": True, "div": 5, "tours": 4, "money": 700,
+                                   "packs": ["alps"], "customAtDiv": 5}, [], errs)
+        try:
+            await pg.click("#startBtn")
+            await pg.wait_for_selector("#pick:not(.hide)")
+            line = await pg.locator("#byoLink").locator("xpath=..").text_content() or ""
+            check("builder: once spent, only unranked is offered",
+                  "unranked only" in line, "line %r" % (line.strip(),))
+        finally:
+            await ctx.close()
+
+        # THE GATE ITSELF. Own no pack and the builder does not exist — which is the whole
+        # reason it is a selling point, so the shop has to say so as well.
+        ctx, pg = await open_case(browser, url,
+                                  {"tutorialDone": True, "div": 5, "tours": 4, "money": 700,
+                                   "packs": []}, [], errs)
+        try:
+            await pg.click("#startBtn")
+            await pg.wait_for_selector("#pick:not(.hide)")
+            check("builder: owning no pack, there is no builder",
+                  await pg.locator("#byoLink").count() == 0, "")
+            await pg.click("#pickBack")
+            await pg.wait_for_selector("#menu:not(.hide)")
+            await pg.click("#routesBtn")
+            await pg.wait_for_selector("#routes:not(.hide)")
+            sub = await pg.locator("#routesSub").text_content() or ""
+            check("builder: and the shop sells it as a reason to buy one",
+                  "race builder" in sub, "routes sub %r" % (sub,))
+        finally:
+            await ctx.close()
 
         # ---- 5. race craft: carry TWO of three -------------------------------
         # The pool grew to three (radio / power meter / feed craft) and the limit to
@@ -549,8 +715,12 @@ async def main():
             check("the Pyrenees pack is no longer an empty box",
                   any(p["name"] == "The Pyrenees" and "climb" in p["tag"] for p in packs),
                   "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
-            check("every advertised pack now has roads, including the cobbles",
-                  not empty and len(sellable) == 3,
+            # EVERY pack, however many there are. This asserted a literal 3 and broke the day
+            # a fourth shipped, which tests today's catalogue rather than the rule ("nothing
+            # is ever advertised empty") — the rule that the Pyrenees and the cobbles both
+            # violated for real, which is why the check exists at all.
+            check("every advertised pack has roads in it, whatever the catalogue holds",
+                  not empty and len(sellable) == len(packs) and len(packs) >= 3,
                   "packs %r" % ([(p["name"], p["tag"]) for p in packs],))
             # A sector has no gradient and no summit, so listing it like a climb prints
             # "at undefined%". It is rated in stars, the way pave actually is.
@@ -780,11 +950,15 @@ async def main():
             ([], 3000, True),
             (["cobbles"], 6000, True),
             (["cobbles", "pyrenees"], 12000, True),
-            # a third non-alps id stands in for a future pack: 3000 * 2^3
-            # would be 24000, the cap must hold it at 18000, and with every
-            # catalogued pack counted as owned the "next costs" paragraph is
-            # gone, so the card button is where the cap must show
-            (["cobbles", "pyrenees", "future"], 18000, False),
+            # THE CAP. 3000 * 2^3 would be 24000 and it must hold at 18000.
+            # The price line is still THERE, because alps is still unbought and
+            # `owned < ROUTE_PACKS.length` is the real rule for showing it. This
+            # case used to expect the line GONE, which only held while three packs
+            # existed and a stand-in id ("future") padded the count to match — an
+            # assertion encoding the size of the catalogue rather than a rule. The
+            # "nothing left to buy" half is now its own case below, where it is
+            # actually true.
+            (["cobbles", "pyrenees", "california"], 18000, True),
         ]
         for packs, want, want_para in cases:
             ladder = {"tutorialDone": True, "tours": 1, "money": 1234,
@@ -803,6 +977,36 @@ async def main():
                 check(name, got_btn == want and r["priceLine"] is None,
                       "want %d on the card and no next-costs paragraph; button %s, paragraph %r"
                       % (want, got_btn, r["priceLine"]))
+            await ctx.close()
+
+        # NOTHING LEFT TO BUY. `owned < ROUTE_PACKS.length` is what puts the price line on
+        # screen, so owning every pack is the only state where it should be gone — and it is
+        # a state the priced-card cases can never reach, because they need an unowned card to
+        # read a price off. Derives the full list from the page rather than naming the packs,
+        # so a fifth one does not quietly make this pass for the wrong reason.
+        ctx, pg = await open_case(browser, url, {"tutorialDone": True, "tours": 1,
+                                                 "money": 99999, "packs": []}, [], errs)
+        try:
+            await read_routes(pg)                      # renders once so __packCount exists
+            ids = await pg.evaluate("window.__packIds")
+            await ctx.close()
+            ctx, pg = await open_case(browser, url, {"tutorialDone": True, "tours": 1,
+                                                     "money": 99999, "packs": ids}, [], errs)
+            await pg.click("#routesBtn")
+            await pg.wait_for_selector("#routes:not(.hide)")
+            await pg.wait_for_function("() => document.querySelectorAll('#routesBody .card').length"
+                                       " === window.__packCount")
+            line = await pg.evaluate(
+                "[...document.querySelectorAll('#routesBody p.sub')]"
+                ".map(p => p.textContent).find(t => /costs \\d/.test(t)) || null")
+            buyable = await pg.evaluate(
+                "[...document.querySelectorAll('#routesBody .card .btns button')]"
+                ".filter(b => !b.disabled).length")
+            check("own every pack and the price line has nothing to point at",
+                  line is None, "line %r" % (line,))
+            check("own every pack and nothing is left for sale",
+                  buyable == 0, "%d buyable cards" % buyable)
+        finally:
             await ctx.close()
 
         # ---- 3b. rival information belongs to the race radio -----------------
