@@ -410,6 +410,47 @@ fast descent you have run out of gear, exactly as in life.
 worth MORE than before, not less: chasing the ideal gear against sitting in one went from
 +3.8s to **+8.7s** mean. Auto-shift is not needed and stays unbuilt.
 
+### The window stopped narrowing up the ladder (build 33)
+
+Kevin rode build 32 and it was **still really hard**, and asked for one difficulty at every
+division, using Division 8's. He is right and the diagnosis is that two difficulty sources
+were stacked on the same axis:
+
+- the shipped rhythm ramp shrinks the tolerance window from 2.19 at Division 8 to **0.86** at
+  Division 1, and
+- gearing then moves the target 30% at every shift, inside that shrinking window.
+
+So the geared band no longer ramps: `gearRamp` is 1.9, which is exactly what
+`1.9 - 1.15 * D.t` evaluates to at Division 8. Not a new number, the ramp frozen at its easiest
+rung. **The ramp still applies to an ungeared time trial** — it is a fine lever on its own and
+Kevin has never objected to it there — so this is gated on `race.gears` and the golden does not
+move.
+
+**The trade, stated plainly.** Chasing the ideal gear is now worth **+3.3s mean** against
+sitting in one gear, down from +8.7s. That is not a regression in the mechanic; it is where the
+value was coming from. A tight window is what made a wrong gear expensive, so easing the window
+necessarily cheapens it. Measured across window widths, all with the flat ramp:
+
+| geared window | gain, div 8 / 4 / 1 | mean | avg `hold` |
+|---|---|---|---|
+| 3.17 (**shipped**, div 8's build-32 window) | +2.7 / +1.4 / +5.7 | +3.3s | 0.953 |
+| 2.62 | +3.5 / +0.5 / +5.1 | +3.1s | 0.945 |
+| 2.18 (div 8's *ungeared* window) | +4.5 / +4.8 / +28.0 | +12.4s | 0.934 |
+| 1.86 | +6.1 / +5.2 / +20.3 | +10.5s | 0.922 |
+
+2.18 is tempting and was rejected: it is Division 8's window *without* the gearing widener, so
+it would make Division 8 **harder than the build Kevin just rode and called too hard**. He asked
+for easier and uniform; 3.17 is both. If +3.3s ever reads as too weak in the hand, 2.18 is the
+next rung and this table is why.
+
+**The gate flapped at six seeds and reported a false FAIL.** The flattened band first measured
+gate 2 as broken — Division 1 at **-4.4s**, chasing the ideal gear LOSING to sitting in one,
+which reads exactly like a dead mechanic. At ten seeds the same measurement is **+5.7s**.
+Division 1 is where the harness crashes most (it never steers), so its median stands on the
+fewest clean rides and is the least stable number in the file — and it is the number the gates
+are read off. `SEEDS` is ten now. This is the same volatility that made a tuning sweep swing
+from +13.9s to -5.7s across neighbouring cells; it has now cost time twice.
+
 ### Three measurement traps, all of which would have shipped a wrong number
 
 - **The harness could not see the band at all.** Its rider tapped at `cadTgt` exactly, every

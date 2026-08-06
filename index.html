@@ -361,7 +361,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 32</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 33</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -754,6 +754,12 @@ const CFG = {
   // the act of using it. Gated on `race.gears` so the shipped time trial's band does not move
   // by a float and the golden needs no regeneration.
   gearBand: 1.45,
+  // ★ ONE WINDOW FOR EVERY DIVISION, AND IT IS DIVISION 8's. 1.9 is exactly what
+  // `1.9 - 1.15 * D.t` evaluates to at `D.t` 0, so this is not a new number, it is the ramp
+  // frozen at its easiest rung. The ramp still applies to an UNGEARED time trial: it is a
+  // fine difficulty lever on its own, and it only became too much when gearing started moving
+  // the target 30% a shift inside a window that was simultaneously shrinking.
+  gearRamp: 1.9,
   // THE TARGET FOLLOWS A LAGGED SPEED, NOT THE LIVE ONE. This is the single biggest reason the
   // shift count falls. At 120 Hz the raw speed jitters across a gear boundary constantly, so a
   // chevron lit, went out and lit again several times a second and shifting felt urgent every
@@ -4176,7 +4182,17 @@ function step(race, frameDt, input) {
         // ★ WIDER WITH GEARS. A moving target scored against a fixed target's window would
         // charge you for every shift, so the band opens when the gear is what steers it. Gated
         // on `race.gears`, so with the toggle off this is the float it always was.
-        const band = CFG.ttBand * (1.9 - 1.15 * race.D.t) * (race.gears ? CFG.gearBand : 1);
+        // ★ WITH GEARS THE BAND DOES NOT NARROW UP THE LADDER. Kevin rode build 32 and it was
+        // still too hard at the top: the shipped ramp shrinks the window from 2.19 at Division
+        // 8 to 0.86 at Division 1, and gearing then moves the target 30% at every shift INSIDE
+        // that shrinking window. Two difficulty sources stacked on the same axis. Division 1
+        // now gets the Division 8 window and the difficulty comes from the parcours, which is
+        // already harder there on its own: longer, more switchbacks, a narrower road, and a
+        // speed range that swings twice as wide, which is what asks for the extra shifts.
+        // Gated on `race.gears`, so an ungeared time trial keeps its ramp and the golden does
+        // not move by a float.
+        const ramp = race.gears ? CFG.gearRamp : (1.9 - 1.15 * race.D.t);
+        const band = CFG.ttBand * ramp * (race.gears ? CFG.gearBand : 1);
         // ★ WITH GEARS, THE GEAR MOVES THE TARGET. Without them the target is the fixed
         // `ttCadence` it has always been. A bigger gear turns slower at the same road speed,
         // so it pulls the target DOWN toward grinding; a smaller one pushes it up until you
@@ -8733,6 +8749,7 @@ function renderDebug() {
       + "TIME TRIALS ONLY. On road stages it added difficulty without fun, so that half is gone. "
       + "Four ratios, and the gear MOVES the rhythm target rather than adding a second bar to argue with it: a bigger gear turns slower at the same road speed, so it pulls the target down toward grinding, and a smaller one pushes it up until you cannot tap fast enough. The gear ladder beside the rhythm bar rings the one to aim for. "
       + "It was six, which asked for a shift every two or three seconds. Four ratios, a target that lags your speed by about a second, and a dead zone on the recommendation bring that down to seven or eight shifts a ride. "
+      + "THE WINDOW NO LONGER NARROWS UP THE LADDER: every division now gets the Division 8 window, because gearing moving the target and the window shrinking were two difficulty sources stacked on one axis. Division 1 is still harder, from the parcours rather than the tolerance. "
       + "Chevrons sit at the ends of the action row, down on the left and up on the right, or , and . on a keyboard. Shifting under load costs you a beat, so shift before the drag, not on it.");
 
   xToggle("dbgSwing", () => swingBudgetOn,
