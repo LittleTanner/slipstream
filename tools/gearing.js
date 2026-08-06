@@ -36,7 +36,13 @@ const P = require('./parts.js');
 const { CFG } = Sim;
 
 const TT = 5;                                   // STAGES[5] is the race of truth
-const SEEDS = [11, 23, 37, 52, 71, 89];
+// ★ TEN, NOT SIX, AND THE GATE FLAPPED AT SIX. A Division 1 median over six seeds swung from
+// +13.9s to -5.7s across NEIGHBOURING cells of a tuning sweep, and when the band was flattened
+// it reported gate 2 as a hard FAIL (-4.4s, chasing the ideal gear losing to sitting in one).
+// The same measurement at ten seeds read +5.7s. Division 1 is where the harness crashes most
+// (it never steers), so its median stands on the fewest clean rides and is the least stable
+// number here — which is exactly the number the gates are read off.
+const SEEDS = [11, 23, 37, 52, 71, 89, 104, 118, 127, 143];
 const SHIFT_SEEDS = [11, 23, 37, 52, 71, 89, 104, 118, 127, 143, 156, 168, 179, 191, 203, 214];
 const DIVS = [8, 4, 1];
 
