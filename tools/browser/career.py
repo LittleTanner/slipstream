@@ -707,6 +707,65 @@ async def main():
         finally:
             await ctx.close()
 
+        # ---- 4b-bis. THE GAME CAN SAVE WITH NO SHIM --------------------------
+        # ★ THIS CASE DELIBERATELY DOES NOT CALL open_case, AND THAT IS THE ENTIRE POINT.
+        # Every other case here injects `window.storage` before the page runs. `index.html`
+        # READ that object in four places and DEFINED it nowhere, so in a real browser every
+        # call threw, every call sat inside a try/catch that swallowed it, and the game booted
+        # cleanly while discarding all four saves. On GitHub Pages a career reset on every
+        # reload and nothing anywhere said so. The suite was 95 checks green throughout,
+        # because the shim we inject to test saving was the only reason saving worked.
+        #
+        # So: no init script, no shim, no seeded ladder. Exactly what a player loads.
+        ctx = await browser.new_context()
+        ctx.set_default_timeout(30000)
+        pg = await ctx.new_page()
+        pg.on("pageerror", lambda e: errs.append(str(e)))
+        try:
+            await pg.goto(url, wait_until="commit", timeout=30000)
+            await pg.wait_for_function("() => document.querySelectorAll('#mKits button').length > 0")
+            kind = await pg.evaluate("window.__storeKind")
+            check("save: an unshimmed browser gets a real store",
+                  kind == "localStorage", "store kind %r" % (kind,))
+            check("save: the page defines window.storage itself",
+                  await pg.evaluate("typeof window.storage === 'object' && typeof window.storage.get === 'function'"),
+                  "typeof %s" % await pg.evaluate("typeof window.storage"))
+            # The shim's contract: get() resolves to a record carrying `value`, or null for a
+            # key never written. If the in-page store returns a bare string instead, every
+            # `JSON.parse(r.value)` in Store silently yields undefined.
+            shape = await pg.evaluate("""(async () => {
+              await window.storage.set('slipstream:probe2', '{"a":1}');
+              const hit = await window.storage.get('slipstream:probe2');
+              const miss = await window.storage.get('slipstream:no-such-key');
+              await window.storage.delete('slipstream:probe2');
+              const gone = await window.storage.get('slipstream:probe2');
+              return { hit: hit && hit.value, miss, gone };
+            })()""")
+            check("save: get returns a {value} record, missing keys are null",
+                  shape["hit"] == '{"a":1}' and shape["miss"] is None and shape["gone"] is None,
+                  "probe %r" % (shape,))
+            # THE REAL PROOF IS A RELOAD. A kit swatch is one click and calls Store.save, so
+            # this exercises the same path a career does, end to end, through real localStorage.
+            n = await pg.evaluate("document.querySelectorAll('#mKits button').length")
+            pick = await pg.evaluate(
+                "[...document.querySelectorAll('#mKits button')].findIndex(b => b.getAttribute('aria-pressed') !== 'true')")
+            check("save: the menu offers a kit colour to change", n > 1 and pick >= 0,
+                  "%d swatches, first unselected at %r" % (n, pick))
+            await pg.locator("#mKits button").nth(pick).click()
+            await pg.wait_for_timeout(300)
+            raw = await pg.evaluate("localStorage.getItem('slipstream:ladder')")
+            check("save: the choice reaches real localStorage",
+                  raw is not None and '"kit"' in raw, "stored %r" % ((raw or "")[:60],))
+            await pg.reload(wait_until="commit")
+            await pg.wait_for_function("() => document.querySelectorAll('#mKits button').length > 0")
+            await pg.wait_for_timeout(400)
+            still = await pg.evaluate(
+                "[...document.querySelectorAll('#mKits button')].findIndex(b => b.getAttribute('aria-pressed') === 'true')")
+            check("save: THE CHOICE SURVIVES A RELOAD (the bug that shipped for 30+ builds)",
+                  still == pick, "picked %r, selected after reload %r" % (pick, still))
+        finally:
+            await ctx.close()
+
         # ---- 4c. real roads, free and paid -----------------------------------
         # Kevin: "seeing real routes throughout the game is more exciting than unnamed
         # routes." Free roads are always owned and come from ranges no pack claims, so the

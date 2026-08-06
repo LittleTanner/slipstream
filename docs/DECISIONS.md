@@ -377,6 +377,56 @@ takes a team car and rides on. Harness, not mechanic.
 never turns it on, so TT times only move with the toggle. An earlier note in this
 conversation said the golden would have to be regenerated; that was wrong.
 
+## The game could not save in a browser, and the test shim is what hid it (build 34)
+
+Found while investigating a stuck GitHub Pages deploy, not by playing. `window.storage` was
+**read in four places in `index.html` and defined in none.** Some hosts provide it, and
+`tools/browser/*.py` injects it before the page script runs. An ordinary browser has no such
+object, and every call sits inside a `try/catch` that swallows the `TypeError`.
+
+Measured in Chromium against build 33, with no shim:
+
+```
+window.storage present: undefined
+localStorage usable   : True
+visible screens       : ['menu']
+page errors           : none
+```
+
+So the game booted, played, reported nothing wrong, and **discarded every save**. `Store.load()`
+returned null on the next visit and the career started from zero. On GitHub Pages that had been
+true for dozens of builds. The comment above `Store` claimed it "degrades to session only"; it
+did not even do that.
+
+**The shim was the bug's accomplice.** Every browser case injected the exact object whose absence
+was the defect, so a 95-check suite stayed green across the whole period. That is a sharper
+version of the failure this file keeps recording: both halves existed, were correctly written and
+correctly wired to each other, and the layer underneath them was never built outside the harness.
+
+The fix defines `window.storage` **only if the host has not**, so an injected shim or a real host
+store always wins. It is backed by `localStorage`, probed with an actual write because
+`localStorage` throws rather than returning null when it is blocked (Safari private browsing, a
+third-party iframe, cookies off), and falls back to an in-memory `Map` when that probe fails — so
+the save now survives the session even in the worst case, which is what the old comment promised.
+
+**The regression guard is a case that runs with NO shim**, because nothing else could have caught
+this. It asserts the store exists, that `get` returns a `{value}` record and null for a missing
+key (a bare string would make every `JSON.parse(r.value)` yield undefined), and then the part that
+actually matters: pick a kit colour, **reload the page, and check it is still selected**. Verified
+to be meaningful by running it against both versions:
+
+| | `__storeKind` | localStorage written | kit after reload |
+|---|---|---|---|
+| before (build 33) | `None` | no | **LOST** |
+| after | `localStorage` | yes | survives |
+
+Neither version logs a page error, which is the whole reason this needed a test rather than a
+glance.
+
+**The diagnostics page now names the store** as its first row, and flags anything that is not
+`localStorage`. A diagnostics page that cannot show you the bug is decoration — the same lesson
+the tactic-levels row learned in build 31.
+
 ## Gearing asked for a shift every three seconds, and three separate things caused it (build 32)
 
 Kevin rode build 24's six-speed and asked for four changes before trying auto-shift. All four

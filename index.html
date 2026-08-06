@@ -361,7 +361,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 33</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 34</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -4659,7 +4659,52 @@ const M = {
   }
 };
 
-// Persists in environments that provide a store, degrades to session only elsewhere.
+// ★ THE STORE THE GAME SAVES INTO, WHICH UNTIL NOW DID NOT EXIST IN A BROWSER.
+// `window.storage` was READ in four places below and DEFINED in none. Some hosts provide it,
+// and `tools/browser/*.py` injects it before this script runs — but an ordinary browser has no
+// such thing, and every call sits inside a `try/catch` that swallows the TypeError. So on
+// GitHub Pages the game booted, played, reported no error, and silently threw away every save:
+// `Store.load()` returned null on the next visit and the career started from nothing. Measured
+// in Chromium against build 33: `typeof window.storage` is "undefined", `localStorage` works
+// fine, the menu renders, zero page errors. The old comment here promised it "degrades to
+// session only", and it did not even do that.
+//
+// This is the failure mode CLAUDE.md keeps recording: both halves existed and were correctly
+// wired to each other, and the layer underneath was never built outside the harness. THE SHIM
+// IS WHAT HID IT — every browser test injected the very thing whose absence was the bug — which
+// is why `career.py` now runs one case with no shim at all.
+//
+// NEVER CLOBBER A HOST'S STORE. If something already set `window.storage`, that one is real and
+// wins; this only fills the gap.
+if (!window.storage) {
+  // localStorage THROWS rather than returning null when it is unavailable (Safari private
+  // browsing, a third-party iframe, cookies off), so probe it with a real write. When it is
+  // blocked, fall back to a Map so the save survives the session instead of every write
+  // failing — which is what the old comment always claimed happened.
+  let back;
+  try {
+    localStorage.setItem("slipstream:probe", "1");
+    localStorage.removeItem("slipstream:probe");
+    back = localStorage;
+    window.__storeKind = "localStorage";
+  } catch (e) {
+    const mem = new Map();
+    back = { getItem: k => (mem.has(k) ? mem.get(k) : null),
+             setItem: (k, v) => { mem.set(k, String(v)); },
+             removeItem: k => { mem.delete(k); } };
+    window.__storeKind = "memory (this session only)";
+  }
+  // Exactly the shape the harness injects, so the shimmed and unshimmed paths cannot diverge:
+  // `get` resolves to a record carrying a `value` string, or null if the key was never written.
+  window.storage = {
+    get: async k => { const v = back.getItem(k); return v == null ? null : { key: k, value: v }; },
+    set: async (k, v) => { back.setItem(k, String(v)); },
+    delete: async k => { back.removeItem(k); }
+  };
+} else window.__storeKind = "provided by the host";
+
+// Reads and writes the career. Every method stays fault-tolerant: a store can still fail
+// mid-session (quota, a device wiping site data) and losing a save must never stop the race.
 const Store = {
   async load() {
     try { const r = await window.storage.get("slipstream:ladder"); return r ? JSON.parse(r.value) : null; }
@@ -8622,6 +8667,13 @@ function dbgButton(host, label, fn) {
 function renderDebug() {
   const st = $("dbgState"); st.innerHTML = "";
   const car = ladder.career || {};
+  // ★ CAN THIS BUILD ACTUALLY SAVE? First row, because when it cannot, nothing else on this
+  // page survives a reload and every other number here is about to be a lie. `window.storage`
+  // was undefined in a plain browser for many builds and the try/catch around every call hid
+  // it perfectly: no error, no warning, just a career that reset. A diagnostics page that
+  // cannot show you the bug is decoration.
+  dbgRow(st, "Save store", (window.__storeKind || "MISSING - saves are being discarded")
+    + (window.__storeKind === "localStorage" ? "" : "  ← check this"));
   dbgRow(st, "Division", ladder.div + " (peak " + (ladder.peakDiv || ladder.div) + ", best " + (ladder.best || ladder.div) + ")");
   dbgRow(st, "Tours ridden", String(ladder.tours || 0));
   dbgRow(st, "Wins / top wins", (ladder.wins || 0) + " / " + (ladder.topWins || 0));
