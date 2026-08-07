@@ -15,7 +15,7 @@ make the Swift sim prove it matches, frame by frame, before anything else is jud
 | `Sim` IIFE (`index.html:571-4470`) | **almost line for line** | deterministic and DOM-free. 3901 lines. Verified by grep: zero `document`, `canvas`, `localStorage`, `performance`, `Math.random`, `setTimeout` or `requestAnimationFrame`. The only `window.` hits are the word "window" in comments (a team car's, a tolerance one) | 
 | `tools/parts.js`, the stat model | directly | plain data and arithmetic |
 | `golden.json`, `port/` | as fixtures | they are data, not code |
-| the view IIFE | **rewritten** | canvas + touch becomes SwiftUI. Do not translate it |
+| the view IIFE | **rewritten** | canvas + touch becomes SwiftUI. Do not translate it. `docs/SCREENS.md` is what it must be rewritten INTO: all 17 screens, what each is for, and the HUD |
 | `Store` / `window.storage` | **deleted** | browser scaffolding. On iOS this is `@AppStorage` for the ladder and SwiftData for history — the `Store` block already carries a PORT NOTE saying why the history blob is wrong for the real app |
 | the debug gesture panel | rewritten, kept | it has earned its place three times |
 
@@ -162,5 +162,6 @@ and a Swift app that must pass them.
 - `ladder.js` and `dominance.js` re-run against Swift give the same shape (on-path 3.63 to 5.30,
   worst rung gain 1.47, 0 dominant parts).
 - Saving works **on a real device with nothing injected**, and survives a cold launch.
-- The free-play gate and StoreKit are still undecided — see `DECISIONS.md`. They are port work,
-  not JS work, and were deliberately deferred.
+- StoreKit is wired. `unlockCareer()` is the ONLY function that grants the career and is the
+  single seam to replace: `Product.purchase()`, verify, `finish()`, then set `full`. It also
+  needs **Restore Purchases**, which the App Store requires and which the prototype cannot test.

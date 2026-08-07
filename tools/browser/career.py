@@ -709,6 +709,72 @@ async def main():
         finally:
             await ctx.close()
 
+        # ---- 4a-bis. THE FREE DIVISIONS END AT 6 -----------------------------
+        # Divisions 8-6 are free; 5-1 are the career purchase.
+        #
+        # ★ DRIVEN ENTIRELY THROUGH THE DOM, because `ladder` and `applyLadder` live inside the
+        # view IIFE and `evaluate` cannot see them — only `Sim` is reachable, being declared
+        # before it. That is the standing rule here: THE DOM IS THE CONTRACT. So this seeds the
+        # save into the banked state and tests everything downstream of it: the warning before
+        # the wall, the offer, its wording, the purchase, and the promotion being collected.
+        #
+        # WHAT THIS DOES NOT COVER: that `applyLadder` sets `atWall` in the first place. Reaching
+        # it needs a full shrunk race and the suite already spends 110s on one. The seeded state
+        # here is the state that function produces, so a change to it would leave this case green
+        # -- said out loud rather than left as a false sense of coverage.
+        ladder = {"tutorialDone": True, "div": 6, "tours": 3, "money": 250}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            stat = await pg.evaluate("document.getElementById('mStat').textContent")
+            seen = await pg.evaluate("!document.getElementById('mWall').classList.contains('hide')")
+            check("free tier: Division 6 says it is the last free one, up front",
+                  "free division" in stat.lower(), "mStat %r" % (stat,))
+            check("free tier: no offer until the promotion is actually earned",
+                  seen is False, "mWall visible %r" % (seen,))
+        finally:
+            await ctx.close()
+
+        # Standing at the wall: promotion earned and banked, career not bought.
+        ladder = {"tutorialDone": True, "div": 6, "tours": 4, "money": 250, "atWall": True}
+        ctx, pg = await open_case(browser, url, ladder, [], errs)
+        try:
+            wall = await pg.evaluate("""(() => {
+              const el = document.getElementById('mWall');
+              return { shown: !el.classList.contains('hide'), text: el.textContent,
+                       buy: !!document.getElementById('mWallBuy') };
+            })()""")
+            check("free tier: the offer appears on the menu with a way to buy",
+                  wall["shown"] and wall["buy"], "mWall shown %r" % (wall["shown"],))
+            # The wording IS the design: congratulate, then sell, then say what stays free. A
+            # rider who declines must see they have not lost the game they were playing.
+            t = wall["text"].lower()
+            check("free tier: the offer leads with the achievement, not the lock",
+                  "earned division 5" in t, "text %r" % (wall["text"][:90],))
+            check("free tier: the offer states what stays free",
+                  "free forever" in t and "daily" in t, "text %r" % (wall["text"][:170],))
+            # OFF-BY-ONE GUARD. The first draft said "Divisions 6 to 1 are the full career",
+            # which tells a rider the division they are standing in is behind the paywall.
+            check("free tier: the paid range starts at 5, not at the division they are in",
+                  "divisions 5 to 1" in t and "divisions 6 to 1" not in t,
+                  "text %r" % (wall["text"][:170],))
+            # Buying must COLLECT the banked promotion. Setting `full` alone would strand a rider
+            # at Division 6 having paid, which is the worst bug this flow could have.
+            await pg.click("#mWallBuy")
+            await pg.wait_for_timeout(400)
+            after = await pg.evaluate(
+                "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value))")
+            check("free tier: buying collects the banked promotion, into Division 5",
+                  after.get("full") is True and after.get("div") == 5
+                  and after.get("atWall") is False,
+                  "saved %r" % ({k: after.get(k) for k in ("full", "div", "atWall", "peakDiv")},))
+            check("free tier: peakDiv follows, so training unlocks the division too",
+                  after.get("peakDiv") == 5, "peakDiv %r" % (after.get("peakDiv"),))
+            gone = await pg.evaluate(
+                "document.getElementById('mWall').classList.contains('hide')")
+            check("free tier: the offer is gone once bought", gone is True, "still shown")
+        finally:
+            await ctx.close()
+
         # ---- 4b-bis. THE GAME CAN SAVE WITH NO SHIM --------------------------
         # ★ THIS CASE DELIBERATELY DOES NOT CALL open_case, AND THAT IS THE ENTIRE POINT.
         # Every other case here injects `window.storage` before the page runs. `index.html`

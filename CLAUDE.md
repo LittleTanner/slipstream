@@ -62,8 +62,11 @@ cycling terms.
   is behind a gesture now: hold the build number five seconds, type the passphrase, and a
   Debug button appears with a diagnostics page. The flag is not persisted, so a shipped
   build starts clean.
-- The free-play gate ("play Divisions 8-6, then the paywall") is an idea, not a decision.
-- Real-money purchases are StoreKit work and belong in the port.
+- ~~The free-play gate.~~ **Decided and built (build 36).** Divisions 8-6 are free and complete;
+  5-1 are the career purchase. The promotion out of 6 is EARNED and BANKED, never refused, and
+  buying collects it. The daily challenge stays free at Division 4, above the wall on purpose.
+- Real-money purchases are StoreKit work and belong in the port. `unlockCareer()` is the only
+  seam, and it still needs a Restore Purchases path.
 
 ## The port
 

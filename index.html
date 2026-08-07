@@ -205,6 +205,18 @@
   #settings .inner{padding-top:12px}
   #settings h2{margin-top:0}
   #verLine{margin-top:22px;opacity:.55;text-align:center}
+  /* THE WALL. Framed as an offer, not a locked door: the rider has just earned Division 5 and
+     this says so first. The accent border is `--you`, the player's own colour, because the
+     achievement is theirs — a red/grey "locked" treatment would read as a punishment for
+     winning. `.go` beats `.hide` at equal specificity (this file's oldest CSS trap, five times
+     now), so the id rules below are what actually hide these blocks. */
+  #rWall,#mWall{margin-top:14px;padding:14px 16px;border:2px solid var(--you);border-radius:14px;
+    background:rgba(204,0,102,.06);display:flex;flex-direction:column;gap:8px}
+  #rWall.hide,#mWall.hide{display:none}
+  #rWall b,#mWall b{font-size:15px;letter-spacing:.01em}
+  #rWall p,#mWall p{font-size:12px;opacity:.72;line-height:1.5}
+  #rWall .free,#mWall .free{font-size:11px;opacity:.6;line-height:1.45}
+  #rWall button,#mWall button{margin-top:2px}
   .navgear{position:fixed;top:14px;right:14px;z-index:25;width:40px;height:40px;
     border-radius:12px;border:1.5px solid rgba(46,49,47,.2);background:none;
     font:inherit;font-size:19px;line-height:1;color:var(--ink);cursor:pointer}
@@ -270,6 +282,7 @@
   <div class="eyebrow" id="mDiv">Division 8 of 8</div>
   <h1>SLIP<span class="cut">STREAM</span></h1>
   <div class="ladder"><span id="mDots">○○○○○○○●</span><span id="mStat"></span></div>
+  <div id="mWall" class="hide"></div>
   <div class="secthead">Your kit colour</div>
   <div class="kits" id="mKits"></div>
   <canvas class="radar" id="mRadar"></canvas>
@@ -361,7 +374,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 35</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 36</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -548,6 +561,7 @@
   <div class="eyebrow" id="rEyebrow"></div>
   <h2 id="rVerdict"></h2>
   <p class="sub" id="rSub"></p>
+  <div id="rWall" class="hide"></div>
   <div class="jerseys" id="rJerseys"></div>
   <div class="secthead">Stage</div>
   <div class="board" id="rBoard"></div>
@@ -4511,7 +4525,10 @@ let playerKit = "magenta";
 let dailyRun = false;
 let ladder = { div: 8, peakDiv: 8, strikes: 0, tours: 0, wins: 0, topWins: 0, best: 8, career: { climb: 0, sprint: 0, endur: 0, durab: 0 }, rust: { climb: 0, sprint: 0, endur: 0, durab: 0 }, units: "metric", steer: "drag", money: 0, kit: "magenta", bib: 1, tactics: ["radio", "feedcraft"],
   weight: "balanced", muscle: "allround", training: [], parts: [], physique: [], daily: null,
-  owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0, packs: [], req: {} };
+  owned: {}, fitted: { bike: [], body: [], craft: [] }, build: null, unlocked: [], radio: 0, powerMeter: 0, packs: [], req: {},
+  // THE FREE DIVISIONS. `full` is the career purchase; `atWall` records a promotion that was
+  // EARNED at Division 6 and is waiting to be collected. Both default false for a new rider.
+  full: false, atWall: false };
 
 // ---------------------------------------------------------------- tilt steering
 // iOS 13+ needs an explicit permission grant from inside a user gesture, and the
@@ -4795,11 +4812,33 @@ function reqSentence() {
   const need = reqLeft();
   if (!need.length) return "Division " + ladder.div + " is complete.";
   const tail = reqVerb(ladder.div) + " " + reqList(need) + ".";
+  // ★ DO NOT PROMISE A DIVISION THE FREE GAME WILL NOT HAND OVER. Saying "to reach Division 5"
+  // to a rider who will be stopped at the line is the game misleading them for nine races.
+  if (ladder.div === FREE_DIV && !careerBought())
+    return "Division " + FREE_DIV + " is the last of the free divisions. " + reqVerb(ladder.div)
+      + " " + reqList(need) + " to earn Division " + (FREE_DIV - 1) + ".";
   return ladder.div === 1
     ? "To take Division 1 and open the Grand Tour you must " + tail
     : "To reach Division " + (ladder.div - 1) + " you must " + tail;
 }
 const reqPlace = div => div >= 6 ? 3 : div >= 3 ? 2 : 1;
+// ★ THE FREE GAME IS DIVISIONS 8, 7 AND 6. Decided 2026-08 after sitting as "an idea, not a
+// decision" for many builds. Three of eight divisions is nine races minimum, and the slice is
+// deliberately the WHOLE game rather than a trimmed one: every mechanic, every drill, tactics,
+// parts, physique, the route packs, the race builder, and the daily challenge forever. Nothing
+// is disabled inside the free divisions — what you buy is MORE LADDER, not more features.
+//
+// That follows the rule this project already holds: money buys breadth, never power. The wall
+// is content, not capability, and it cannot be used to skip anything — buying does not move you
+// up a division you have not earned.
+//
+// THE DAILY CHALLENGE STAYS FREE AND STAYS AT DIVISION 4, which is above the wall on purpose:
+// it is the one place a free rider meets the harder racing every day, and it is the best
+// advertisement the game has.
+const FREE_DIV = 6;
+const careerBought = () => !!ladder.full;
+// Standing on the line: the requirements for Division 6 are met and the promotion is banked.
+const atTheWall = () => !ladder.full && !!ladder.atWall;
 // Division 8 is where you learn the game; asking for a twenty-minute stage race to escape it
 // is a poor first impression, so the long race is required from Division 7 down.
 const reqNeeded = div => div === 8 ? ["short", "medium"] : REQ_ORDER;
@@ -4861,7 +4900,12 @@ function applyLadder(place, kind) {
       ladder.strikes = 0;
       // At Division 1 there is nowhere left to be promoted to, so completing it IS the
       // achievement — and it is what opens the Grand Tour.
-      if (ladder.div > 1) { ladder.div--; moved = "up"; ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); }
+      // ★ AT THE WALL THE PROMOTION IS BANKED, NOT REFUSED. The rider earned it; taking it away
+      // would read as the game cheating. `req` is already cleared above, so `atWall` is where
+      // the achievement lives until it is collected — buy the career and you are promoted
+      // without riding anything again.
+      if (ladder.div === FREE_DIV && !ladder.full) { ladder.atWall = true; moved = "wall"; }
+      else if (ladder.div > 1) { ladder.div--; moved = "up"; ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div); }
       else { ladder.topWins = (ladder.topWins || 0) + 1; moved = "top"; }
     }
   }
@@ -4875,6 +4919,66 @@ function applyLadder(place, kind) {
   if (ladder.div < ladder.best) ladder.best = ladder.div;
   Store.save(ladder);
   return moved;
+}
+
+// ★★ THE ONE PLACE A PURCHASE HAPPENS. Everything else asks `careerBought()`.
+//
+// PORT NOTE: this is the StoreKit seam and the only function in the file that has to change.
+// On iOS this becomes a non-consumable product: `Product.purchase()`, verify the transaction,
+// `finish()` it, THEN set `full`. It also needs a Restore Purchases path, which the App Store
+// requires and which this prototype has no way to test. In the HTML build the purchase
+// completes immediately and takes no money — that is deliberate, because the point of this
+// build is that the whole flow downstream of the purchase is testable.
+function unlockCareer() {
+  ladder.full = true;
+  // Collect a banked promotion straight away, so buying at the wall does what the rider
+  // expects: they are in Division 5 the moment they come back to the menu.
+  if (ladder.atWall && ladder.div > 1) {
+    ladder.div--;
+    ladder.atWall = false;
+    ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div);
+    if (ladder.div < ladder.best) ladder.best = ladder.div;
+  }
+  Store.save(ladder);
+}
+
+// ★ ONE PAINTER FOR BOTH PLACES THE OFFER APPEARS. The result screen shows it the moment the
+// promotion is earned; the menu shows it every time afterwards until it is bought. Two copies of
+// this text would drift, and a paywall that says different things in different places reads as a
+// dark pattern even when it is not.
+//
+// THE ORDER OF THE WORDS IS THE DESIGN. Congratulate first, because the rider just won something
+// and the game should say so before it asks for anything. Then what they get. Then, plainly,
+// what stays free — a rider who declines must know they have not lost the game they were playing.
+function paintWall(el) {
+  if (!el) return;
+  if (!atTheWall()) { el.classList.add("hide"); el.innerHTML = ""; return; }
+  el.innerHTML = "";
+  const h = document.createElement("b");
+  h.textContent = "You have earned Division " + (FREE_DIV - 1);
+  const p = document.createElement("p");
+  // FREE_DIV - 1, not FREE_DIV: Division 6 is the last FREE one, so the career starts at 5.
+  // The off-by-one shipped in the first draft and read "Divisions 6 to 1 are the full career",
+  // which tells a rider the division they are standing in is behind the paywall.
+  p.textContent = "Divisions " + (FREE_DIV - 1) + " to 1 are the full career: tighter placings, longer "
+    + "tours, the Grand Tour, and every rival who has been getting better while you did. "
+    + "Your promotion is banked and waiting.";
+  const free = document.createElement("p");
+  free.className = "free";
+  free.textContent = "Free forever either way: Divisions 8 to " + FREE_DIV + ", the daily "
+    + "challenge at Division 4, training, every drill, and anything you have already bought.";
+  const b = document.createElement("button");
+  b.className = "go";
+  b.id = el.id === "rWall" ? "rWallBuy" : "mWallBuy";
+  b.textContent = "Unlock the full career";
+  b.addEventListener("click", () => {
+    unlockCareer();
+    paintWall($("rWall")); paintWall($("mWall"));
+    refreshMenu();
+    show("menu");
+  });
+  el.appendChild(h); el.appendChild(p); el.appendChild(free); el.appendChild(b);
+  el.classList.remove("hide");
 }
 
 function divDots(cur) {
@@ -4947,11 +5051,19 @@ function refreshMenu() {
   // What the division still wants from you, in plain words, on the menu. "Win a tour to move
   // up" stopped being true the moment promotion became a season rather than a single result.
   const left = reqLeft();
+  paintWall($("mWall"));
+  // ★ THE FREE-TIER NOTE BELONGS ON BOTH BRANCHES. It was first written only into
+  // `reqSentence()`, which the menu uses ONLY for a rider with zero tours — so every returning
+  // rider, which is everyone who is actually approaching the wall, was told nothing. Caught by
+  // the browser case rather than by reading, because both halves existed and looked right.
+  const freeNote = (ladder.div === FREE_DIV && !careerBought())
+    ? " · last of the free divisions" : "";
   $("mStat").textContent = ladder.tours === 0
     ? reqSentence()
     : (left.length ? "Still to " + reqVerb(ladder.div) + " " + reqList(left)
                    : "Division " + ladder.div + " complete")
       + " · " + ladder.money + " prize money"
+      + freeNote
       + (ladder.strikes ? " · one more bad tour and you drop" : "");
   // The build is locked for the length of a tour, so you can only re-build between tours.
   const bb = $("buildBtn");
@@ -8518,6 +8630,10 @@ function finishStage() {
   else if (you.energy > 45) note = "Plenty left at the line. You saved too much for too long.";
   else note = "Emptied into the wind. Sit closer, eat earlier, go later.";
   $("rSub").textContent = note;
+  // The moment it is earned. `moved === "wall"` only happens on the tour that completes
+  // Division 6's requirements, and paintWall itself re-checks `atTheWall()`, so a rider who has
+  // already bought never sees it.
+  paintWall($("rWall"));
 
   const jer = $("rJerseys"); jer.innerHTML = "";
   const add = (t, c) => { const s = document.createElement("span"); s.className = "jersey"; s.style.background = c; s.textContent = t; jer.appendChild(s); };
@@ -8676,6 +8792,8 @@ function renderDebug() {
   // cannot show you the bug is decoration.
   dbgRow(st, "Save store", (window.__storeKind || "MISSING - saves are being discarded")
     + (window.__storeKind === "localStorage" ? "" : "  ← check this"));
+  dbgRow(st, "Career", careerBought() ? "FULL (bought)"
+    : "free tier, Divisions 8-" + FREE_DIV + (ladder.atWall ? "  ·  AT THE WALL, promotion banked" : ""));
   dbgRow(st, "Division", ladder.div + " (peak " + (ladder.peakDiv || ladder.div) + ", best " + (ladder.best || ladder.div) + ")");
   dbgRow(st, "Tours ridden", String(ladder.tours || 0));
   dbgRow(st, "Wins / top wins", (ladder.wins || 0) + " / " + (ladder.topWins || 0));
@@ -8741,6 +8859,14 @@ function renderDebug() {
   // rather than hardcoded so a re-tuned WIN_STEPS cannot leave this quietly short again.
   const maxCraftWins = () => Object.keys(WIN_STEPS)
     .reduce((n, k) => Math.max(n, WIN_STEPS[k][WIN_STEPS[k].length - 1]), 0);
+  dbgButton(gv, "Unlock the full career (past the Division " + FREE_DIV + " wall)", () => {
+    ladder.full = true;
+    if (ladder.atWall && ladder.div > 1) {
+      ladder.div--; ladder.atWall = false;
+      ladder.peakDiv = Math.min(ladder.peakDiv || 8, ladder.div);
+      if (ladder.div < ladder.best) ladder.best = ladder.div;
+    }
+  });
   dbgButton(gv, "Max the race craft (levels III, and fitted)", () => {
     ladder.wins = Math.max(ladder.wins || 0, maxCraftWins());
     // Fitting matters as much as the level: an unfitted tactic is level 0 whatever your
@@ -8748,6 +8874,7 @@ function renderDebug() {
     ladder.tactics = TACTICS.slice(0, FIT_TACTICS).map(t => t.key);
   });
   dbgButton(gv, "Everything at once", () => {
+    ladder.full = true; ladder.atWall = false;
     ladder.wins = Math.max(ladder.wins || 0, maxCraftWins());
     ladder.tactics = TACTICS.slice(0, FIT_TACTICS).map(t => t.key);
     ladder.tutorialDone = true;
