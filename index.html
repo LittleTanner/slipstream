@@ -4473,7 +4473,11 @@ function liveOrder(race) {
 }
 const byKey = (riders, key, tie) => riders.slice().sort((a, b) => (b[key] - a[key]) || (a[tie] - b[tie]));
 
-return { CFG, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION, UPGRADE_COST, upgradeStats,
+// SAVE_KEYS is exported for the PORT, not for the view: it is the exact list of rider fields
+// that survive `snapshot`/`restore` between stages of a tour. Everything else re-derives within
+// a few frames, deliberately — see the note beside the constant. Swift needs this list to model
+// the tour glue, and a hand-copied version of it would drift.
+return { CFG, SAVE_KEYS, ARCHETYPES, BASE_STATS, KITS, UPGRADES, SECTIONS, FIT_PER_SECTION, UPGRADE_COST, upgradeStats,
   SLOTS, PARTS, PRESETS, UNLOCK_COST, buildStats, neutralBuild, buildArchetype,
   dailyKey, dailyNumber, dailyStage, DAILY_DIV,
   STAGES, FIELD, YOU, HIT_LAT, HIT_LON, clamp, lerp, mulberry32, tierProfile,

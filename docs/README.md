@@ -8,6 +8,9 @@
   `port/`, and what each harness is blind to.
 - `SCREENS.md` — all 17 screens, what each is for, and the race HUD. The other half of
   the port: `PORT.md` covers the sim, this covers what the view has to become.
+- `CLAUDE-for-the-port.md` — copy this to `CLAUDE.md` in the Swift project. Carries the
+  working preferences, the standard of proof and the port rules into a repo that would
+  otherwise start with none of them.
 
 The root `CLAUDE.md` covers working preferences and project state.
 
