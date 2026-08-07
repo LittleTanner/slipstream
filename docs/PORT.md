@@ -12,12 +12,26 @@ make the Swift sim prove it matches, frame by frame, before anything else is jud
 
 | | ports | why |
 |---|---|---|
-| `Sim` IIFE (`index.html:571-4470`) | **almost line for line** | pure, deterministic, DOM-free. 3900 lines. Verified: zero `document` / `window` / `canvas` / `localStorage` / `performance` references, zero `Math.random` |
+| `Sim` IIFE (`index.html:571-4470`) | **almost line for line** | deterministic and DOM-free. 3901 lines. Verified by grep: zero `document`, `canvas`, `localStorage`, `performance`, `Math.random`, `setTimeout` or `requestAnimationFrame`. The only `window.` hits are the word "window" in comments (a team car's, a tolerance one) | 
 | `tools/parts.js`, the stat model | directly | plain data and arithmetic |
 | `golden.json`, `port/` | as fixtures | they are data, not code |
 | the view IIFE | **rewritten** | canvas + touch becomes SwiftUI. Do not translate it |
 | `Store` / `window.storage` | **deleted** | browser scaffolding. On iOS this is `@AppStorage` for the ladder and SwiftData for history — the `Store` block already carries a PORT NOTE saying why the history blob is wrong for the real app |
 | the debug gesture panel | rewritten, kept | it has earned its place three times |
+
+### The one clock dependency, and it will bite you if you miss it
+
+The sim is otherwise clock-free, but `dailyKey(now)` and `dailyNumber(now)` fall back to
+`new Date()` when no `now` is passed. Both are **injectable**, and only the view ever calls them
+without an argument — which is why `golden.json` is completely clock-free and CI does not break
+at midnight. Keep that discipline: the sim takes the date, it never asks for it.
+
+**It is UTC on purpose.** `DAILY_EPOCH` is `Date.UTC(2026, 0, 1)` and every read is
+`getUTCFullYear` / `getUTCMonth` / `getUTCDate`, so nobody in a later time zone gets tomorrow's
+course early and posts the layout. On iOS that means a `Calendar` with `timeZone` pinned to
+`TimeZone(identifier: "UTC")` — **not** `Calendar.current`, which is local and would hand every
+rider a different daily challenge and a different streak. This is the single easiest thing in the
+whole port to get subtly, silently wrong.
 
 **Do not restructure the single HTML file to make porting easier.** The extraction already
 works: `node tools/extract.js` slices the sim out cleanly, and that slice is what every harness
