@@ -23,7 +23,13 @@ for (const c of G.cases) {
     primes: cc.primes.map(p => [p.kind, Math.round(p.d)]),
     feeds: cc.feeds.map(f => [Math.round(f.s), Math.round(f.e)]),
     items: cc.items.map(i => [i.kind, Math.round(i.d), r3(i.x)]),
-    winds: cc.winds.map(w => [Math.round(w.s), w.dir, r3(w.str)]),
+    // ★ `w.d`, NOT `w.s`. A wind has { d, dir, str, lon } and never had an `s`, so this read
+    // `undefined`, `Math.round` gave NaN and JSON wrote null — for all 45 cases, since the
+    // golden was first generated. WHERE the wind sits was never verified, only its direction
+    // and strength, and `lon` (the headwind/tailwind component) was not checked at all. Found
+    // while writing a Swift decoder for the fixture: a port could have placed every wind zone
+    // in the wrong place and the golden would have passed it.
+    winds: cc.winds.map(w => [Math.round(w.d), w.dir, r3(w.str), r3(w.lon)]),
     elevMin: r3(cc.eMin), elevMax: r3(cc.eMax)
   };
   c.result = order.map(x => ({ name: x.name, place: x.place, time: r3(x.time), sprintPts: x.sprintPts, komPts: x.komPts, money: x.money }));
@@ -37,31 +43,20 @@ for (const sc of G.schedules) {
   sc.stages = S.tourSchedule(sc.seed, sc.len);
 }
 G.note = 'Slipstream golden master. Regenerated ' + new Date().toISOString().slice(0, 10)
-  + ' after TWO PROTOTYPES GRADUATED TO DEFAULTS (build 35). '
-  + 'ONE: gearing in time trials is on. `CFG.gearsOn` true, still gated in createRace on the '
-  + 'stage being a time trial, so a road day is byte-identical and only TT stages move. Four '
-  + 'ratios 30 percent apart calibrated to the measured interquartile speed range 6-14 m/s, a '
-  + 'target that reads a lagged speed, hysteresis on the recommendation, and a tolerance '
-  + 'window that no longer narrows up the divisions (gearRamp 1.9, the Division 8 value). '
-  + 'The golden drives the player through `input` and passes no shift, so a golden TT is now '
-  + 'ridden in the starting gear the whole way and its times move accordingly. '
-  + 'TWO: the rival drop-back is the distance budget. A relieved rider takes exactly the '
-  + 'deficit that clears the gap it still has to drop in `swingSecs`, instead of a flat 9 '
-  + 'percent of pace. This changes AI rotation in EVERY race, which is why the whole golden '
-  + 'moves and not just the time trials. '
-  + 'WHY IT ONLY WORKS NOW: behind the debug toggle the budget required `bf !== r`, so for the '
-  + 'seconds before a team-mate came past it switched itself off and the old rule ran. That '
-  + 'seam was the entire defect. Measured, front-handover to behind-the-last-wheel: fixed cut '
-  + '3.17s median / 4.83s worst; budget half-applied 3.90s / 28.68s; budget applied throughout '
-  + '3.08s / 5.38s, against the player own 3.30s / 8.90s. '
-  + 'swingSecs 4.0 and swingFloor 0.74 were chosen for REALISM over score: 2.2s/0.66 measures '
-  + '2.01s median and was rejected because a rival must not drop back quicker than you do. '
-  + 'AND THE 39s TAIL THAT MOTIVATED THE REWRITE NEVER EXISTED: tools/aiswing.js started its '
-  + 'clock whenever breakFront changed, including in breaks that were not rotating, where '
-  + 'nothing is dropping back at all. Gating on race.rotating collapses it to 4.83s. That is '
-  + 'the second bogus figure that harness produced. '
-  + 'GATES: 38/38 mechanics, sanity clean across 45 cases, dominance 0 dominant and 1 dead '
-  + '(was 4 dead, so the faster rotation widened parts viability), ladder on-path 3.63 to 5.30 '
-  + 'with worst-rung gain 1.47 (was 1.17, so no column is flat).';
+  + ' to FIX A VACUOUS ASSERTION, not because the sim changed (build 36; the sim is untouched '
+  + 'and 38/38 mechanics plus port-verify pass unchanged either side of this). '
+  + 'A wind is { d, dir, str, lon } and has never had an `s`. Both this generator and verify.js '
+  + 'read `Math.round(w.s)`, which is Math.round(undefined) = NaN, which JSON writes as null. '
+  + 'So the first element of every wind triple was null on both sides and compared equal: '
+  + 'WHERE THE WIND SAT ON THE COURSE WAS NEVER VERIFIED, in any of the 45 cases, for as long as '
+  + 'this file has existed. Only direction and strength were. `lon`, the headwind/tailwind '
+  + 'component that the physics actually reads, was not recorded at all. '
+  + 'Now [Math.round(w.d), dir, r3(str), r3(lon)]. Re-running the OLD golden against the FIXED '
+  + 'assertion failed 45 of 1590 — one per case, exactly the wind check — which is the proof '
+  + 'that the data was absent rather than merely unchecked. '
+  + 'FOUND while writing a Swift decoder for this fixture, which is the point of doing the port '
+  + 'kit before the port: a Swift sim could have placed every wind zone in the wrong place and '
+  + 'the golden would have called it conformant. Wind is not a detail here — it drives the '
+  + 'crosswind splits, the draft value and the whole reason to sit in.';
 fs.writeFileSync(GOLDEN_PATH, JSON.stringify(G, null, 0));
 console.log('regenerated', G.cases.length, 'cases,', G.schedules.length, 'schedules');
