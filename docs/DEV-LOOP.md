@@ -50,7 +50,12 @@ the single thing that would be lost by porting to Swift early.
    checks division display, route-pack pricing, money and result recording against
    seeded saves. Run smoke before shipping any UI change; career when touching
    progression, money or save code.
-8. Ship: commit `index.html`, re-extract from the COMMITTED file, verify again. Bump the
+8. `node tools/port-export.js && node tools/port-verify.js` — regenerate and re-check the
+   iOS conformance fixtures in `port/`. Runs in seconds. It MUST be regenerated whenever
+   `golden.json` is, and `port-verify` fails loudly when it is stale, on purpose: a
+   conformance fixture nobody re-checks rots, and a rotten one is worse than none because a
+   Swift port would chase a divergence from a sim that no longer exists. See `docs/PORT.md`.
+9. Ship: commit `index.html`, re-extract from the COMMITTED file, verify again. Bump the
    build number at the bottom of Settings (`verLine`) with every shipped change, so what
    is deployed is checkable against what was pushed.
 

@@ -19,6 +19,11 @@ jobs:
         run: node tools/tests/run.js
       - name: Verify against the golden master (1590 checks)
         run: node tools/verify.js
+      # Keeps the iOS conformance fixtures honest. They must be regenerated with the golden,
+      # and a stale fixture is worse than none: a Swift port would chase a divergence from a
+      # sim that no longer exists. Seconds to run. See docs/PORT.md.
+      - name: iOS conformance fixtures are current (port/)
+        run: node tools/port-verify.js
 
   browser:
     runs-on: ubuntu-latest

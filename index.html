@@ -361,7 +361,7 @@
        type the passphrase to reveal it. A player will never find that by accident; Kevin
        gets his shortcut back with a diagnostics page attached. -->
   <button class="go ghost hide" id="debugBtn">Debug</button>
-  <p class="sub" id="verLine">v1.0 &#183; build 34</p>
+  <p class="sub" id="verLine">v1.0 &#183; build 35</p>
 </div></div>
 
 <div class="screen hide" id="debug"><div class="inner">
@@ -624,32 +624,35 @@ const CFG = {
   // three separate paths, so it was chaining several swings into one. `tools/aiswing.js`
   // measures it correctly now. Revisit only if the TAIL is what bothers you in the hand.
   swingCut: 0.09,                     // how much of their pace a swinging rider gives up
-  // ★ THE DISTANCE-BUDGET SWING, RIDEABLE BEHIND THE DEBUG PANEL AND MEASURABLY WORSE.
-  // Off by default, so a shipped build and the golden both take the fixed-cut path above and
-  // nothing moves. It exists so the rotation can be judged BY FEEL, which is the one question
-  // a harness cannot answer; on the numbers the question is already settled.
+  // ★ THE DISTANCE-BUDGET SWING, NOW THE RULE (build 35). A relieved rider works out how far
+  // it still has to drop and takes exactly the deficit that clears that gap in `swingSecs`,
+  // instead of giving up a flat 9% of pace and hoping. The deficit fades as the gap closes, so
+  // the rider settles onto the last wheel rather than sailing past it, and it still bites when
+  // the whole group is soft-pedalling — the case a flat percentage cannot handle.
   //
-  // It asks a better question than the fixed cut — "how far do I still have to drop, and what
-  // deficit clears it in `swingSecs`" instead of "give up 9% and hope" — and it still loses:
-  //   fixed pace cut    median 3.17s   range 0.35-4.83s
-  //   distance budget   median 3.90s   range 0.73-28.68s
-  // Slower in the middle and it introduces a 28s tail of its own. The floor is why: a 13 m gap
-  // asks for about 75% of the front's pace, the 0.82 floor binds before that, and the budget
-  // ends up weaker than the flat cut it replaced.
+  // IT ONLY BEAT THE FIXED CUT ONCE IT APPLIED THROUGHOUT. Behind the debug toggle it required
+  // `bf !== r`, so for the seconds before a team-mate actually comes past — most of the early
+  // swing — it switched itself off and the old rule ran instead. That half-application WAS the
+  // 28.7s tail: traced, the swinger's speed matched "the front's" to the decimal for six
+  // seconds because it WAS the front. A rule that stops applying halfway through is two rules.
   //
-  // ★★ AND THE REASON IT WAS EVER WANTED WAS THE HARNESS. Build 21 recorded this as halving
-  // the worst case, 39.1s to 20.1s. There was no 39s case. `tools/aiswing.js` started its
-  // clock whenever `race.breakFront` changed, including in breaks that were NOT ROTATING,
-  // where that name just means "furthest up the road" — those runs had `rotating` false and
-  // `swingOff` 0 for their whole length, so the rider was never relieved and never dropping
-  // back. Gate the trigger on `race.rotating` and the tail disappears entirely. That is the
-  // SECOND drop-back figure this harness invented; the first was 11.91s from timing contiguous
-  // runs of `swingOff`. The shipped rule was never slow: 3.17s against the player's own 3.30s.
+  //   fixed pace cut (was)   median 3.17s   worst  4.83s
+  //   budget, half-applied   median 3.90s   worst 28.68s
+  //   budget, throughout     median 3.08s   worst  5.38s
   //
   // VERIFY ANY CHANGE HERE AGAINST THE GOLDEN, NOT THE MECHANICS SUITE — the false green on
   // swing constants documented above applies to this path too.
-  swingBudget: false,
   swingSecs: 4.0,                     // how long the budget gives itself to clear the train
+  // ...and the most of their own pace it may ever give up. Swept together; the pair is chosen
+  // for REALISM, not for the best number. Faster cells exist (2.2s/0.66 reads a 2.01s median)
+  // and were rejected: a real rider takes four to six seconds to come off the front and round
+  // a three-man train, and a rival who did it in two would drop back visibly quicker than you
+  // do at 3.30s, which is the opposite of the thing being modelled.
+  //   secs 4.0 floor 0.82   median 3.41   worst 17.60
+  //   secs 4.0 floor 0.74   median 3.08   worst  5.38   <- shipped
+  //   secs 3.0 floor 0.66   median 2.31   worst  4.11
+  //   secs 2.2 floor 0.66   median 2.01   worst  3.88
+  swingFloor: 0.74,
   // ★ YOUR DELIBERATE SOFT-PEDAL IS ITS OWN NUMBER, NOT THE SWINGER'S. A rival's swingOff
   // is an automatic 2.2s drift after their turn; a human holding both pads is ASKING to go
   // backwards now, and a rider who wants to drift back stops pedalling rather than easing
@@ -729,7 +732,9 @@ const CFG = {
   // not in the same scope" is the failure this project has shipped more than once. The
   // race RECORDS it at creation, so a race never changes rules underneath itself and
   // determinism holds.
-  gearsOn: false,
+  // ON BY DEFAULT since build 35. `createRace` still gates it on the stage being a time trial,
+  // so a road day is untouched: the road version added difficulty without fun and is gone.
+  gearsOn: true,
   // ★ FOUR GEARS, NOT SIX, AND CALIBRATED TO THE BULK OF A RIDE RATHER THAN ITS TAILS.
   // Six ratios measured 40 shifts a ride at Division 8 and 56 at Division 1 — one every two
   // or three seconds across a 110s time trial, which is not gearing, it is a second pedalling
@@ -3457,18 +3462,27 @@ function stepRider(race, r, dt) {
   // car punches slings you properly, and that is the whole point of the trick.
   if (r.swingOff > 0) {
     const bf = race.breakFront;
-    const budget = CFG.swingBudget && !r.you && bf && bf !== r && race.rotating
-      && (r.swingGap || 0) > 0;
+    // ★ REFERENCE PACE: the front's when somebody else is on it, YOUR OWN when you are still
+    // nominally on the front yourself. That second case is most of the early swing and it is
+    // what made the first cut of this mechanism half-apply: it required `bf !== r`, so for the
+    // seconds before a team-mate actually comes past, the budget switched itself off and the
+    // old fixed cut ran instead. Traced on the worst case, the swinging rider's speed equalled
+    // "the front's" to the decimal for six straight seconds, because it WAS the front — and
+    // that run took 28.7s. A rule that stops applying halfway through is two rules.
+    const ref = (bf && bf !== r) ? bf.speed : r.speed;
+    const budget = !r.you && race.rotating && (r.swingGap || 0) > 0;
     if (budget) {
       // ★ THE DISTANCE BUDGET. Take exactly the deficit that clears the gap that is LEFT in
-      // `swingSecs`, measured against the front's real pace. When the gap is nearly closed the
-      // deficit fades to nothing, so the rider settles onto the last wheel instead of sailing
-      // past it; when the group is soft-pedalling the deficit is still whatever the distance
-      // demands, which is the case the fixed 9% cut cannot handle and where its 39s tail came
-      // from. Floored at 82% of their own target for the same reason the fixed cut is: fully
-      // coupling to the front strands them on any dip in the front's speed.
-      tgt = Math.max(bf.speed - (r.swingGap || 0) / CFG.swingSecs, tgt * 0.82);
+      // `swingSecs`. When the gap is nearly closed the deficit fades to nothing, so the rider
+      // settles onto the last wheel instead of sailing past it; when the group is
+      // soft-pedalling the deficit is still whatever the distance demands, which is the case a
+      // flat percentage of pace cannot handle. Floored so that fully coupling to the front
+      // cannot strand them when the front's own speed dips (a regroup, a corner).
+      tgt = Math.max(ref - (r.swingGap || 0) / CFG.swingSecs, tgt * CFG.swingFloor);
     } else {
+      // THE FALLBACK, for the two moments the budget has nothing to spend: the rotation has
+      // stopped, or the gap is already closed and the rider is tucking in. A flat nudge is
+      // right there — there is no distance left to budget for.
       tgt *= 1 - CFG.swingCut * r.swingOff;                   // pulling aside after a turn
       // The cut must bite RELATIVE TO THE TRAIN, not the swinger's own ambition: 91% of a
       // raider's target can still match a soft-pedalling group's pace, which parked the
@@ -5048,18 +5062,6 @@ function startStage() {
 // ---------------------------------------------------------------- input
 const keys = new Set();
 let btn = { ease: false, attack: false };
-// GEARING, prototype. A view-side mirror of Sim.CFG.gearsOn so the debug panel can paint its
-// own button state. NOTHING ELSE READS IT: the layout and the input handlers all read
-// `race.gears`, which the sim decides and which is already gated on the stage being a time
-// trial. That is deliberate — a second switch the view could disagree with is how half a
-// mechanic ships. Not persisted, so a reload comes up in the shipped configuration.
-let gearsOn = false;
-// THE DROP-BACK EXPERIMENT, same shape and for the same reason: a mirror the debug panel
-// paints from, while the mechanism itself reads only `Sim.CFG.swingBudget`. Unlike gearing
-// this one has no view side at all — it changes how fast a relieved rival slides to the back
-// of a rotation and nothing about what is drawn — so the ONLY way to judge it is to ride a
-// breakaway and watch the rotation. Not persisted.
-let swingBudgetOn = false;
 const touches = new Map();     // id -> { x, y, t }
 let binRect = null, binHit = false;
 // ★ THE MUSETTE. In a feed zone a soigneur holds out a cloth bag; take it cleanly at speed
@@ -8764,55 +8766,11 @@ function renderDebug() {
   // EXPERIMENTS. Not save writes, so they do not go through dbgButton (which saves the
   // ladder and refreshes the menu). Setting both the sim flag and the view mirror in one
   // place is the point: two switches for one feature is how half a mechanic ships.
-  const xv = $("dbgExp"); xv.innerHTML = "";
-  // ONE SHAPE FOR EVERY EXPERIMENT, because the second one was going to be a copy of the
-  // first with three words changed. `flip` is handed the new state and is the ONLY place that
-  // sets both the sim flag and the view mirror; `caption` and `note` are read fresh on every
-  // paint so a button can never describe a configuration the sim is not in.
-  //
-  // WRITTEN INTO NODES THAT ARE ALREADY IN THE TREE, and repainted in place rather than by
-  // re-rendering the screen. The arming caption for this panel's own gesture was once written
-  // to a detached node because the render ran first, and the message never appeared at all.
-  const xToggle = (id, isOn, flip, caption, note) => {
-    const b = document.createElement("button");
-    b.id = id;
-    const p = document.createElement("p"); p.className = "sub";
-    const paint = () => {
-      // Solid vs ghost is the file's existing on/off convention for a `.go` button; the
-      // `.on` class only styles `.card .btns button`, so it would do nothing here.
-      b.className = isOn() ? "go" : "go ghost";
-      b.textContent = caption(isOn());
-      p.textContent = note(isOn());
-    };
-    b.addEventListener("click", () => { flip(!isOn()); paint(); });
-    xv.appendChild(b); xv.appendChild(p);
-    paint();
-  };
-
-  xToggle("dbgGears", () => gearsOn,
-    v => { gearsOn = v; Sim.CFG.gearsOn = v; },
-    // Reads the ratio count rather than hard-coding it, so cutting six gears to four cannot
-    // leave the button advertising a gearbox the sim does not have.
-    on => "Gearing in time trials: " + (on ? "ON" : "off")
-      + " · " + Sim.CFG.gearRatios.length + " speed",
-    on => (on
-      ? "On from the NEXT time trial you start: a race records the rules when it is created, so an in-progress stage is left alone rather than having its physics changed under a result. "
-      : "Off from the next time trial you start. ")
-      + "TIME TRIALS ONLY. On road stages it added difficulty without fun, so that half is gone. "
-      + "Four ratios, and the gear MOVES the rhythm target rather than adding a second bar to argue with it: a bigger gear turns slower at the same road speed, so it pulls the target down toward grinding, and a smaller one pushes it up until you cannot tap fast enough. The gear ladder beside the rhythm bar rings the one to aim for. "
-      + "It was six, which asked for a shift every two or three seconds. Four ratios, a target that lags your speed by about a second, and a dead zone on the recommendation bring that down to seven or eight shifts a ride. "
-      + "THE WINDOW NO LONGER NARROWS UP THE LADDER: every division now gets the Division 8 window, because gearing moving the target and the window shrinking were two difficulty sources stacked on one axis. Division 1 is still harder, from the parcours rather than the tolerance. "
-      + "Chevrons sit at the ends of the action row, down on the left and up on the right, or , and . on a keyboard. Shifting under load costs you a beat, so shift before the drag, not on it.");
-
-  xToggle("dbgSwing", () => swingBudgetOn,
-    v => { swingBudgetOn = v; Sim.CFG.swingBudget = v; },
-    on => "Rival drop-back: " + (on ? "DISTANCE BUDGET" : "fixed pace cut"),
-    on => (on
-      ? "On IMMEDIATELY, including mid-race: unlike gearing this is not recorded at race creation, so a rotation you are already in changes under you. "
-      : "Off immediately. ")
-      + "How fast a rival slides from the front of a breakaway to the back of it. The shipped rule gives up a flat 9% of the front's pace and hopes that clears the train; this one works out how far it still has to drop and takes the deficit that clears it in four seconds. "
-      + "ON THE NUMBERS THE SHIPPED RULE WINS and this is here for feel only: fixed cut 3.17s median, 4.83s worst; distance budget 3.90s median, 28.68s worst. The ‘39s tail’ that made this look necessary was the harness starting its clock on breaks that were not rotating at all. "
-      + "There is nothing to look at on the HUD. Get into a break, take a turn on the front, then watch whether the rider you relieved slots onto the last wheel or hangs alongside the group.");
+  // EXPERIMENTS. Empty: gearing in time trials and the distance-budget drop-back both
+  // graduated to defaults in build 35, so there is nothing here to switch. Kept as a slot
+  // because the next prototype wants one, and a toggle whose feature has shipped is worse
+  // than no toggle — it implies the shipped build has a mode it does not have.
+  $("dbgExp").innerHTML = "";
 
   const rs = $("dbgReset"); rs.innerHTML = "";
   dbgButton(rs, "Clear the saved tour", () => { ladder.savedTour = null; });

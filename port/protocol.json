@@ -1,0 +1,40 @@
+{
+  "note": "How to replay trace.json against a port. Follow this exactly; a mismatched harness produces divergence that is not in the sim, which has already cost this project real time three separate times (see docs/DECISIONS.md on harness faults).",
+  "timestep": {
+    "fixedDt": 0.008333333333333333,
+    "hz": 120,
+    "rule": "ALWAYS step with exactly fixedDt. The sim is deterministic only at a fixed timestep; a variable frame time is a different simulation, not a faster one."
+  },
+  "rng": {
+    "kind": "mulberry32",
+    "seededPer": "race",
+    "rule": "Course generation consumes the PRNG in a fixed order. Adding, removing or REORDERING a single R() call inside course generation changes every course from that point on. Derive values from existing draws instead of taking new ones."
+  },
+  "input": {
+    "perFrame": {
+      "rate": "number, taps per second",
+      "ease": "bool",
+      "launch": "bool",
+      "stumble": "bool",
+      "tx": "number, desired lane",
+      "shiftUp": "bool",
+      "shiftDown": "bool"
+    },
+    "policyUsedByTheseTraces": "rate = (course.len - you.dist) < 200 ? 4.0 : 0; ease/launch/stumble false; tx = you.x; no shifting. NOTE this policy never steers and never brakes, which is fine for a conformance trace and NOT fine for judging difficulty (see docs/DEV-LOOP.md)."
+  },
+  "sampling": {
+    "everyNFrames": 120,
+    "decimals": 6,
+    "fields": {
+      "d": "rider.dist",
+      "v": "rider.speed",
+      "e": "rider.energy"
+    },
+    "riderOrder": "the order of race.riders, given per case as `riders`; index into d/v/e with it"
+  },
+  "tolerances": {
+    "perSampleAbs": 0.0001,
+    "rule": "Compare sample by sample and STOP AT THE FIRST MISMATCH. The first divergent sample is the bug; every later one is its echo. Report the frame, the rider and the field.",
+    "whyNotExact": "Different languages order floating point differently in a few places (Math.hypot, exponentiation). 1e-4 over a race is far tighter than any real behavioural difference and far looser than the last-bit noise."
+  }
+}

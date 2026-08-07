@@ -533,6 +533,49 @@ about 53px to 84px on an ordinary phone with a glyph that scales off the pill: g
 exists in a time trial, and a time trial clears feeds, items and litter, so the action button
 has almost nothing to show there.
 
+## Both prototypes graduated to defaults (build 35)
+
+Kevin, after riding them: "The drop back rewrite can be the default now" and "make the time
+trial use the gears I like it." Both toggles are gone — a switch whose feature has shipped is
+worse than no switch, because it implies a mode the build does not have.
+
+**Gearing is on, still gated on the stage.** `CFG.gearsOn` is true and `createRace` keeps the
+`course.spec.tt` gate, so a road day is byte-identical and only time trials move. The road
+version stays cut.
+
+**The drop-back budget only became defensible when it applied throughout.** Behind the toggle it
+required `bf !== r`, so for the seconds before a team-mate actually came past — most of the early
+swing — it switched itself off and the old fixed cut ran instead. That seam was the whole defect.
+Traced on the worst case, the swinger's speed matched "the front's" to the decimal for six
+straight seconds because it WAS the front, and that run took 28.7s.
+
+| | median | worst |
+|---|---|---|
+| fixed pace cut (build 34 and earlier) | 3.17s | 4.83s |
+| budget, gated on `bf !== r` | 3.90s | 28.68s |
+| **budget applied throughout (shipped)** | **3.08s** | **5.38s** |
+| the player, for reference | 3.30s | 8.90s |
+
+**A rule that stops applying halfway through is two rules, and the seam is where the tail was.**
+That generalises past this mechanic and is the reason the entry is here.
+
+**`swingSecs` 4.0 and `swingFloor` 0.74 were chosen for realism, not for score.** Faster cells
+exist and were rejected: 2.2s/0.66 measures a 2.01s median, and a rival who drops back quicker
+than the player does at 3.30s is the opposite of the thing being modelled. A real drop-back takes
+four to six seconds.
+
+**Side effects worth recording**, both measured after the change:
+
+- **Dominance improved, 4 dead parts to 1.** The rotation now completes nearly twice as many
+  handovers in the same wall clock (49 against 27 in the harness), and that wider spread of race
+  shapes gave more tires somewhere to be best.
+- **The ladder's worst rung improved, 1.17 to 1.47**, so no column is flat. On-path drifts
+  3.63 to 5.30, steeper than the 4.11 to 5.15 it replaced but still inside the contest band.
+
+The golden was regenerated: the drop-back changes AI rotation in every race, so this is not a
+time-trial-only regeneration. `tools/aiswing.js` now measures one rule and keeps the three-row
+history in its header, because those numbers are the argument for the current shape.
+
 ## The distance-budget drop-back is worse, and the tail it was built for never existed (build 32)
 
 Kevin asked for a debug toggle so he could ride the drop-back rewrite. It is built and it is
