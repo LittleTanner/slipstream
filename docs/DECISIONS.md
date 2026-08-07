@@ -533,6 +533,49 @@ about 53px to 84px on an ordinary phone with a glyph that scales off the pill: g
 exists in a time trial, and a time trial clears feeds, items and litter, so the action button
 has almost nothing to show there.
 
+## The free game is Divisions 8, 7 and 6 (build 36)
+
+Kevin: "Make the free play have the paywall after playing divisions 8-6." After many builds as
+"an idea, not a decision", it is decided and built.
+
+**What is free is the WHOLE game, not a trimmed one.** Inside Divisions 8-6 nothing is disabled:
+every mechanic, every drill, tactics, parts, physique, route packs, the race builder, and the
+daily challenge. What you buy is **more ladder, not more features**. That keeps the rule this
+project already holds — money buys breadth, never power — and it means the free slice is an
+honest advertisement rather than a crippled one.
+
+Three of eight divisions is nine races minimum, since each division needs a short, a medium and
+a long race. Divisions 8-6 all share the same `reqPlace` of top three, so the free tier is a
+coherent difficulty band and the tightening to top two starts exactly where the wall is.
+
+**The daily challenge stays free and stays at Division 4**, which is above the wall on purpose:
+it is the one place a free rider meets the harder racing, every day, forever.
+
+**The promotion is EARNED and BANKED, never refused.** Completing Division 6 sets `atWall` and
+leaves the requirements cleared; buying collects it and puts the rider in Division 5 without
+riding anything again. Refusing a promotion the rider just won would read as the game cheating
+them for succeeding, and `peakDiv` follows too, so training unlocks the new division with it.
+
+**The order of the words is the design.** Congratulate, then sell, then say plainly what stays
+free. A rider who declines must be able to see they have not lost the game they were playing.
+The offer is painted by ONE function into two places (the result screen the moment it is earned,
+the menu every time after), because two copies of paywall copy drift, and a paywall that says
+different things in different places reads as a dark pattern even when it is not.
+
+**And the menu says so before the ninth race, not after.** The first draft put the warning only
+in `reqSentence()`, which the menu uses only for a rider with zero tours — so everyone actually
+approaching the wall was told nothing. Both halves existed and looked right; the browser case
+caught it. The same class of bug as every other entry in this file.
+
+Two bugs the tests caught that reading did not: that one, and an off-by-one that told the rider
+"Divisions 6 to 1 are the full career" — naming the division they were standing in as paid.
+Both now have assertions.
+
+`unlockCareer()` is the only function that grants the career, and it is the StoreKit seam. In
+the HTML build it completes immediately and takes no money, deliberately, so the whole flow
+downstream of the purchase is testable. The port replaces that one function and adds Restore
+Purchases.
+
 ## Both prototypes graduated to defaults (build 35)
 
 Kevin, after riding them: "The drop back rewrite can be the default now" and "make the time
