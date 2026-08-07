@@ -673,37 +673,39 @@ async def main():
             div = await pg.evaluate(
                 "window.storage.get('slipstream:ladder').then(r => JSON.parse(r.value).div)")
             check("debug: jumping division rewrites the save", div == 1, "div %r" % div)
-            # ---- the Experiments panel ---------------------------------------
-            # BOTH TOGGLES, AND BOTH HALVES OF EACH. An experiment is exactly the shape of
-            # bug this project has shipped repeatedly: a button that paints itself ON while
-            # the sim flag it is supposed to own stays false, so the feature "exists" and
-            # never fires. So assert the CFG flag, not the caption.
-            exps = await pg.evaluate(
+            # ---- the two graduated mechanics -----------------------------------
+            # Gearing in time trials and the distance-budget drop-back were debug toggles and
+            # are defaults as of build 35. Assert the SHIPPED STATE, and assert the toggles are
+            # GONE: a switch whose feature has shipped is worse than no switch, because it
+            # implies a mode the build does not have. This is the same class of check as the
+            # pre-ship assertion that "Unlock everything" is not reachable.
+            left = await pg.evaluate(
                 "[...document.querySelectorAll('#dbgExp button')].map(b => b.id)")
-            check("debug: the experiments panel carries both toggles",
-                  set(exps) >= {"dbgGears", "dbgSwing"}, "buttons %r" % (exps,))
-            flags = await pg.evaluate(
-                "({g: Sim.CFG.gearsOn, s: Sim.CFG.swingBudget, n: Sim.CFG.gearRatios.length})")
-            check("debug: both experiments start off, as a shipped build must",
-                  flags["g"] is False and flags["s"] is False, "flags %r" % (flags,))
-            # The caption reads the ratio count from the sim rather than hard-coding it, so
-            # this also catches a gearbox size changing in CFG and not on the button.
-            cap = await pg.locator("#dbgGears").text_content()
-            check("debug: the gearing button reports the sim's own ratio count",
-                  ("%d speed" % flags["n"]) in cap and flags["n"] == 4,
-                  "caption %r, ratios %r" % (cap, flags["n"]))
-            for bid, key in (("dbgGears", "gearsOn"), ("dbgSwing", "swingBudget")):
-                await pg.click("#" + bid)
-                await pg.wait_for_timeout(120)
-                on = await pg.evaluate("Sim.CFG.%s" % key)
-                cls = await pg.locator("#" + bid).get_attribute("class")
-                check("debug: %s sets the sim flag and drops the ghost class" % bid,
-                      on is True and "ghost" not in (cls or ""),
-                      "CFG.%s %r, class %r" % (key, on, cls))
-                await pg.click("#" + bid)
-                await pg.wait_for_timeout(120)
-                off = await pg.evaluate("Sim.CFG.%s" % key)
-                check("debug: %s switches back off" % bid, off is False, "CFG.%s %r" % (key, off))
+            check("debug: the graduated experiments left no stale toggles behind",
+                  left == [], "buttons still in #dbgExp: %r" % (left,))
+            cfg = await pg.evaluate(
+                "({gears: Sim.CFG.gearsOn, ratios: Sim.CFG.gearRatios.length,"
+                " ramp: Sim.CFG.gearRamp, secs: Sim.CFG.swingSecs, floor: Sim.CFG.swingFloor,"
+                " budget: 'swingBudget' in Sim.CFG})")
+            check("gearing ships ON, four speeds, flat window",
+                  cfg["gears"] is True and cfg["ratios"] == 4 and cfg["ramp"] == 1.9,
+                  "CFG %r" % (cfg,))
+            check("the drop-back budget is the rule, not a flag",
+                  cfg["budget"] is False and cfg["secs"] == 4.0 and cfg["floor"] == 0.74,
+                  "CFG %r" % (cfg,))
+            # THE GATE IS ON THE STAGE, NOT THE FLAG. A road day must never grow a gear: the
+            # road version added difficulty without fun and was cut, and `createRace` is the one
+            # place that decides. Build a race of each kind and ask it.
+            gated = await pg.evaluate("""(() => {
+              const mk = i => Sim.createRace({seed: 11, stageIndex: i, playerType: 'rouleur',
+                gc: {}, leaders: {}, div: 4});
+              return { tt: mk(5).gears, flat: mk(0).gears, mtn: mk(2).gears,
+                       ttSpec: !!mk(5).spec.tt };
+            })()""")
+            check("gears exist in a time trial and nowhere else",
+                  gated["ttSpec"] and gated["tt"] is True
+                  and gated["flat"] is False and gated["mtn"] is False,
+                  "by stage %r" % (gated,))
         finally:
             await ctx.close()
 

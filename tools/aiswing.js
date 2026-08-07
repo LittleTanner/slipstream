@@ -5,9 +5,11 @@
 // `r.swingOff`, which reads ~12s and is WRONG: the flag is re-armed by three separate paths
 // (turn expiry, being relieved, and the stay-out-until-you-are-behind rule), so a single
 // run chains several swings together. That bad number was reported as a defect and written
-// into two docs before this harness was fixed. Measured properly, the median is 3.65s,
-// against the player's 3.3s and the four-to-six seconds the design claims — the AI
-// drop-back is fine. What is not fine is the TAIL: the worst case runs to ~39s.
+// into two docs before this harness was fixed.
+//
+// ★ AND THE "39s TAIL" WAS THIS HARNESS TOO. See the rotation gate below. Two separate bogus
+// figures came out of this one file, both were written into docs as defects, and one nearly
+// bought a rewrite the game did not need. Read the gate before trusting any number here.
 //
 //   node tools/aiswing.js              # the repo's current sim
 //   SIM=/path/to/other-sim.js node ... # a patched copy, for before/after
@@ -66,27 +68,23 @@ function run(seed) {
   }
   return times;
 }
-// ★ BOTH RULES IN ONE RUN, because the point of the experiment is the COMPARISON and running
-// it twice from memory is how "it halved the tail" became a remembered figure rather than a
-// measured one. `swingBudget` is a plain CFG flag with no race-creation gate, so flipping it
-// between runs is enough — no second sim file, no SIM= env dance.
-function report(tag) {
-  const all = []; for (const s of [7, 23, 41]) all.push(...run(s));
-  all.sort((a, b) => a - b);
-  const med = all.length ? (all.length % 2 ? all[(all.length - 1) / 2]
-    : (all[all.length / 2 - 1] + all[all.length / 2]) / 2) : NaN;
-  console.log('  ' + tag.padEnd(18) + 'drop-backs: ' + String(all.length).padStart(3)
-    + '   median ' + (all.length ? med.toFixed(2) : 'n/a')
-    + 's   range ' + (all.length ? all[0] + '-' + all[all.length - 1] : 'n/a') + 's');
-  return { med, worst: all.length ? all[all.length - 1] : NaN };
-}
-CFG.swingBudget = false; const fixed = report('fixed pace cut');
-CFG.swingBudget = true;  const budget = report('distance budget');
-CFG.swingBudget = false;
-console.log('  ---');
-console.log('  the budget trades the median for the tail: median '
-  + (budget.med - fixed.med >= 0 ? '+' : '') + (budget.med - fixed.med).toFixed(2)
-  + 's, worst case ' + (budget.worst - fixed.worst >= 0 ? '+' : '')
-  + (budget.worst - fixed.worst).toFixed(2) + 's');
+// ONE RULE NOW. The distance budget graduated from a debug toggle to the default in build 35,
+// so there is no second path to compare against and `CFG.swingBudget` is gone. The history is
+// kept here because the numbers are the argument for the current shape:
+//
+//   fixed pace cut (build 34 and earlier)   median 3.17s   worst  4.83s
+//   budget, gated on `bf !== r`             median 3.90s   worst 28.68s
+//   budget applied throughout (shipped)     median 3.08s   worst  5.38s
+//
+// The middle row is the lesson: the budget lost badly while it only applied once somebody else
+// was on the front, because for the seconds before that it silently fell back to the old rule.
+// A rule that stops applying halfway through is two rules, and the seam is where the tail was.
+const all = []; for (const s of [7, 23, 41]) all.push(...run(s));
+all.sort((a, b) => a - b);
+const med = all.length ? (all.length % 2 ? all[(all.length - 1) / 2]
+  : (all[all.length / 2 - 1] + all[all.length / 2]) / 2) : NaN;
+console.log('  drop-backs: ' + all.length + '   median ' + (all.length ? med.toFixed(2) : 'n/a')
+  + 's   range ' + (all.length ? all[0] + '-' + all[all.length - 1] : 'n/a') + 's');
 console.log('  The player\'s own drop-back is `easeCut`, measured at 3.30s median / 8.90s worst,');
-console.log('  and is untouched by either rule. That is the bar a rival should be judged against.');
+console.log('  and is untouched by this rule. That is the bar a rival should be judged against.');
+console.log('  Target band is 4-6s in the design and ~3.3s in the hand; faster is NOT better.');
