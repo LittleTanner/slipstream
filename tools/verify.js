@@ -18,7 +18,7 @@ for(const c of G.cases){
   eq(cc.primes.map(p=>[p.kind,Math.round(p.d)]), ec.primes, tag+' primes');
   eq(cc.feeds.map(f=>[Math.round(f.s),Math.round(f.e)]), ec.feeds, tag+' feeds');
   eq(cc.items.map(i=>[i.kind,Math.round(i.d),r3(i.x)]), ec.items, tag+' items');
-  eq(cc.winds.map(w=>[Math.round(w.s),w.dir,r3(w.str)]), ec.winds, tag+' winds');
+  eq(cc.winds.map(w=>[Math.round(w.d),w.dir,r3(w.str),r3(w.lon)]), ec.winds, tag+' winds');  // w.d not w.s: see golden-gen
   let g=0; while(!race.you.finished && g++<120*900) S.step(race,CFG.fixedDt,policy(race));
   const order=S.settle(race);
   eq(order.map(x=>x.place), c.result.map(x=>x.place), tag+' places');
